@@ -27,6 +27,8 @@
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/raw_ostream.h"
 
+#include <memory>
+
 namespace {
 // NOTE: Very useful for debugging Z3 behaviour. These files can be given to
 // the z3 binary to replay all Z3 API calls using its `-log` option.
@@ -57,7 +59,7 @@ namespace klee {
 
 class Z3SolverImpl : public SolverImpl {
 private:
-  Z3Builder *builder;
+  std::unique_ptr<Z3Builder> builder;
   time::Span timeout;
   SolverRunStatus runStatusCode;
   std::unique_ptr<llvm::raw_fd_ostream> dumpedQueriesFile;
@@ -135,10 +137,9 @@ Z3SolverImpl::Z3SolverImpl()
 
 Z3SolverImpl::~Z3SolverImpl() {
   Z3_params_dec_ref(builder->ctx, solverParameters);
-  delete builder;
 }
 
-Z3Solver::Z3Solver() : Solver(new Z3SolverImpl()) {}
+Z3Solver::Z3Solver() : Solver(std::make_unique<Z3SolverImpl>()) {}
 
 char *Z3Solver::getConstraintLog(const Query &query) {
   return impl->getConstraintLog(query);
@@ -268,7 +269,7 @@ bool Z3SolverImpl::internalRunSolver(
     Z3_solver_assert(builder->ctx, theSolver, builder->construct(constraint));
     constant_arrays_in_query.visit(constraint);
   }
-  ++stats::queries;
+  ++stats::solverQueries;
   if (objects)
     ++stats::queryCounterexamples;
 
@@ -362,7 +363,7 @@ SolverImpl::SolverRunStatus Z3SolverImpl::handleSolverResponse(
         __attribute__((unused))
         bool successfulEval =
             Z3_model_eval(builder->ctx, theModel, initial_read,
-                          /*model_completion=*/Z3_TRUE, &arrayElementExpr);
+                          /*model_completion=*/true, &arrayElementExpr);
         assert(successfulEval && "Failed to evaluate model");
         Z3_inc_ref(builder->ctx, arrayElementExpr);
         assert(Z3_get_ast_kind(builder->ctx, arrayElementExpr) ==
@@ -432,7 +433,7 @@ bool Z3SolverImpl::validateZ3Model(::Z3_solver &theSolver, ::Z3_model &theModel)
     __attribute__((unused))
     bool successfulEval =
         Z3_model_eval(builder->ctx, theModel, constraint,
-                      /*model_completion=*/Z3_TRUE, &rawEvaluatedExpr);
+                      /*model_completion=*/true, &rawEvaluatedExpr);
     assert(successfulEval && "Failed to evaluate model");
 
     // Use handle to do ref-counting.

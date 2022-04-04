@@ -11,6 +11,10 @@
 
 #include "klee/Config/Version.h"
 #include "klee/Support/ErrorHandling.h"
+
+#include "klee/Support/CompilerWarning.h"
+DISABLE_WARNING_PUSH
+DISABLE_WARNING_DEPRECATED_DECLARATIONS
 #include "llvm/Analysis/MemoryBuiltins.h"
 #include "llvm/Analysis/ConstantFolding.h"
 #include "llvm/IR/Constants.h"
@@ -29,7 +33,7 @@
 #include "llvm/Pass.h"
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
-
+DISABLE_WARNING_POP
 using namespace llvm;
 
 namespace klee {
@@ -66,10 +70,10 @@ bool IntrinsicCleanerPass::runOnBasicBlock(BasicBlock &b, Module &M) {
       case Intrinsic::vastart:
       case Intrinsic::vaend:
       case Intrinsic::fabs:
-#if LLVM_VERSION_CODE >= LLVM_VERSION(7, 0)
+      case Intrinsic::fma:
+      case Intrinsic::fmuladd:
       case Intrinsic::fshr:
       case Intrinsic::fshl:
-#endif
 #if LLVM_VERSION_CODE >= LLVM_VERSION(12, 0)
       case Intrinsic::abs:
       case Intrinsic::smax:
@@ -214,7 +218,6 @@ bool IntrinsicCleanerPass::runOnBasicBlock(BasicBlock &b, Module &M) {
         dirty = true;
         break;
       }
-#if LLVM_VERSION_CODE >= LLVM_VERSION(8, 0)
       case Intrinsic::sadd_sat:
       case Intrinsic::ssub_sat:
       case Intrinsic::uadd_sat:
@@ -282,17 +285,12 @@ bool IntrinsicCleanerPass::runOnBasicBlock(BasicBlock &b, Module &M) {
         dirty = true;
         break;
       }
-#endif
 
       case Intrinsic::trap: {
         // Intrinsic instruction "llvm.trap" found. Directly lower it to
         // a call of the abort() function.
         auto C = M.getOrInsertFunction("abort", Type::getVoidTy(ctx));
-#if LLVM_VERSION_CODE >= LLVM_VERSION(9, 0)
         if (auto *F = dyn_cast<Function>(C.getCallee())) {
-#else
-        if (auto *F = dyn_cast<Function>(C)) {
-#endif
           F->setDoesNotReturn();
           F->setDoesNotThrow();
         }
@@ -324,7 +322,6 @@ bool IntrinsicCleanerPass::runOnBasicBlock(BasicBlock &b, Module &M) {
         dirty = true;
         break;
       }
-#if LLVM_VERSION_CODE >= LLVM_VERSION(8, 0)
       case Intrinsic::is_constant: {
         if(auto* constant = llvm::ConstantFoldInstruction(ii, ii->getModule()->getDataLayout()))
           ii->replaceAllUsesWith(constant);
@@ -334,7 +331,6 @@ bool IntrinsicCleanerPass::runOnBasicBlock(BasicBlock &b, Module &M) {
         dirty = true;
         break;
       }
-#endif
 
       // The following intrinsics are currently handled by LowerIntrinsicCall
       // (Invoking LowerIntrinsicCall with any intrinsics not on this
@@ -350,15 +346,16 @@ bool IntrinsicCleanerPass::runOnBasicBlock(BasicBlock &b, Module &M) {
       case Intrinsic::ctpop:
       case Intrinsic::cttz:
       case Intrinsic::dbg_declare:
-#if LLVM_VERSION_CODE >= LLVM_VERSION(7, 0)
       case Intrinsic::dbg_label:
-#endif
 #ifndef SUPPORT_KLEE_EH_CXX
       case Intrinsic::eh_typeid_for:
 #endif
       case Intrinsic::exp2:
       case Intrinsic::exp:
       case Intrinsic::expect:
+#if LLVM_VERSION_CODE >= LLVM_VERSION(12, 0)
+      case Intrinsic::experimental_noalias_scope_decl:
+#endif
       case Intrinsic::floor:
       case Intrinsic::flt_rounds:
       case Intrinsic::frameaddress:

@@ -311,10 +311,12 @@ int main(int argc, char** argv) {
 
       prg_argc = input->numArgs;
       prg_argv = input->args;
-      prg_argv[0] = argv[1];
+      free(prg_argv[0]);
+      prg_argv[0] = strdup(argv[1]);
       klee_init_env(&prg_argc, &prg_argv);
 
       replay_create_files(&__exe_fs);
+      kTest_free(input);
       return 0;
     }
 
@@ -366,8 +368,11 @@ int main(int argc, char** argv) {
     obj_index = 0;
     prg_argc = input->numArgs;
     prg_argv = input->args;
-    prg_argv[0] = argv[optind];
+    free(prg_argv[0]);
+    prg_argv[0] = strdup(argv[optind]);
+
     klee_init_env(&prg_argc, &prg_argv);
+
     if (idx > 2)
       fputc('\n', stderr);
     fprintf(stderr, "KLEE-REPLAY: NOTE: Test file: %s\n"
@@ -385,6 +390,7 @@ int main(int argc, char** argv) {
     /* Run the test case machinery in a subprocess, eventually this parent
        process should be a script or something which shells out to the actual
        execution tool. */
+
     int pid = fork();
     if (pid < 0) {
       perror("fork");
@@ -408,6 +414,9 @@ int main(int argc, char** argv) {
         perror("waitpid");
         _exit(66);
       }
+
+      free(prg_argv);
+      kTest_free(input);
     }
   }
 
@@ -457,30 +466,17 @@ void klee_posix_prefer_cex(void *buffer, uintptr_t condition) {
 }
 
 void klee_make_symbolic(void *addr, size_t nbytes, const char *name) {
-  /* XXX remove model version code once new tests gen'd */
   if (obj_index >= input->numObjects) {
-    if (strcmp("model_version", name) == 0) {
-      assert(nbytes == 4);
-      *((int*) addr) = 0;
-    } else {
       __emit_error("ran out of appropriate inputs");
-    }
   } else {
     KTestObject *boo = &input->objects[obj_index];
-
-    if (strcmp("model_version", name) == 0 &&
-        strcmp("model_version", boo->name) != 0) {
-      assert(nbytes == 4);
-      *((int*) addr) = 0;
+    if (boo->numBytes != nbytes) {
+      fprintf(stderr, "KLEE-REPLAY: ERROR: make_symbolic mismatch, different sizes: "
+              "%d in input file, %lu in code\n", boo->numBytes, (unsigned long)nbytes);
+      exit(1);
     } else {
-      if (boo->numBytes != nbytes) {
-        fprintf(stderr, "KLEE-REPLAY: ERROR: make_symbolic mismatch, different sizes: "
-           "%d in input file, %lu in code\n", boo->numBytes, (unsigned long)nbytes);
-        exit(1);
-      } else {
-        memcpy(addr, boo->bytes, nbytes);
-        obj_index++;
-      }
+      memcpy(addr, boo->bytes, nbytes);
+      obj_index++;
     }
   }
 }

@@ -22,10 +22,10 @@
 #include "klee/Support/ErrorHandling.h"
 #include "klee/Support/ModuleUtil.h"
 
+#include "klee/Support/CompilerWarning.h"
+DISABLE_WARNING_PUSH
+DISABLE_WARNING_DEPRECATED_DECLARATIONS
 #include "llvm/Bitcode/BitcodeWriter.h"
-#if LLVM_VERSION_CODE < LLVM_VERSION(8, 0)
-#include "llvm/IR/CallSite.h"
-#endif
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Instructions.h"
@@ -40,13 +40,10 @@
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/raw_os_ostream.h"
 #include "llvm/Transforms/Scalar.h"
-#if LLVM_VERSION_CODE >= LLVM_VERSION(8, 0)
 #include "llvm/Transforms/Scalar/Scalarizer.h"
-#endif
 #include "llvm/Transforms/Utils/Cloning.h"
-#if LLVM_VERSION_CODE >= LLVM_VERSION(7, 0)
 #include "llvm/Transforms/Utils.h"
-#endif
+DISABLE_WARNING_POP
 
 #include <sstream>
 
@@ -74,7 +71,7 @@ namespace {
 
   cl::opt<bool>
   OutputModule("output-module",
-               cl::desc("Write the bitcode for the final transformed module"),
+               cl::desc("Write the bitcode for the final transformed module (default=false)"),
                cl::init(false),
 	       cl::cat(ModuleCat));
 
@@ -138,14 +135,8 @@ static Function *getStubFunctionForCtorList(Module *m,
     for (unsigned i=0; i<arr->getNumOperands(); i++) {
       auto cs = cast<ConstantStruct>(arr->getOperand(i));
       // There is a third element in global_ctor elements (``i8 @data``).
-#if LLVM_VERSION_CODE >= LLVM_VERSION(9, 0)
       assert(cs->getNumOperands() == 3 &&
              "unexpected element in ctor initializer list");
-#else
-      // before LLVM 9.0, the third operand was optional
-      assert((cs->getNumOperands() == 2 || cs->getNumOperands() == 3) &&
-             "unexpected element in ctor initializer list");
-#endif
       auto fp = cs->getOperand(1);
       if (!fp->isNullValue()) {
         if (auto ce = dyn_cast<llvm::ConstantExpr>(fp))
@@ -303,11 +294,7 @@ void KModule::manifest(InterpreterHandler *ih, bool forceSourceOutput) {
 
   if (OutputModule) {
     std::unique_ptr<llvm::raw_fd_ostream> f(ih->openOutputFile("final.bc"));
-#if LLVM_VERSION_CODE >= LLVM_VERSION(7, 0)
     WriteBitcodeToFile(*module, *f);
-#else
-    WriteBitcodeToFile(module.get(), *f);
-#endif
   }
 
   /* Build shadow structures */
@@ -320,7 +307,6 @@ void KModule::manifest(InterpreterHandler *ih, bool forceSourceOutput) {
   for (auto &Function : *module) {
     if (Function.isDeclaration()) {
       declarations.push_back(&Function);
-      continue;
     }
 
     auto kf = std::unique_ptr<KFunction>(new KFunction(&Function, this));
@@ -423,7 +409,8 @@ static int getOperandNum(Value *v,
 
 KFunction::KFunction(llvm::Function *_function,
                      KModule *km) 
-  : function(_function),
+  : KCallable(CK_Function),
+    function(_function),
     numArgs(function->arg_size()),
     numInstructions(0),
     trackCoverage(true) {
@@ -468,18 +455,13 @@ KFunction::KFunction(llvm::Function *_function,
       ki->dest = registerMap[inst];
 
       if (isa<CallInst>(it) || isa<InvokeInst>(it)) {
-#if LLVM_VERSION_CODE >= LLVM_VERSION(8, 0)
-        const CallBase &cs = cast<CallBase>(*inst);
-        Value *val = cs.getCalledOperand();
-#else
-        const CallSite cs(inst);
-        Value *val = cs.getCalledValue();
-#endif
-        unsigned numArgs = cs.arg_size();
+        const CallBase &cb = cast<CallBase>(*inst);
+        Value *val = cb.getCalledOperand();
+        unsigned numArgs = cb.arg_size();
         ki->operands = new int[numArgs+1];
         ki->operands[0] = getOperandNum(val, registerMap, km, ki);
         for (unsigned j=0; j<numArgs; j++) {
-          Value *v = cs.getArgOperand(j);
+          Value *v = cb.getArgOperand(j);
           ki->operands[j+1] = getOperandNum(v, registerMap, km, ki);
         }
       } else {

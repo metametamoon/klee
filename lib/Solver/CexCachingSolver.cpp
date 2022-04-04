@@ -23,6 +23,9 @@
 
 #include "llvm/Support/CommandLine.h"
 
+#include <memory>
+#include <utility>
+
 using namespace klee;
 using namespace llvm;
 
@@ -66,7 +69,7 @@ struct AssignmentLessThan {
 class CexCachingSolver : public SolverImpl {
   typedef std::set<Assignment*, AssignmentLessThan> assignmentsTable_ty;
 
-  Solver *solver;
+  std::unique_ptr<Solver> solver;
   
   MapOfSets<ref<Expr>, Assignment*> cache;
   // memo table
@@ -85,7 +88,8 @@ class CexCachingSolver : public SolverImpl {
   bool getAssignment(const Query& query, Assignment *&result);
   
 public:
-  CexCachingSolver(Solver *_solver) : solver(_solver) {}
+  CexCachingSolver(std::unique_ptr<Solver> solver)
+      : solver(std::move(solver)) {}
   ~CexCachingSolver();
   
   bool computeTruth(const Query&, bool &isValid);
@@ -265,7 +269,6 @@ bool CexCachingSolver::getAssignment(const Query& query, Assignment *&result) {
 
 CexCachingSolver::~CexCachingSolver() {
   cache.clear();
-  delete solver;
   for (assignmentsTable_ty::iterator it = assignmentsTable.begin(), 
          ie = assignmentsTable.end(); it != ie; ++it)
     delete *it;
@@ -383,6 +386,8 @@ void CexCachingSolver::setCoreSolverTimeout(time::Span timeout) {
 
 ///
 
-Solver *klee::createCexCachingSolver(Solver *_solver) {
-  return new Solver(new CexCachingSolver(_solver));
+std::unique_ptr<Solver>
+klee::createCexCachingSolver(std::unique_ptr<Solver> solver) {
+  return std::make_unique<Solver>(
+      std::make_unique<CexCachingSolver>(std::move(solver)));
 }

@@ -20,11 +20,15 @@
 #include "klee/Solver/Solver.h"
 #include "klee/Support/ErrorHandling.h"
 
+#include "klee/Support/CompilerWarning.h"
+DISABLE_WARNING_PUSH
+DISABLE_WARNING_DEPRECATED_DECLARATIONS
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Instruction.h"
 #include "llvm/IR/Value.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/raw_ostream.h"
+DISABLE_WARNING_POP
 
 #include <cassert>
 #include <sstream>
@@ -375,19 +379,23 @@ ref<Expr> ObjectState::read8(unsigned offset) const {
 }
 
 ref<Expr> ObjectState::read8(ref<Expr> offset) const {
-  assert(!isa<ConstantExpr>(offset) && "constant offset passed to symbolic read8");
+  assert(!isa<ConstantExpr>(offset) &&
+         "constant offset passed to symbolic read8");
   unsigned base, size;
   fastRangeCheckOffset(offset, &base, &size);
   flushRangeForRead(base, size);
 
-  if (size>4096) {
+  if (size > 4096) {
     std::string allocInfo;
     object->getAllocInfo(allocInfo);
-    klee_warning_once(0, "flushing %d bytes on read, may be slow and/or crash: %s", 
-                      size,
-                      allocInfo.c_str());
+    klee_warning_once(
+        nullptr,
+        "Symbolic memory access will send the following array of %d bytes to "
+        "the constraint solver -- large symbolic arrays may cause significant "
+        "performance issues: %s",
+        size, allocInfo.c_str());
   }
-  
+
   return ReadExpr::create(getUpdates(), ZExtExpr::create(offset, Expr::Int32));
 }
 
@@ -413,19 +421,23 @@ void ObjectState::write8(unsigned offset, ref<Expr> value) {
 }
 
 void ObjectState::write8(ref<Expr> offset, ref<Expr> value) {
-  assert(!isa<ConstantExpr>(offset) && "constant offset passed to symbolic write8");
+  assert(!isa<ConstantExpr>(offset) &&
+         "constant offset passed to symbolic write8");
   unsigned base, size;
   fastRangeCheckOffset(offset, &base, &size);
   flushRangeForWrite(base, size);
 
-  if (size>4096) {
+  if (size > 4096) {
     std::string allocInfo;
     object->getAllocInfo(allocInfo);
-    klee_warning_once(0, "flushing %d bytes on read, may be slow and/or crash: %s", 
-                      size,
-                      allocInfo.c_str());
+    klee_warning_once(
+        nullptr,
+        "Symbolic memory access will send the following array of %d bytes to "
+        "the constraint solver -- large symbolic arrays may cause significant "
+        "performance issues: %s",
+        size, allocInfo.c_str());
   }
-  
+
   updates.extend(ZExtExpr::create(offset, Expr::Int32), value);
 }
 

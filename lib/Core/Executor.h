@@ -64,6 +64,7 @@ namespace klee {
   class ExternalDispatcher;
   class Expr;
   class InstructionInfoTable;
+  class KCallable;
   struct KFunction;
   struct KInstruction;
   class KInstIterator;
@@ -109,8 +110,8 @@ private:
   Searcher *searcher;
 
   ExternalDispatcher *externalDispatcher;
-  TimingSolver *solver;
-  MemoryManager *memory;
+  std::unique_ptr<TimingSolver> solver;
+  std::unique_ptr<MemoryManager> memory;
   std::set<ExecutionState*, ExecutionStateIDCompare> states;
   StatsTracker *statsTracker;
   TreeStreamWriter *pathWriter, *symPathWriter;
@@ -137,13 +138,13 @@ private:
   /// happens with other states (that don't satisfy the seeds) depends
   /// on as-yet-to-be-determined flags.
   std::map<ExecutionState*, std::vector<SeedInfo> > seedMap;
-  
+
   /// Map of globals to their representative memory object.
   std::map<const llvm::GlobalValue*, MemoryObject*> globalObjects;
 
   /// Map of globals to their bound address. This also includes
-  /// globals that have no representative object (i.e. functions).
-  std::map<const llvm::GlobalValue*, ref<ConstantExpr> > globalAddresses;
+  /// globals that have no representative object (e.g. aliases).
+  std::map<const llvm::GlobalValue*, ref<ConstantExpr>> globalAddresses;
 
   /// Map of legal function addresses to the corresponding Function.
   /// Used to validate and dereference function pointers.
@@ -211,8 +212,7 @@ private:
   /// Return the typeid corresponding to a certain `type_info`
   ref<ConstantExpr> getEhTypeidFor(ref<Expr> type_info);
 
-  llvm::Function* getTargetFunction(llvm::Value *calledVal,
-                                    ExecutionState &state);
+  llvm::Function* getTargetFunction(llvm::Value *calledVal);
   
   void executeInstruction(ExecutionState &state, KInstruction *ki);
 
@@ -240,7 +240,7 @@ private:
 
   void callExternalFunction(ExecutionState &state,
                             KInstruction *target,
-                            llvm::Function *function,
+                            KCallable *callable,
                             std::vector< ref<Expr> > &arguments);
 
   ObjectState *bindObjectInState(ExecutionState &state, const MemoryObject *mo,
@@ -410,7 +410,8 @@ private:
   const InstructionInfo & getLastNonKleeInternalInstruction(const ExecutionState &state,
       llvm::Instruction** lastInstruction);
 
-  /// Remove state from queue and delete state
+  /// Remove state from queue and delete state. This function should only be
+  /// used in the termination functions below.
   void terminateState(ExecutionState &state);
 
   /// Call exit handler and terminate state normally
@@ -420,21 +421,43 @@ private:
   /// Call exit handler and terminate state early
   /// (e.g. due to state merging or memory pressure)
   void terminateStateEarly(ExecutionState &state, const llvm::Twine &message,
-                           StateTerminationType terminationType);
+                           StateTerminationType reason);
+
+  /// Call exit handler and terminate state early
+  /// (e.g. caused by the applied algorithm as in state merging or replaying)
+  void terminateStateEarlyAlgorithm(ExecutionState &state,
+                                    const llvm::Twine &message,
+                                    StateTerminationType reason);
+
+  /// Call exit handler and terminate state early
+  /// (e.g. due to klee_silent_exit issued by user)
+  void terminateStateEarlyUser(ExecutionState &state,
+                               const llvm::Twine &message);
+
+  /// Call error handler and terminate state in case of errors.
+  /// The underlying function of all error-handling termination functions
+  /// below. This function should only be used in the termination functions
+  /// below.
+  void terminateStateOnError(ExecutionState &state,
+                                    const llvm::Twine &message,
+                                    StateTerminationType reason,
+                                    const llvm::Twine &longMessage = "",
+                                    const char *suffix = nullptr);
 
   /// Call error handler and terminate state in case of program errors
   /// (e.g. free()ing globals, out-of-bound accesses)
-  void terminateStateOnError(ExecutionState &state, const llvm::Twine &message,
-                             StateTerminationType terminationType,
-                             const llvm::Twine &longMessage = "",
-                             const char *suffix = nullptr);
+  void terminateStateOnProgramError(ExecutionState &state,
+                                    const llvm::Twine &message,
+                                    StateTerminationType reason,
+                                    const llvm::Twine &longMessage = "",
+                                    const char *suffix = nullptr);
 
   /// Call error handler and terminate state in case of execution errors
   /// (things that should not be possible, like illegal instruction or
   /// unlowered intrinsic, or unsupported intrinsics, like inline assembly)
-  void terminateStateOnExecError(ExecutionState &state,
-                                 const llvm::Twine &message,
-                                 const llvm::Twine &info = "");
+  void terminateStateOnExecError(
+      ExecutionState &state, const llvm::Twine &message,
+      StateTerminationType = StateTerminationType::Execution);
 
   /// Call error handler and terminate state in case of solver errors
   /// (solver error or timeout)
@@ -449,7 +472,7 @@ private:
   /// bindModuleConstants - Initialize the module constant table.
   void bindModuleConstants();
 
-  template <typename SqType, typename TypeIt>
+  template <typename TypeIt>
   void computeOffsetsSeqTy(KGEPInstruction *kgepi,
                            ref<ConstantExpr> &constantOffset, uint64_t index,
                            const TypeIt it);
