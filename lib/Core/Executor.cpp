@@ -4245,6 +4245,7 @@ void Executor::callExternalFunction(ExecutionState &state,
       (void) success;
       ce->toMemory(&args[wordIndex]);
       IDType result;
+      addConstraint(state, EqExpr::create(ce, *ai));
       // Checking to see if the argument is a pointer to something
       llvm::Type *argumentType = nullptr;
       if (ati != functionType->param_end()) {
