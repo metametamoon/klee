@@ -71,7 +71,7 @@ StackFrame::~StackFrame() {
 /***/
 
 ExecutionState::ExecutionState(KFunction *kf)
-    : pc(kf->instructions), prevPC(pc) {
+    : pc(kf->instructions), prevPC(pc), symcretes(true) {
   pushFrame(nullptr, kf);
   setID();
 }
@@ -92,12 +92,15 @@ ExecutionState::ExecutionState(const ExecutionState& state):
     depth(state.depth),
     addressSpace(state.addressSpace),
     constraints(state.constraints),
+    unaddressableSymbolics(state.unaddressableSymbolics),
     pathOS(state.pathOS),
     symPathOS(state.symPathOS),
     coveredLines(state.coveredLines),
     symbolics(state.symbolics),
+    symbolicsMap(state.symbolicsMap),
     cexPreferences(state.cexPreferences),
     arrayNames(state.arrayNames),
+    symcretes(state.symcretes),
     openMergeStack(state.openMergeStack),
     steppedInstructions(state.steppedInstructions),
     instsSinceCovNew(state.instsSinceCovNew),
@@ -134,6 +137,40 @@ void ExecutionState::popFrame() {
 
 void ExecutionState::addSymbolic(const MemoryObject *mo, const Array *array) {
   symbolics.emplace_back(ref<const MemoryObject>(mo), array);
+  symbolicsMap[array] = ref<const MemoryObject>(mo);
+}
+
+bool ExecutionState::isSymcrete(const Array *array) {
+  return symcretes.bindings.count(array);
+}
+
+void ExecutionState::addSymcrete(
+    const Array *array, const std::vector<unsigned char> &concretisation) {
+  assert(array && array->isSymbolicArray() &&
+         "Cannot make concrete array symcrete");
+  assert(array->size == concretisation.size() &&
+         "Given concretisation does not fit the array");
+  assert(!isSymcrete(array) && "Array already symcrete");
+  symcretes.bindings[array] = concretisation;
+}
+
+void ExecutionState::removeSymcrete(const Array *array) {
+  assert(isSymcrete(array) && "Given array is not symcrete");
+  symcretes.bindings.erase(array);
+}
+
+void ExecutionState::replaceSymcretes(const Assignment &assign) {
+  for (auto i : assign.bindings) {
+    assert(symcretes.bindings.count(i.first) && "New symcrete in assignment");
+  }
+  for (auto i : symcretes.bindings) {
+    assert(assign.bindings.count(i.first) && "Old symcrete not in assignment");
+  }
+  symcretes = assign;
+}
+
+ref<Expr> ExecutionState::evaluateWithSymcretes(ref<Expr> e) {
+  return symcretes.evaluate(e);
 }
 
 /**/
@@ -178,9 +215,9 @@ bool ExecutionState::merge(const ExecutionState &b) {
       return false;
   }
 
-  std::set< ref<Expr> > aConstraints(constraints.begin(), constraints.end());
-  std::set< ref<Expr> > bConstraints(b.constraints.begin(), 
-                                     b.constraints.end());
+  std::set< ref<Expr> > aConstraints(constraints.constraints().begin(), constraints.constraints().end());
+  std::set< ref<Expr> > bConstraints(b.constraints.constraints().begin(), 
+                                     b.constraints.constraints().end());
   std::set< ref<Expr> > commonConstraints, aSuffix, bSuffix;
   std::set_intersection(aConstraints.begin(), aConstraints.end(),
                         bConstraints.begin(), bConstraints.end(),
@@ -308,8 +345,8 @@ bool ExecutionState::merge(const ExecutionState &b) {
 
   ConstraintManager m(constraints);
   for (const auto &constraint : commonConstraints)
-    m.addConstraint(constraint);
-  m.addConstraint(OrExpr::create(inA, inB));
+    m.addConstraint(constraint, {});
+  m.addConstraint(OrExpr::create(inA, inB), {});
 
   return true;
 }
@@ -348,9 +385,9 @@ void ExecutionState::dumpStack(llvm::raw_ostream &out) const {
   }
 }
 
-void ExecutionState::addConstraint(ref<Expr> e) {
+void ExecutionState::addConstraint(ref<Expr> e, const Assignment &delta) {
   ConstraintManager c(constraints);
-  c.addConstraint(e);
+  c.addConstraint(e, delta);
 }
 
 void ExecutionState::addCexPreference(const ref<Expr> &cond) {

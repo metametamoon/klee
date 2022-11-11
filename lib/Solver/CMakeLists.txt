@@ -15,6 +15,9 @@ klee_add_component(kleaverSolver
   CoreSolver.cpp
   DummySolver.cpp
   FastCexSolver.cpp
+  FuzzingSolver.cpp
+  Fuzzer.cpp
+  IREmitter.cpp
   IncompleteSolver.cpp
   IndependentSolver.cpp
   MetaSMTSolver.cpp
@@ -33,14 +36,20 @@ klee_add_component(kleaverSolver
 )
 
 set(LLVM_COMPONENTS
+  core
+  executionengine
+  mcjit
+  native
   support
+  passes
 )
+
 klee_get_llvm_libs(LLVM_LIBS ${LLVM_COMPONENTS})
 target_link_libraries(kleaverSolver PUBLIC ${LLVM_LIBS})
 
 target_link_libraries(kleaverSolver PRIVATE
   kleeBasic
+  kleeFuzzer
   kleaverExpr
   kleeSupport
   ${KLEE_SOLVER_LIBRARIES})
-

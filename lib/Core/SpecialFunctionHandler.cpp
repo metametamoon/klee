@@ -508,11 +508,11 @@ void SpecialFunctionHandler::handleAssume(ExecutionState &state,
   if (e->getWidth() != Expr::Bool)
     e = NeExpr::create(e, ConstantExpr::create(0, e->getWidth()));
   
-  bool res;
+  Solver::TruthResponse res;
   bool success __attribute__((unused)) = executor.solver->mustBeFalse(
       state.constraints, e, res, state.queryMetaData);
   assert(success && "FIXME: Unhandled solver failure");
-  if (res) {
+  if (res.result) {
     if (SilentKleeAssume) {
       executor.terminateState(state);
     } else {
@@ -520,7 +520,7 @@ void SpecialFunctionHandler::handleAssume(ExecutionState &state,
           state, "invalid klee_assume call (provably false)");
     }
   } else {
-    executor.addConstraint(state, e);
+    executor.addConstraint(state, e, res.counterexampleDelta);
   }
 }
 
@@ -619,12 +619,12 @@ void SpecialFunctionHandler::handlePrintRange(ExecutionState &state,
     bool success __attribute__((unused)) = executor.solver->getValue(
         state.constraints, arguments[1], value, state.queryMetaData);
     assert(success && "FIXME: Unhandled solver failure");
-    bool res;
+    Solver::TruthResponse res;
     success = executor.solver->mustBeTrue(state.constraints,
                                           EqExpr::create(arguments[1], value),
                                           res, state.queryMetaData);
     assert(success && "FIXME: Unhandled solver failure");
-    if (res) {
+    if (res.result) {
       llvm::errs() << " == " << value;
     } else { 
       llvm::errs() << " ~= " << value;
@@ -845,7 +845,7 @@ void SpecialFunctionHandler::handleMakeSymbolic(ExecutionState &state,
     } 
 
     // FIXME: Type coercion should be done consistently somewhere.
-    bool res;
+    Solver::TruthResponse res;
     bool success __attribute__((unused)) = executor.solver->mustBeTrue(
         s->constraints,
         EqExpr::create(
@@ -854,7 +854,7 @@ void SpecialFunctionHandler::handleMakeSymbolic(ExecutionState &state,
         res, s->queryMetaData);
     assert(success && "FIXME: Unhandled solver failure");
     
-    if (res) {
+    if (res.result) {
       executor.executeMakeSymbolic(*s, mo, name);
     } else {      
       executor.terminateStateOnUserError(*s, "Wrong size given to klee_make_symbolic");

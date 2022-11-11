@@ -14,6 +14,7 @@
 #include "klee/Expr/ExprPPrinter.h"
 #include "klee/Expr/Parser/Lexer.h"
 #include "klee/Expr/Parser/Parser.h"
+#include "klee/Expr/SymbolicSource.h"
 #include "klee/Solver/Solver.h"
 
 #include "llvm/ADT/APInt.h"
@@ -110,6 +111,7 @@ namespace {
     ExprBuilder *Builder;
     ArrayCache TheArrayCache;
     bool ClearArrayAfterQuery;
+    SymbolicSource *s; // Hack
 
     Lexer TheLexer;
     unsigned MaxErrors;
@@ -521,10 +523,10 @@ DeclResult ParserImpl::ParseArrayDecl() {
   const Identifier *Label = GetOrCreateIdentifier(Name);
   const Array *Root;
   if (!Values.empty())
-    Root = TheArrayCache.CreateArray(Label->Name, Size.get(), &Values[0],
+    Root = TheArrayCache.CreateArray(Label->Name, Size.get(), s, &Values[0],
                                      &Values[0] + Values.size());
   else
-    Root = TheArrayCache.CreateArray(Label->Name, Size.get());
+    Root = TheArrayCache.CreateArray(Label->Name, Size.get(), s);
   ArrayDecl *AD = new ArrayDecl(Label, Size.get(), 
                                 DomainType.get(), RangeType.get(), Root);
 
@@ -1317,7 +1319,7 @@ VersionResult ParserImpl::ParseVersionSpecifier() {
   if (!Res.isValid()) {
     // FIXME: I'm not sure if this is right. Do we need a unique array here?
     Res =
-        VersionResult(true, UpdateList(TheArrayCache.CreateArray("", 0), NULL));
+        VersionResult(true, UpdateList(TheArrayCache.CreateArray("", 0, s), NULL));
   }
   
   if (Label)
@@ -1632,7 +1634,7 @@ void QueryCommand::dump() {
     ObjectsBegin = &Objects[0];
     ObjectsEnd = ObjectsBegin + Objects.size();
   }
-  ExprPPrinter::printQuery(llvm::outs(), ConstraintSet(Constraints), Query,
+  ExprPPrinter::printQuery(llvm::outs(), ConstraintSet(Constraints, {}, {}), Query,
                            ValuesBegin, ValuesEnd, ObjectsBegin, ObjectsEnd,
                            false);
 }

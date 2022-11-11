@@ -11,7 +11,9 @@
  * This file groups declarations that are common to both KLEE and Kleaver.
  */
 
+#include "klee/Solver/Fuzzer.h"
 #include "klee/Solver/Common.h"
+#include "klee/Solver/Solver.h"
 #include "klee/Solver/SolverCmdLine.h"
 #include "klee/Support/ErrorHandling.h"
 #include "klee/System/Time.h"
@@ -20,12 +22,13 @@
 
 
 namespace klee {
-Solver *constructSolverChain(Solver *coreSolver,
-                             std::string querySMT2LogPath,
+std::pair<Solver *, Fuzzer *> constructSolverChain(Solver *coreSolver, std::string querySMT2LogPath,
                              std::string baseSolverQuerySMT2LogPath,
                              std::string queryKQueryLogPath,
-                             std::string baseSolverQueryKQueryLogPath) {
+                             std::string baseSolverQueryKQueryLogPath,
+                             llvm::LLVMContext *ctx) {
   Solver *solver = coreSolver;
+  Fuzzer *fuzzer = nullptr;
   const time::Span minQueryTimeToLog(MinQueryTimeToLog);
 
   if (QueryLoggingOptions.isSet(SOLVER_KQUERY)) {
@@ -55,6 +58,15 @@ Solver *constructSolverChain(Solver *coreSolver,
   if (UseIndependentSolver)
     solver = createIndependentSolver(solver);
 
+  if (ctx) {
+    auto pair = createFuzzingSolver(solver, *ctx);
+    solver = pair.first;
+    fuzzer = pair.second;
+  }
+
+  if (UseIndependentSolver)
+    solver = createIndependentSolver(solver);
+
   if (DebugValidateSolver)
     solver = createValidatingSolver(solver, coreSolver);
 
@@ -74,6 +86,6 @@ Solver *constructSolverChain(Solver *coreSolver,
     solver = createValidatingSolver(/*s=*/solver, /*oracle=*/oracleSolver);
   }
 
-  return solver;
+  return {solver, fuzzer};
 }
 }

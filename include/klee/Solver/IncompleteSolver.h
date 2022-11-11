@@ -93,9 +93,9 @@ private:
 public:
   StagedSolverImpl(IncompleteSolver *_primary, Solver *_secondary);
   ~StagedSolverImpl();
-    
-  bool computeTruth(const Query&, bool &isValid);
-  bool computeValidity(const Query&, Solver::Validity &result);
+
+  bool computeTruth(const Query&, Solver::TruthResponse &res);
+  bool computeValidity(const Query&, Solver::ValidityResponse &res);
   bool computeValue(const Query&, ref<Expr> &result);
   bool computeInitialValues(const Query&,
                             const std::vector<const Array*> &objects,

@@ -62,8 +62,8 @@ public:
   virtual ~QueryLoggingSolver();
 
   /// implementation of the SolverImpl interface
-  bool computeTruth(const Query &query, bool &isValid);
-  bool computeValidity(const Query &query, Solver::Validity &result);
+  bool computeTruth(const Query &query, Solver::TruthResponse &res);
+  bool computeValidity(const Query &query, Solver::ValidityResponse &res);
   bool computeValue(const Query &query, ref<Expr> &result);
   bool computeInitialValues(const Query &query,
                             const std::vector<const Array *> &objects,

@@ -503,7 +503,7 @@ void ExprSMTLIBPrinter::printUpdatesAndArray(const UpdateNode *un,
 
 void ExprSMTLIBPrinter::scanAll() {
   // perform scan of all expressions
-  for (const auto &constraint : query->constraints)
+  for (const auto &constraint : query->constraints.constraints())
     scan(constraint);
 
   // Scan the query too
@@ -626,7 +626,7 @@ void ExprSMTLIBPrinter::printHumanReadableQuery() {
 
   if (abbrMode != ABBR_LET) {
     // Generate assert statements for each constraint
-    for (const auto &constraint : query->constraints)
+    for (const auto &constraint : query->constraints.constraints())
       printAssert(constraint);
 
     *o << "; QueryExpr\n";
@@ -654,8 +654,8 @@ void ExprSMTLIBPrinter::printQueryInSingleAssert() {
   ref<Expr> queryAssert = Expr::createIsZero(query->expr);
 
   // Print constraints inside the main query to reuse the Expr bindings
-  for (std::vector<ref<Expr> >::const_iterator i = query->constraints.begin(),
-                                               e = query->constraints.end();
+  for (std::vector<ref<Expr> >::const_iterator i = query->constraints.constraints().begin(),
+                                               e = query->constraints.constraints().end();
        i != e; ++i) {
     queryAssert = AndExpr::create(queryAssert, *i);
   }

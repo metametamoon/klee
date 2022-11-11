@@ -15,6 +15,7 @@
 
 #include "klee/ADT/BitArray.h"
 #include "klee/Expr/ArrayCache.h"
+#include "klee/Expr/Assignment.h"
 #include "klee/Expr/Expr.h"
 #include "klee/Support/OptionCategories.h"
 #include "klee/Solver/Solver.h"
@@ -27,6 +28,7 @@
 #include "llvm/Support/raw_ostream.h"
 
 #include <cassert>
+#include <llvm/Support/Casting.h>
 #include <sstream>
 
 using namespace llvm;
@@ -84,9 +86,10 @@ ObjectState::ObjectState(const MemoryObject *mo)
     size(mo->size),
     readOnly(false) {
   if (!UseConstantArrays) {
+    auto sb = this->getSourceBuilder();
     static unsigned id = 0;
     const Array *array =
-        getArrayCache()->CreateArray("tmp_arr" + llvm::utostr(++id), size);
+        getArrayCache()->CreateArray("tmp_arr" + llvm::utostr(++id), size, sb->makeSymbolic());
     updates = UpdateList(array, 0);
   }
   memset(concreteStore, 0, size);
@@ -116,8 +119,9 @@ ObjectState::ObjectState(const ObjectState &os)
     unflushedMask(os.unflushedMask ? new BitArray(*os.unflushedMask, os.size) : nullptr),
     updates(os.updates),
     size(os.size),
-    readOnly(false) {
-  assert(!os.readOnly && "no need to copy read only object?");
+    readOnly(os.readOnly) {
+  // Temporarily disabled
+  // assert(!os.readOnly && "no need to copy read only object?");
   if (os.knownSymbolics) {
     knownSymbolics = new ref<Expr>[size];
     for (unsigned i=0; i<size; i++)
@@ -137,6 +141,11 @@ ObjectState::~ObjectState() {
 ArrayCache *ObjectState::getArrayCache() const {
   assert(object && "object was NULL");
   return object->parent->getArrayCache();
+}
+
+SourceBuilder *ObjectState::getSourceBuilder() const {
+  assert(object && "object was NULL");
+  return object->parent->getSourceBuilder();
 }
 
 /***/
@@ -179,8 +188,9 @@ const UpdateList &ObjectState::getUpdates() const {
     }
 
     static unsigned id = 0;
+    auto sb = getSourceBuilder();
     const Array *array = getArrayCache()->CreateArray(
-        "const_arr" + llvm::utostr(++id), size, &Contents[0],
+        "const_arr" + llvm::utostr(++id), size, sb->constant(), &Contents[0],
         &Contents[0] + Contents.size());
     updates = UpdateList(array, 0);
 
@@ -360,6 +370,11 @@ void ObjectState::setKnownSymbolic(unsigned offset,
 }
 
 /***/
+
+ref<Expr> ObjectState::hackRead() const {
+  return ReadExpr::alloc(getUpdates(),
+                         ConstantExpr::create(0, Expr::Int8));
+}
 
 ref<Expr> ObjectState::read8(unsigned offset) const {
   if (isByteConcrete(offset)) {

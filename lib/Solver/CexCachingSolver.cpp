@@ -88,8 +88,8 @@ public:
   CexCachingSolver(Solver *_solver) : solver(_solver) {}
   ~CexCachingSolver();
   
-  bool computeTruth(const Query&, bool &isValid);
-  bool computeValidity(const Query&, Solver::Validity &result);
+  bool computeTruth(const Query&, Solver::TruthResponse &res);
+  bool computeValidity(const Query&, Solver::ValidityResponse &result);
   bool computeValue(const Query&, ref<Expr> &result);
   bool computeInitialValues(const Query&,
                             const std::vector<const Array*> &objects,
@@ -199,7 +199,7 @@ bool CexCachingSolver::searchForAssignment(KeyType &key, Assignment *&result) {
 bool CexCachingSolver::lookupAssignment(const Query &query, 
                                         KeyType &key,
                                         Assignment *&result) {
-  key = KeyType(query.constraints.begin(), query.constraints.end());
+  key = KeyType(query.constraints.constraints().begin(), query.constraints.constraints().end());
   ref<Expr> neg = Expr::createIsZero(query.expr);
   if (ConstantExpr *CE = dyn_cast<ConstantExpr>(neg)) {
     if (CE->isFalse()) {
@@ -272,7 +272,7 @@ CexCachingSolver::~CexCachingSolver() {
 }
 
 bool CexCachingSolver::computeValidity(const Query& query,
-                                       Solver::Validity &result) {
+                                       Solver::ValidityResponse &res) {
   TimerStatIncrementer t(stats::cexCacheTime);
   Assignment *a;
   if (!getAssignment(query.withFalse(), a))
@@ -285,18 +285,18 @@ bool CexCachingSolver::computeValidity(const Query& query,
   if (cast<ConstantExpr>(q)->isTrue()) {
     if (!getAssignment(query, a))
       return false;
-    result = !a ? Solver::True : Solver::Unknown;
+    res.validity = !a ? Solver::MustBeTrue : Solver::TrueOrFalse;
   } else {
     if (!getAssignment(query.negateExpr(), a))
       return false;
-    result = !a ? Solver::False : Solver::Unknown;
+    res.validity = !a ? Solver::MustBeFalse : Solver::TrueOrFalse;
   }
   
   return true;
 }
 
 bool CexCachingSolver::computeTruth(const Query& query,
-                                    bool &isValid) {
+                                    Solver::TruthResponse &res) {
   TimerStatIncrementer t(stats::cexCacheTime);
 
   // There is a small amount of redundancy here. We only need to know
@@ -317,7 +317,7 @@ bool CexCachingSolver::computeTruth(const Query& query,
   if (!getAssignment(query, a))
     return false;
 
-  isValid = !a;
+  res.result = !a;
 
   return true;
 }

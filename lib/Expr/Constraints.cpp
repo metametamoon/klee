@@ -9,6 +9,8 @@
 
 #include "klee/Expr/Constraints.h"
 
+#include "klee/Expr/Expr.h"
+#include "klee/Expr/ExprUtil.h"
 #include "klee/Expr/ExprVisitor.h"
 #include "klee/Module/KModule.h"
 #include "klee/Support/OptionCategories.h"
@@ -71,10 +73,10 @@ public:
 };
 
 bool ConstraintManager::rewriteConstraints(ExprVisitor &visitor) {
-  ConstraintSet old;
+  ConstraintSet::constraints_ty old;
   bool changed = false;
 
-  std::swap(constraints, old);
+  std::swap(constraints._constraints, old);
   for (auto &ce : old) {
     ref<Expr> e = visitor.visit(ce);
 
@@ -82,7 +84,7 @@ bool ConstraintManager::rewriteConstraints(ExprVisitor &visitor) {
       addConstraintInternal(e); // enable further reductions
       changed = true;
     } else {
-      constraints.push_back(ce);
+      constraints.add_constraint(ce, {});
     }
   }
 
@@ -97,7 +99,7 @@ ref<Expr> ConstraintManager::simplifyExpr(const ConstraintSet &constraints,
 
   std::map< ref<Expr>, ref<Expr> > equalities;
 
-  for (auto &constraint : constraints) {
+  for (auto &constraint : constraints._constraints) {
     if (const EqExpr *ee = dyn_cast<EqExpr>(constraint)) {
       if (isa<ConstantExpr>(ee->left)) {
         equalities.insert(std::make_pair(ee->right,
@@ -145,17 +147,20 @@ void ConstraintManager::addConstraintInternal(const ref<Expr> &e) {
 	rewriteConstraints(visitor);
       }
     }
-    constraints.push_back(e);
+    constraints.add_constraint(e, {});
     break;
   }
 
   default:
-    constraints.push_back(e);
+    constraints.add_constraint(e, {});
     break;
   }
 }
 
-void ConstraintManager::addConstraint(const ref<Expr> &e) {
+void ConstraintManager::addConstraint(const ref<Expr> &e, const Assignment &delta) {
+  for (auto i : delta.bindings) {
+    constraints._symcretization.bindings[i.first] = i.second;
+  }
   ref<Expr> simplified = simplifyExpr(constraints, e);
   addConstraintInternal(simplified);
 }
@@ -163,16 +168,45 @@ void ConstraintManager::addConstraint(const ref<Expr> &e) {
 ConstraintManager::ConstraintManager(ConstraintSet &_constraints)
     : constraints(_constraints) {}
 
-bool ConstraintSet::empty() const { return constraints.empty(); }
 
-klee::ConstraintSet::constraint_iterator ConstraintSet::begin() const {
-  return constraints.begin();
+size_t ConstraintSet::size() const {
+  return _constraints.size();
 }
 
-klee::ConstraintSet::constraint_iterator ConstraintSet::end() const {
-  return constraints.end();
+bool ConstraintSet::empty() const {
+  return _constraints.empty() && _symcretes.empty();
 }
 
-size_t ConstraintSet::size() const noexcept { return constraints.size(); }
+void ConstraintSet::dump() const {
+  llvm::errs() << "Constraint Set:\n";
+  llvm::errs() << "Constraints (" << _constraints.size() << ") [\n";
+  for (const auto &constraint : _constraints) {
+    constraint->dump();
+  }
+  llvm::errs() << "]\n";
+  llvm::errs() << "Symcretes (" << _symcretes.size() << ") [\n";
+  for (unsigned s = 0; s < _symcretes.size(); s++) {
+    auto &symcrete = _symcretes[s];
+    symcrete.symcretized->dump();
+    llvm::errs() << "Concretization: ";
+    auto &value = _symcretization.bindings.at(symcrete.marker);
+    for (unsigned i = 0; i < value.size(); i++) {
+      llvm::errs() << (unsigned int)value[i] << (i + 1 == value.size() ? "" : " ");
+    }
+    llvm::errs() << "\n" << (s + 1 == _symcretes.size() ? "" : "\n");
+  }
+  llvm::errs() << "]\n";
+}
 
-void ConstraintSet::push_back(const ref<Expr> &e) { constraints.push_back(e); }
+void ConstraintSet::add_symcrete(Symcrete s,
+                                  std::vector<unsigned char> concretization) {
+  _symcretes.push_back(std::move(s));
+  _symcretization.bindings.insert({s.marker, std::move(concretization)});
+}
+
+void ConstraintSet::add_constraint(const ref<Expr> &e, Assignment update) {
+  _constraints.push_back(e);
+  for (auto i : update.bindings) {
+    _symcretization.bindings[i.first] = i.second;
+  }
+}

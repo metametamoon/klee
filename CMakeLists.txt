@@ -108,6 +108,7 @@ set(KLEE_COMPONENT_CXX_DEFINES "")
 set(KLEE_COMPONENT_CXX_FLAGS "")
 set(KLEE_SOLVER_LIBRARIES "")
 set(KLEE_COMPONENT_EXTRA_LIBRARIES "")
+set(CMAKE_EXE_LINKER_FLAGS "-Wl,-E" CACHE INTERNAL "" FORCE)
 
 
 ################################################################################

@@ -207,7 +207,7 @@ void ImpliedValue::checkForImpliedValues(Solver *S, ref<Expr> e,
   reads = std::vector< ref<ReadExpr> >(readsSet.begin(), readsSet.end());
 
   ConstraintSet assumption;
-  assumption.push_back(EqExpr::create(e, value));
+  assumption.add_constraint(EqExpr::create(e, value), {});
 
   // obscure... we need to make sure that all the read indices are
   // bounds checked. if we don't do this we can end up constructing
@@ -218,9 +218,9 @@ void ImpliedValue::checkForImpliedValues(Solver *S, ref<Expr> e,
   for (std::vector< ref<ReadExpr> >::iterator i = reads.begin(), 
          ie = reads.end(); i != ie; ++i) {
     ReadExpr *re = i->get();
-    assumption.push_back(UltExpr::create(re->index, 
+    assumption.add_constraint(UltExpr::create(re->index, 
                                          ConstantExpr::alloc(re->updates.root->size, 
-                                                             Context::get().getPointerWidth())));
+                                                             Context::get().getPointerWidth())), {});
   }
 
   for (const auto &var : reads) {
@@ -229,11 +229,11 @@ void ImpliedValue::checkForImpliedValues(Solver *S, ref<Expr> e,
     (void)success;
     assert(success && "FIXME: Unhandled solver failure");    
     std::map<ref<ReadExpr>, ref<ConstantExpr> >::iterator it = found.find(var);
-    bool res;
+    Solver::TruthResponse res;
     success =
         S->mustBeTrue(Query(assumption, EqExpr::create(var, possible)), res);
     assert(success && "FIXME: Unhandled solver failure");    
-    if (res) {
+    if (res.result) {
       if (it != found.end()) {
         assert(possible == it->second && "Invalid ImpliedValue!");
         found.erase(it);

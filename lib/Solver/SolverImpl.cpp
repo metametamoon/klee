@@ -14,17 +14,35 @@ using namespace klee;
 
 SolverImpl::~SolverImpl() {}
 
-bool SolverImpl::computeValidity(const Query &query, Solver::Validity &result) {
-  bool isTrue, isFalse;
-  if (!computeTruth(query, isTrue))
-    return false;
-  if (isTrue) {
-    result = Solver::True;
-  } else {
-    if (!computeTruth(query.negateExpr(), isFalse))
-      return false;
-    result = isFalse ? Solver::False : Solver::Unknown;
+bool SolverImpl::computeValidity(const Query &query, ValidityResponse &res) {
+  bool trueSuccess, falseSuccess;
+  TruthResponse isTrue, isFalse;
+  trueSuccess = computeTruth(query, isTrue);
+  if (trueSuccess && isTrue.result) {
+    res.validity = Solver::MustBeTrue;
+    return true;
   }
+  falseSuccess = computeTruth(query.negateExpr(), isFalse);
+  if (falseSuccess && isFalse.result) {
+    res.validity = Solver::MustBeFalse;
+    return true;
+  }
+  if (trueSuccess && falseSuccess) {
+    res.validity = Solver::TrueOrFalse;
+    res.queryDelta = isFalse.counterexampleDelta;
+    res.negatedQueryDelta = isTrue.counterexampleDelta;
+    return true;
+  }
+  if (trueSuccess && !falseSuccess) {
+    res.validity = Solver::MayBeFalse;
+    res.negatedQueryDelta = isTrue.counterexampleDelta;
+  }
+  if (!trueSuccess && falseSuccess) {
+    res.validity = Solver::MayBeTrue;
+    res.queryDelta = isFalse.counterexampleDelta;
+    return true;
+  }
+  res.validity = Solver::None;
   return true;
 }
 

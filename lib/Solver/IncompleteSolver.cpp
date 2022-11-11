@@ -69,43 +69,44 @@ StagedSolverImpl::~StagedSolverImpl() {
   delete secondary;
 }
 
-bool StagedSolverImpl::computeTruth(const Query& query, bool &isValid) {
+bool StagedSolverImpl::computeTruth(const Query &query,
+                                    Solver::TruthResponse &res) {
   IncompleteSolver::PartialValidity trueResult = primary->computeTruth(query); 
   
   if (trueResult != IncompleteSolver::None) {
-    isValid = (trueResult == IncompleteSolver::MustBeTrue);
+    res.result = (trueResult == IncompleteSolver::MustBeTrue);
     return true;
   } 
 
-  return secondary->impl->computeTruth(query, isValid);
+  return secondary->impl->computeTruth(query, res);
 }
 
 bool StagedSolverImpl::computeValidity(const Query& query,
-                                       Solver::Validity &result) {
-  bool tmp;
+                                       Solver::ValidityResponse &res) {
+  Solver::TruthResponse tmp;
 
   switch(primary->computeValidity(query)) {
   case IncompleteSolver::MustBeTrue: 
-    result = Solver::True;
+    res.validity = Solver::MustBeTrue;
     break;
   case IncompleteSolver::MustBeFalse: 
-    result = Solver::False;
+    res.validity = Solver::MustBeFalse;
     break;
   case IncompleteSolver::TrueOrFalse: 
-    result = Solver::Unknown;
+    res.validity = Solver::TrueOrFalse;
     break;
   case IncompleteSolver::MayBeTrue:
     if (!secondary->impl->computeTruth(query, tmp))
       return false;
-    result = tmp ? Solver::True : Solver::Unknown;
+    res.validity = tmp.result ? Solver::MustBeTrue : Solver::TrueOrFalse;
     break;
   case IncompleteSolver::MayBeFalse:
     if (!secondary->impl->computeTruth(query.negateExpr(), tmp))
       return false;
-    result = tmp ? Solver::False : Solver::Unknown;
+    res.validity = tmp.result ? Solver::MustBeFalse : Solver::TrueOrFalse;
     break;
   default:
-    if (!secondary->impl->computeValidity(query, result))
+    if (!secondary->impl->computeValidity(query, res))
       return false;
     break;
   }

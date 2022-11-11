@@ -10,8 +10,10 @@
 #ifndef KLEE_EXPRUTIL_H
 #define KLEE_EXPRUTIL_H
 
+#include "klee/Expr/Expr.h"
 #include "klee/Expr/ExprVisitor.h"
 
+#include <unordered_set>
 #include <vector>
 
 namespace klee {
@@ -46,6 +48,67 @@ namespace klee {
 
   public:
     std::set<const Array *> results;
+  };
+
+  class SymbolicObjectFinder : public ExprVisitor {
+  protected:
+    Action visitRead(const ReadExpr &re) {
+      const UpdateList &ul = re.updates;
+
+      // XXX should we memo better than what ExprVisitor is doing for us?
+      for (const auto *un = ul.head.get(); un; un = un->next.get()) {
+        visit(un->index);
+        visit(un->value);
+      }
+
+      if (ul.root->isSymbolicArray())
+        if (results.insert(ul.root).second)
+          objects.push_back(ul.root);
+
+      return Action::doChildren();
+    }
+
+  public:
+    std::set<const Array *> results;
+    std::vector<const Array *> &objects;
+
+    SymbolicObjectFinder(std::vector<const Array *> &_objects)
+        : objects(_objects) {}
+  };
+
+  /// This for now mirrors SymbolicObjectFinder
+  /// Return a list of all unique symbolic objects referenced by the given
+  /// expression.
+  void findObjects(ref<Expr> e, std::vector<const Array *> &results);
+
+  /// Return a list of all unique symbolic objects referenced by the
+  /// given expression range.
+  template <typename InputIterator>
+  void findObjects(InputIterator begin, InputIterator end,
+                           std::vector<const Array *> &results);
+
+  class ObjectFinder : public ExprVisitor {
+  protected:
+    Action visitRead(const ReadExpr &re) {
+      const UpdateList &ul = re.updates;
+
+      // XXX should we memo better than what ExprVisitor is doing for us?
+      for (const auto *un = ul.head.get(); un; un = un->next.get()) {
+        visit(un->index);
+        visit(un->value);
+      }
+
+      if (results.insert(ul.root).second)
+        objects.push_back(ul.root);
+
+      return Action::doChildren();
+    }
+
+  public:
+    std::set<const Array *> results;
+    std::vector<const Array *> &objects;
+
+    ObjectFinder(std::vector<const Array *> &_objects) : objects(_objects) {}
   };
 }
 

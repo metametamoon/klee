@@ -24,6 +24,8 @@
 #include "klee/Core/TerminationTypes.h"
 #include "klee/Expr/ArrayCache.h"
 #include "klee/Expr/ArrayExprOptimizer.h"
+#include "klee/Expr/SourceBuilder.h"
+#include "klee/Expr/SymbolicSource.h"
 #include "klee/Module/Cell.h"
 #include "klee/Module/KInstruction.h"
 #include "klee/Module/KModule.h"
@@ -110,12 +112,14 @@ private:
 
   ExternalDispatcher *externalDispatcher;
   TimingSolver *solver;
+  Fuzzer *fuzzer;
   MemoryManager *memory;
   std::set<ExecutionState*, ExecutionStateIDCompare> states;
   StatsTracker *statsTracker;
   TreeStreamWriter *pathWriter, *symPathWriter;
   SpecialFunctionHandler *specialFunctionHandler;
   TimerGroup timers;
+  SourceBuilder sourceBuilder;
   std::unique_ptr<PTree> processTree;
 
   /// Used to track states that have been added during the current
@@ -232,6 +236,8 @@ private:
   void initializeGlobalAliases();
   void initializeGlobalObjects(ExecutionState &state);
 
+  bool checkSAT(ExecutionState &state);
+
   void stepInstruction(ExecutionState &state);
   void updateStates(ExecutionState *current);
   void transferToBasicBlock(llvm::BasicBlock *dst, 
@@ -328,6 +334,7 @@ private:
   /// as one of the results. Note that the output vector may include
   /// NULL pointers for states which were unable to be created.
   void branch(ExecutionState &state, const std::vector<ref<Expr>> &conditions,
+              const std::vector<Assignment> &deltas,
               std::vector<ExecutionState *> &result, BranchType reason);
 
   /// Fork current and return states in which condition holds / does
@@ -344,7 +351,7 @@ private:
   /// function is a wrapper around the state's addConstraint function
   /// which also manages propagation of implied values,
   /// validity checks, and seed patching.
-  void addConstraint(ExecutionState &state, ref<Expr> condition);
+  void addConstraint(ExecutionState &state, ref<Expr> condition, const Assignment &delta);
 
   // Called on [for now] concrete reads, replaces constant with a symbolic
   // Used for testing.

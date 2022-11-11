@@ -495,7 +495,7 @@ void ExprPPrinter::printQuery(llvm::raw_ostream &os,
                               bool printArrayDecls) {
   PPrinter p(os);
 
-  for (const auto &constraint : constraints)
+  for (const auto &constraint : constraints.constraints())
     p.scan(constraint);
   p.scan(q);
 
@@ -536,7 +536,7 @@ void ExprPPrinter::printQuery(llvm::raw_ostream &os,
   
   // Ident at constraint list;
   unsigned indent = PC.pos;
-  for (auto it = constraints.begin(), ie = constraints.end(); it != ie;) {
+  for (auto it = constraints.constraints().begin(), ie = constraints.constraints().end(); it != ie;) {
     p.print(*it, PC);
     ++it;
     if (it != ie)

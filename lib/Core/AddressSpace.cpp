@@ -115,23 +115,23 @@ bool AddressSpace::resolveOne(ExecutionState &state,
       --oi;
       const auto &mo = oi->first;
 
-      bool mayBeTrue;
+      Solver::TruthResponse mayBeTrue;
       if (!solver->mayBeTrue(state.constraints,
                              mo->getBoundsCheckPointer(address), mayBeTrue,
                              state.queryMetaData))
         return false;
-      if (mayBeTrue) {
+      if (mayBeTrue.result) {
         result.first = oi->first;
         result.second = oi->second.get();
         success = true;
         return true;
       } else {
-        bool mustBeTrue;
+        Solver::TruthResponse mustBeTrue;
         if (!solver->mustBeTrue(state.constraints,
                                 UgeExpr::create(address, mo->getBaseExpr()),
                                 mustBeTrue, state.queryMetaData))
           return false;
-        if (mustBeTrue)
+        if (mustBeTrue.result)
           break;
       }
     }
@@ -140,21 +140,21 @@ bool AddressSpace::resolveOne(ExecutionState &state,
     for (oi=start; oi!=end; ++oi) {
       const auto &mo = oi->first;
 
-      bool mustBeTrue;
+      Solver::TruthResponse mustBeTrue;
       if (!solver->mustBeTrue(state.constraints,
                               UltExpr::create(address, mo->getBaseExpr()),
                               mustBeTrue, state.queryMetaData))
         return false;
-      if (mustBeTrue) {
+      if (mustBeTrue.result) {
         break;
       } else {
-        bool mayBeTrue;
+        Solver::TruthResponse mayBeTrue;
 
         if (!solver->mayBeTrue(state.constraints,
                                mo->getBoundsCheckPointer(address), mayBeTrue,
                                state.queryMetaData))
           return false;
-        if (mayBeTrue) {
+        if (mayBeTrue.result) {
           result.first = oi->first;
           result.second = oi->second.get();
           success = true;
@@ -177,23 +177,23 @@ int AddressSpace::checkPointerInObject(ExecutionState &state,
   // to add I just want to have a nice symbolic test case first.
   const MemoryObject *mo = op.first;
   ref<Expr> inBounds = mo->getBoundsCheckPointer(p);
-  bool mayBeTrue;
+  Solver::TruthResponse mayBeTrue;
   if (!solver->mayBeTrue(state.constraints, inBounds, mayBeTrue,
                          state.queryMetaData)) {
     return 1;
   }
 
-  if (mayBeTrue) {
+  if (mayBeTrue.result) {
     rl.push_back(op);
 
     // fast path check
     auto size = rl.size();
     if (size == 1) {
-      bool mustBeTrue;
+      Solver::TruthResponse mustBeTrue;
       if (!solver->mustBeTrue(state.constraints, inBounds, mustBeTrue,
                               state.queryMetaData))
         return 1;
-      if (mustBeTrue)
+      if (mustBeTrue.result)
         return 0;
     }
     else
@@ -257,12 +257,12 @@ bool AddressSpace::resolve(ExecutionState &state, TimingSolver *solver,
       if (incomplete != 2)
         return incomplete ? true : false;
 
-      bool mustBeTrue;
+      Solver::TruthResponse mustBeTrue;
       if (!solver->mustBeTrue(state.constraints,
                               UgeExpr::create(p, mo->getBaseExpr()), mustBeTrue,
                               state.queryMetaData))
         return true;
-      if (mustBeTrue)
+      if (mustBeTrue.result)
         break;
     }
 
@@ -272,12 +272,12 @@ bool AddressSpace::resolve(ExecutionState &state, TimingSolver *solver,
       if (timeout && timeout < timer.delta())
         return true;
 
-      bool mustBeTrue;
+      Solver::TruthResponse mustBeTrue;
       if (!solver->mustBeTrue(state.constraints,
                               UltExpr::create(p, mo->getBaseExpr()), mustBeTrue,
                               state.queryMetaData))
         return true;
-      if (mustBeTrue)
+      if (mustBeTrue.result)
         break;
       auto op = std::make_pair<>(mo, oi->second.get());
 

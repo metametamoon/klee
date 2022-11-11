@@ -15,6 +15,7 @@
 
 #include "klee/ADT/ImmutableSet.h"
 #include "klee/ADT/TreeStream.h"
+#include "klee/Expr/Assignment.h"
 #include "klee/Expr/Constraints.h"
 #include "klee/Expr/Expr.h"
 #include "klee/Module/KInstIterator.h"
@@ -183,6 +184,9 @@ public:
   /// @brief Constraints collected so far
   ConstraintSet constraints;
 
+  /// _-_ Think this through
+  std::vector<std::pair<const MemoryObject *, ref<ObjectState>>> unaddressableSymbolics;
+
   /// Statistics and information
 
   /// @brief Metadata utilized and collected by solvers for this state
@@ -207,6 +211,7 @@ public:
   //
   // FIXME: Move to a shared list structure (not critical).
   std::vector<std::pair<ref<const MemoryObject>, const Array *>> symbolics;
+  std::map<const Array *, ref<const MemoryObject>> symbolicsMap;
 
   /// @brief A set of boolean expressions
   /// the user has requested be true of a counterexample.
@@ -214,6 +219,9 @@ public:
 
   /// @brief Set of used array names for this state.  Used to avoid collisions.
   std::set<std::string> arrayNames;
+
+  /// @brief Symcrete concretisations for this state
+  Assignment symcretes;
 
   /// @brief The objects handling the klee_open_merge calls this state ran through
   std::vector<ref<MergeHandler>> openMergeStack;
@@ -263,7 +271,18 @@ public:
 
   void addSymbolic(const MemoryObject *mo, const Array *array);
 
-  void addConstraint(ref<Expr> e);
+  bool isSymcrete(const Array *array);
+
+  void addSymcrete(const Array *array,
+                   const std::vector<unsigned char> &concretisation);
+
+  void removeSymcrete(const Array *array);
+
+  void replaceSymcretes(const Assignment &assign);
+
+  ref<Expr> evaluateWithSymcretes(ref<Expr> e);
+
+  void addConstraint(ref<Expr> e, const Assignment &delta);
   void addCexPreference(const ref<Expr> &cond);
 
   bool merge(const ExecutionState &b);

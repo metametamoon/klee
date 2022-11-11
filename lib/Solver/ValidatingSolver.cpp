@@ -24,8 +24,8 @@ public:
       : solver(_solver), oracle(_oracle) {}
   ~ValidatingSolver() { delete solver; }
 
-  bool computeValidity(const Query &, Solver::Validity &result);
-  bool computeTruth(const Query &, bool &isValid);
+  bool computeValidity(const Query &, Solver::ValidityResponse &res);
+  bool computeTruth(const Query &, Solver::TruthResponse &res);
   bool computeValue(const Query &, ref<Expr> &result);
   bool computeInitialValues(const Query &,
                             const std::vector<const Array *> &objects,
@@ -36,37 +36,37 @@ public:
   void setCoreSolverTimeout(time::Span timeout);
 };
 
-bool ValidatingSolver::computeTruth(const Query &query, bool &isValid) {
-  bool answer;
+bool ValidatingSolver::computeTruth(const Query &query, Solver::TruthResponse &res) {
+  Solver::TruthResponse answer;
 
-  if (!solver->impl->computeTruth(query, isValid))
+  if (!solver->impl->computeTruth(query, res))
     return false;
   if (!oracle->impl->computeTruth(query, answer))
     return false;
 
-  if (isValid != answer)
+  if (res.result != answer.result)
     assert(0 && "invalid solver result (computeTruth)");
 
   return true;
 }
 
 bool ValidatingSolver::computeValidity(const Query &query,
-                                       Solver::Validity &result) {
-  Solver::Validity answer;
+                                       Solver::ValidityResponse &res) {
+  Solver::ValidityResponse answer;
 
-  if (!solver->impl->computeValidity(query, result))
+  if (!solver->impl->computeValidity(query, res))
     return false;
   if (!oracle->impl->computeValidity(query, answer))
     return false;
 
-  if (result != answer)
+  if (res.validity != answer.validity)
     assert(0 && "invalid solver result (computeValidity)");
 
   return true;
 }
 
 bool ValidatingSolver::computeValue(const Query &query, ref<Expr> &result) {
-  bool answer;
+  Solver::TruthResponse answer;
 
   if (!solver->impl->computeValue(query, result))
     return false;
@@ -76,7 +76,7 @@ bool ValidatingSolver::computeValue(const Query &query, ref<Expr> &result) {
           query.withExpr(NeExpr::create(query.expr, result)), answer))
     return false;
 
-  if (answer)
+  if (answer.result)
     assert(0 && "invalid solver result (computeValue)");
 
   return true;
@@ -85,7 +85,7 @@ bool ValidatingSolver::computeValue(const Query &query, ref<Expr> &result) {
 bool ValidatingSolver::computeInitialValues(
     const Query &query, const std::vector<const Array *> &objects,
     std::vector<std::vector<unsigned char> > &values, bool &hasSolution) {
-  bool answer;
+  Solver::TruthResponse answer;
 
   if (!solver->impl->computeInitialValues(query, objects, values, hasSolution))
     return false;
@@ -99,25 +99,25 @@ bool ValidatingSolver::computeInitialValues(
       assert(array);
       for (unsigned j = 0; j < array->size; j++) {
         unsigned char value = values[i][j];
-        bindings.push_back(EqExpr::create(
+        bindings.add_constraint(EqExpr::create(
             ReadExpr::create(UpdateList(array, 0),
                              ConstantExpr::alloc(j, array->getDomain())),
-            ConstantExpr::alloc(value, array->getRange())));
+            ConstantExpr::alloc(value, array->getRange())), {});
       }
     }
     ConstraintManager tmp(bindings);
     ref<Expr> constraints = Expr::createIsZero(query.expr);
-    for (auto const &constraint : query.constraints)
+    for (auto const &constraint : query.constraints.constraints())
       constraints = AndExpr::create(constraints, constraint);
 
     if (!oracle->impl->computeTruth(Query(bindings, constraints), answer))
       return false;
-    if (!answer)
+    if (!answer.result)
       assert(0 && "invalid solver result (computeInitialValues)");
   } else {
     if (!oracle->impl->computeTruth(query, answer))
       return false;
-    if (!answer)
+    if (!answer.result)
       assert(0 && "invalid solver result (computeInitialValues)");
   }
 

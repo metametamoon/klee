@@ -10,15 +10,21 @@
 #ifndef KLEE_SOLVER_H
 #define KLEE_SOLVER_H
 
+#include "klee/Expr/Assignment.h"
 #include "klee/Expr/Expr.h"
+#include "klee/Module/KInstruction.h"
 #include "klee/System/Time.h"
+#include "klee/Expr/Constraints.h"
 #include "klee/Solver/SolverCmdLine.h"
+#include "llvm/IR/LLVMContext.h"
 
+#include <cstdint>
 #include <vector>
 
 namespace klee {
   class ConstraintSet;
   class Expr;
+  class Fuzzer;
   class SolverImpl;
 
   /// Collection of meta data that a solver can have access to. This is
@@ -31,7 +37,7 @@ namespace klee {
 
   struct Query {
   public:
-    const ConstraintSet &constraints;
+    const ConstraintSet constraints;
     ref<Expr> expr;
 
     Query(const ConstraintSet& _constraints, ref<Expr> _expr)
@@ -53,8 +59,24 @@ namespace klee {
       return withExpr(Expr::createIsZero(expr));
     }
 
+    /// Get all arrays that figure in the query
+    std::vector<const Array *> gatherArrays() const;
+
     /// Dump query
     void dump() const ;
+
+    Query concretized() const {
+      const Assignment &assign = constraints.symcretization();
+      ConstraintSet cs;
+      for (auto s : constraints.symcretes()) {
+        cs.add_constraint(assign.evaluate(s.asExpr()), {});
+      }
+      for (auto e : constraints.constraints()) {
+        cs.add_constraint(assign.evaluate(e), {});
+      }
+      ref<Expr> e = assign.evaluate(expr);
+      return Query(cs, e);
+    }
   };
 
   class Solver {
@@ -68,7 +90,44 @@ namespace klee {
       False = -1,
       Unknown = 0
     };
-  
+
+    enum PartialValidity {
+      /// The query is provably true.
+      MustBeTrue = 1,
+
+      /// The query is provably false.
+      MustBeFalse = -1,
+
+      /// The query is not provably false (a true assignment is known to
+      /// exist).
+      MayBeTrue = 2,
+
+      /// The query is not provably true (a false assignment is known to
+      /// exist).
+      MayBeFalse = -2,
+
+      /// The query is known to have both true and false assignments.
+      TrueOrFalse = 0,
+
+      /// The validity of the query is unknown.
+      None = 3
+    };
+
+    struct ValidityResponse {
+      PartialValidity validity;
+      Assignment queryDelta;
+      Assignment negatedQueryDelta;
+
+      ValidityResponse() : queryDelta(true), negatedQueryDelta(true) {}
+    };
+
+    struct TruthResponse {
+      bool result;
+      Assignment counterexampleDelta;
+
+      TruthResponse() : counterexampleDelta(true) {}
+    };
+
   public:
     /// validity_to_str - Return the name of given Validity enum value.
     static const char *validity_to_str(Validity v);
@@ -93,10 +152,11 @@ namespace klee {
     /// Solver::Unknown
     ///
     /// \return True on success.
-    bool evaluate(const Query&, Validity &result);
-  
+
+    bool evaluate(const Query&, ValidityResponse &res);
+
     /// mustBeTrue - Determine if the expression is provably true.
-    /// 
+    ///
     /// This evaluates the following logical formula:
     ///
     /// \f[ \forall X constraints(X) \to query(X) \f]
@@ -111,7 +171,7 @@ namespace klee {
     /// \param [out] result - On success, true iff the logical formula is true
     ///
     /// \return True on success.
-    bool mustBeTrue(const Query&, bool &result);
+    bool mustBeTrue(const Query&, TruthResponse &res);
 
     /// mustBeFalse - Determine if the expression is provably false.
     ///
@@ -129,7 +189,7 @@ namespace klee {
     /// \param [out] result - On success, true iff the logical formula is false
     ///
     /// \return True on success.
-    bool mustBeFalse(const Query&, bool &result);
+    bool mustBeFalse(const Query&, TruthResponse &res);
 
     /// mayBeTrue - Determine if there is a valid assignment for the given state
     /// in which the expression evaluates to true.
@@ -148,7 +208,7 @@ namespace klee {
     /// \param [out] result - On success, true iff the logical formula may be true
     ///
     /// \return True on success.
-    bool mayBeTrue(const Query&, bool &result);
+    bool mayBeTrue(const Query&, TruthResponse &res);
 
     /// mayBeFalse - Determine if there is a valid assignment for the given
     /// state in which the expression evaluates to false.
@@ -167,7 +227,7 @@ namespace klee {
     /// \param [out] result - On success, true iff the logical formula may be false
     ///
     /// \return True on success.
-    bool mayBeFalse(const Query&, bool &result);
+    bool mayBeFalse(const Query&, TruthResponse &res);
 
     /// getValue - Compute one possible value for the given expression.
     ///
@@ -276,6 +336,9 @@ namespace klee {
 
   // Create a solver based on the supplied ``CoreSolverType``.
   Solver *createCoreSolver(CoreSolverType cst);
+
+// Create a solver with extern fuzzing capabilities.
+std::pair<Solver *, Fuzzer *> createFuzzingSolver(Solver *s, llvm::LLVMContext &ctx);
 }
 
 #endif /* KLEE_SOLVER_H */

@@ -50,7 +50,7 @@ private:
     unsigned operator()(const CacheEntry &ce) const {
       unsigned result = ce.query->hash();
 
-      for (auto const &constraint : ce.constraints) {
+      for (auto const &constraint : ce.constraints.constraints()) {
         result ^= constraint->hash();
       }
 
@@ -69,8 +69,8 @@ public:
   CachingSolver(Solver *s) : solver(s) {}
   ~CachingSolver() { cache.clear(); delete solver; }
 
-  bool computeValidity(const Query&, Solver::Validity &result);
-  bool computeTruth(const Query&, bool &isValid);
+  bool computeValidity(const Query&, Solver::ValidityResponse &res);
+  bool computeTruth(const Query&, Solver::TruthResponse &res);
   bool computeValue(const Query& query, ref<Expr> &result) {
     ++stats::queryCacheMisses;
     return solver->impl->computeValue(query, result);
@@ -139,35 +139,36 @@ void CachingSolver::cacheInsert(const Query& query,
 }
 
 bool CachingSolver::computeValidity(const Query& query,
-                                    Solver::Validity &result) {
+                                    Solver::ValidityResponse &res) {
   IncompleteSolver::PartialValidity cachedResult;
-  bool tmp, cacheHit = cacheLookup(query, cachedResult);
+  Solver::TruthResponse tmp;
+  bool cacheHit = cacheLookup(query, cachedResult);
   
   if (cacheHit) {
     switch(cachedResult) {
     case IncompleteSolver::MustBeTrue:   
-      result = Solver::True;
+      res.validity = Solver::MustBeTrue;
       ++stats::queryCacheHits;
       return true;
     case IncompleteSolver::MustBeFalse:  
-      result = Solver::False;
+      res.validity = Solver::MustBeFalse;
       ++stats::queryCacheHits;
       return true;
     case IncompleteSolver::TrueOrFalse:  
-      result = Solver::Unknown;
+      res.validity = Solver::TrueOrFalse;
       ++stats::queryCacheHits;
       return true;
     case IncompleteSolver::MayBeTrue: {
       ++stats::queryCacheMisses;
       if (!solver->impl->computeTruth(query, tmp))
         return false;
-      if (tmp) {
+      if (tmp.result) {
         cacheInsert(query, IncompleteSolver::MustBeTrue);
-        result = Solver::True;
+        res.validity = Solver::MustBeTrue;
         return true;
       } else {
         cacheInsert(query, IncompleteSolver::TrueOrFalse);
-        result = Solver::Unknown;
+        res.validity = Solver::TrueOrFalse;
         return true;
       }
     }
@@ -175,13 +176,13 @@ bool CachingSolver::computeValidity(const Query& query,
       ++stats::queryCacheMisses;
       if (!solver->impl->computeTruth(query.negateExpr(), tmp))
         return false;
-      if (tmp) {
+      if (tmp.result) {
         cacheInsert(query, IncompleteSolver::MustBeFalse);
-        result = Solver::False;
+        res.validity = Solver::MustBeFalse;
         return true;
       } else {
         cacheInsert(query, IncompleteSolver::TrueOrFalse);
-        result = Solver::Unknown;
+        res.validity = Solver::TrueOrFalse;
         return true;
       }
     }
@@ -191,13 +192,13 @@ bool CachingSolver::computeValidity(const Query& query,
 
   ++stats::queryCacheMisses;
   
-  if (!solver->impl->computeValidity(query, result))
+  if (!solver->impl->computeValidity(query, res))
     return false;
 
-  switch (result) {
-  case Solver::True: 
+  switch (res.validity) {
+  case Solver::MustBeTrue: 
     cachedResult = IncompleteSolver::MustBeTrue; break;
-  case Solver::False: 
+  case Solver::MustBeFalse: 
     cachedResult = IncompleteSolver::MustBeFalse; break;
   default: 
     cachedResult = IncompleteSolver::TrueOrFalse; break;
@@ -208,7 +209,7 @@ bool CachingSolver::computeValidity(const Query& query,
 }
 
 bool CachingSolver::computeTruth(const Query& query,
-                                 bool &isValid) {
+                                 Solver::TruthResponse &res) {
   IncompleteSolver::PartialValidity cachedResult;
   bool cacheHit = cacheLookup(query, cachedResult);
 
@@ -216,17 +217,17 @@ bool CachingSolver::computeTruth(const Query& query,
   // a False assignment exists.
   if (cacheHit && cachedResult != IncompleteSolver::MayBeTrue) {
     ++stats::queryCacheHits;
-    isValid = (cachedResult == IncompleteSolver::MustBeTrue);
+    res.result = (cachedResult == IncompleteSolver::MustBeTrue);
     return true;
   }
 
   ++stats::queryCacheMisses;
   
   // cache miss: query solver
-  if (!solver->impl->computeTruth(query, isValid))
+  if (!solver->impl->computeTruth(query, res))
     return false;
 
-  if (isValid) {
+  if (res.result) {
     cachedResult = IncompleteSolver::MustBeTrue;
   } else if (cacheHit) {
     // We know a true assignment exists, and query isn't valid, so

@@ -112,7 +112,6 @@ cl::opt<bool> UseAssignmentValidatingSolver(
     cl::desc("Debug the correctness of generated assignments (default=false)"),
     cl::cat(SolvingCat));
 
-
 void KCommandLine::HideOptions(llvm::cl::OptionCategory &Category) {
   StringMap<cl::Option *> &map = cl::getRegisteredOptions();
 

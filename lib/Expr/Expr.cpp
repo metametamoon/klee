@@ -374,6 +374,17 @@ void ConstantExpr::toString(std::string &Res, unsigned radix) const {
 #endif
 }
 
+std::vector<unsigned char> ConstantExpr::toByteVector() {
+  std::vector<unsigned char> byteVector;
+  auto width = this->getWidth();
+  auto widthInBytes = (width % 8 == 0 ? width / 8 : width / 8 + 1);
+  for (unsigned i = 0; i < widthInBytes; i++) {
+    auto byte = this->Extract(i * 8, Expr::Int8);
+    byteVector.push_back(byte->getZExtValue(8));
+  }
+  return byteVector;
+}
+
 ref<ConstantExpr> ConstantExpr::Concat(const ref<ConstantExpr> &RHS) {
   Expr::Width W = getWidth() + RHS->getWidth();
   APInt Tmp(value);
@@ -505,10 +516,11 @@ ref<Expr>  NotOptimizedExpr::create(ref<Expr> src) {
 /***/
 
 Array::Array(const std::string &_name, uint64_t _size,
+             SymbolicSource *_source,
              const ref<ConstantExpr> *constantValuesBegin,
              const ref<ConstantExpr> *constantValuesEnd, Expr::Width _domain,
              Expr::Width _range)
-    : name(_name), size(_size), domain(_domain), range(_range),
+    : name(_name), size(_size), source(_source), domain(_domain), range(_range),
       constantValues(constantValuesBegin, constantValuesEnd) {
 
   assert((isSymbolicArray() || constantValues.size() == size) &&
@@ -520,6 +532,16 @@ Array::Array(const std::string &_name, uint64_t _size,
     assert((*it)->getWidth() == getRange() &&
            "Invalid initial constant value!");
 #endif // NDEBUG
+}
+
+ref<Expr> Array::readWhole() const {
+  UpdateList ul(this, nullptr);
+  ref<Expr> res(0);
+  for (unsigned i = 0; i < this->size; i++) {
+    ref<Expr> byte = ReadExpr::create(ul, ConstantExpr::create(i, Expr::Int32));
+    res = i ? ConcatExpr::create(byte, res) : byte;
+  }
+  return res;
 }
 
 Array::~Array() {

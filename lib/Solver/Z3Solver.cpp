@@ -86,7 +86,7 @@ public:
                        timeoutInMilliSeconds);
   }
 
-  bool computeTruth(const Query &, bool &isValid);
+  bool computeTruth(const Query &, Solver::TruthResponse &res);
   bool computeValue(const Query &, ref<Expr> &result);
   bool computeInitialValues(const Query &,
                             const std::vector<const Array *> &objects,
@@ -158,7 +158,7 @@ char *Z3SolverImpl::getConstraintLog(const Query &query) {
   Z3Builder temp_builder(/*autoClearConstructCache=*/false,
                          /*z3LogInteractionFile=*/NULL);
   ConstantArrayFinder constant_arrays_in_query;
-  for (auto const &constraint : query.constraints) {
+  for (auto const &constraint : query.constraints.constraints()) {
     assumptions.push_back(temp_builder.construct(constraint));
     constant_arrays_in_query.visit(constraint);
   }
@@ -213,11 +213,11 @@ char *Z3SolverImpl::getConstraintLog(const Query &query) {
   return strdup(result);
 }
 
-bool Z3SolverImpl::computeTruth(const Query &query, bool &isValid) {
+bool Z3SolverImpl::computeTruth(const Query &query, Solver::TruthResponse &res) {
   bool hasSolution = false; // to remove compiler warning
   bool status =
       internalRunSolver(query, /*objects=*/NULL, /*values=*/NULL, hasSolution);
-  isValid = !hasSolution;
+  res.result = !hasSolution;
   return status;
 }
 
@@ -264,7 +264,7 @@ bool Z3SolverImpl::internalRunSolver(
   runStatusCode = SOLVER_RUN_STATUS_FAILURE;
 
   ConstantArrayFinder constant_arrays_in_query;
-  for (auto const &constraint : query.constraints) {
+  for (auto const &constraint : query.constraints.constraints()) {
     Z3_solver_assert(builder->ctx, theSolver, builder->construct(constraint));
     constant_arrays_in_query.visit(constraint);
   }

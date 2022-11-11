@@ -109,16 +109,17 @@ void QueryLoggingSolver::flushBuffer() {
   flushBufferConditionally(writeToFile);
 }
 
-bool QueryLoggingSolver::computeTruth(const Query &query, bool &isValid) {
+bool QueryLoggingSolver::computeTruth(const Query &query,
+                                      Solver::TruthResponse &res) {
   startQuery(query, "Truth");
 
-  bool success = solver->impl->computeTruth(query, isValid);
+  bool success = solver->impl->computeTruth(query, res);
 
   finishQuery(success);
 
   if (success) {
     logBuffer << queryCommentSign
-              << "   Is Valid: " << (isValid ? "true" : "false") << "\n";
+              << "   Is Valid: " << (res.result ? "true" : "false") << "\n";
   }
   logBuffer << "\n";
 
@@ -128,15 +129,15 @@ bool QueryLoggingSolver::computeTruth(const Query &query, bool &isValid) {
 }
 
 bool QueryLoggingSolver::computeValidity(const Query &query,
-                                         Solver::Validity &result) {
+                                         Solver::ValidityResponse &res) {
   startQuery(query, "Validity");
 
-  bool success = solver->impl->computeValidity(query, result);
+  bool success = solver->impl->computeValidity(query, res);
 
   finishQuery(success);
 
   if (success) {
-    logBuffer << queryCommentSign << "   Validity: " << result << "\n";
+    logBuffer << queryCommentSign << "   Validity: " << res.validity << "\n";
   }
   logBuffer << "\n";
 

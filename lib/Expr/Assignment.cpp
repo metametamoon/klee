@@ -8,6 +8,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "klee/Expr/Assignment.h"
+#include "klee/Expr/Constraints.h"
 
 namespace klee {
 
@@ -33,12 +34,22 @@ ConstraintSet Assignment::createConstraintsFromAssignment() const {
 
     for (unsigned arrayIndex = 0; arrayIndex < array->size; ++arrayIndex) {
       unsigned char value = values[arrayIndex];
-      result.push_back(EqExpr::create(
+      result.add_constraint(EqExpr::create(
           ReadExpr::create(UpdateList(array, 0),
                            ConstantExpr::alloc(arrayIndex, array->getDomain())),
-          ConstantExpr::alloc(value, array->getRange())));
+          ConstantExpr::alloc(value, array->getRange())), {});
     }
   }
   return result;
 }
+
+std::vector<const Array *> Assignment::getArrays() const {
+  std::vector<const Array*> arrays;
+  arrays.reserve(bindings.size());
+  for (auto i : bindings) {
+    arrays.push_back(i.first);
+  }
+  return arrays;
+}
+
 }

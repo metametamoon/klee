@@ -17,8 +17,8 @@ class DummySolverImpl : public SolverImpl {
 public:
   DummySolverImpl();
 
-  bool computeValidity(const Query &, Solver::Validity &result);
-  bool computeTruth(const Query &, bool &isValid);
+  bool computeValidity(const Query &, Solver::ValidityResponse &res);
+  bool computeTruth(const Query &, Solver::TruthResponse &res);
   bool computeValue(const Query &, ref<Expr> &result);
   bool computeInitialValues(const Query &,
                             const std::vector<const Array *> &objects,
@@ -29,13 +29,14 @@ public:
 
 DummySolverImpl::DummySolverImpl() {}
 
-bool DummySolverImpl::computeValidity(const Query &, Solver::Validity &result) {
+bool DummySolverImpl::computeValidity(const Query &,
+                                      Solver::ValidityResponse &res) {
   ++stats::queries;
   // FIXME: We should have stats::queriesFail;
   return false;
 }
 
-bool DummySolverImpl::computeTruth(const Query &, bool &isValid) {
+bool DummySolverImpl::computeTruth(const Query &, Solver::TruthResponse &res) {
   ++stats::queries;
   // FIXME: We should have stats::queriesFail;
   return false;

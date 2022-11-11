@@ -14,7 +14,9 @@
 #ifndef KLEE_COMMON_H
 #define KLEE_COMMON_H
 
+#include "klee/Solver/Fuzzer.h"
 #include "klee/Solver/Solver.h"
+#include "llvm/IR/LLVMContext.h"
 
 #include <string>
 
@@ -24,11 +26,12 @@ namespace klee {
     const char ALL_QUERIES_KQUERY_FILE_NAME[]="all-queries.kquery";
     const char SOLVER_QUERIES_KQUERY_FILE_NAME[]="solver-queries.kquery";
 
-    Solver *constructSolverChain(Solver *coreSolver,
+std::pair<Solver *, Fuzzer *> constructSolverChain(Solver *coreSolver,
                                  std::string querySMT2LogPath,
                                  std::string baseSolverQuerySMT2LogPath,
                                  std::string queryKQueryLogPath,
-                                 std::string baseSolverQueryKQueryLogPath);
+                                 std::string baseSolverQueryKQueryLogPath,
+                                 llvm::LLVMContext *ctx);
 }
 
 

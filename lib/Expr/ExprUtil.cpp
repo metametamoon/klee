@@ -8,11 +8,13 @@
 //===----------------------------------------------------------------------===//
 
 #include "klee/Expr/ExprUtil.h"
+#include "klee/ADT/Ref.h"
 #include "klee/Expr/Expr.h"
 #include "klee/Expr/ExprHashMap.h"
 #include "klee/Expr/ExprVisitor.h"
 
 #include <set>
+#include <unordered_set>
 
 using namespace klee;
 
@@ -77,31 +79,31 @@ void klee::findReads(ref<Expr> e,
 
 namespace klee {
 
-class SymbolicObjectFinder : public ExprVisitor {
-protected:
-  Action visitRead(const ReadExpr &re) {
-    const UpdateList &ul = re.updates;
+// class SymbolicObjectFinder : public ExprVisitor {
+// protected:
+//   Action visitRead(const ReadExpr &re) {
+//     const UpdateList &ul = re.updates;
 
-    // XXX should we memo better than what ExprVisitor is doing for us?
-    for (const auto *un = ul.head.get(); un; un = un->next.get()) {
-      visit(un->index);
-      visit(un->value);
-    }
+//     // XXX should we memo better than what ExprVisitor is doing for us?
+//     for (const auto *un = ul.head.get(); un; un = un->next.get()) {
+//       visit(un->index);
+//       visit(un->value);
+//     }
 
-    if (ul.root->isSymbolicArray())
-      if (results.insert(ul.root).second)
-        objects.push_back(ul.root);
+//     if (ul.root->isSymbolicArray())
+//       if (results.insert(ul.root).second)
+//         objects.push_back(ul.root);
 
-    return Action::doChildren();
-  }
+//     return Action::doChildren();
+//   }
 
-public:
-  std::set<const Array*> results;
-  std::vector<const Array*> &objects;
+// public:
+//   std::set<const Array*> results;
+//   std::vector<const Array*> &objects;
   
-  SymbolicObjectFinder(std::vector<const Array*> &_objects)
-    : objects(_objects) {}
-};
+//   SymbolicObjectFinder(std::vector<const Array*> &_objects)
+//     : objects(_objects) {}
+// };
 
 ExprVisitor::Action ConstantArrayFinder::visitRead(const ReadExpr &re) {
   const UpdateList &ul = re.updates;
@@ -118,6 +120,7 @@ ExprVisitor::Action ConstantArrayFinder::visitRead(const ReadExpr &re) {
 
   return Action::doChildren();
 }
+
 }
 
 template<typename InputIterator>
@@ -139,3 +142,25 @@ template void klee::findSymbolicObjects<A>(A, A, std::vector<const Array*> &);
 
 typedef std::set< ref<Expr> >::iterator B;
 template void klee::findSymbolicObjects<B>(B, B, std::vector<const Array*> &);
+
+// This for now mirrors findSymbolicObjects
+
+template<typename InputIterator>
+void klee::findObjects(InputIterator begin, 
+                               InputIterator end,
+                               std::vector<const Array*> &results) {
+  ObjectFinder of(results);
+  for (; begin!=end; ++begin)
+    of.visit(*begin);
+}
+
+void klee::findObjects(ref<Expr> e,
+                               std::vector<const Array*> &results) {
+  findObjects(&e, &e+1, results);
+}
+
+typedef std::vector< ref<Expr> >::iterator A;
+template void klee::findObjects<A>(A, A, std::vector<const Array*> &);
+
+typedef std::set< ref<Expr> >::iterator B;
+template void klee::findObjects<B>(B, B, std::vector<const Array*> &);

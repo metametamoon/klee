@@ -24,11 +24,11 @@ using namespace llvm;
 /***/
 
 bool TimingSolver::evaluate(const ConstraintSet &constraints, ref<Expr> expr,
-                            Solver::Validity &result,
+                            Solver::ValidityResponse &res,
                             SolverQueryMetaData &metaData) {
   // Fast path, to avoid timer and OS overhead.
   if (ConstantExpr *CE = dyn_cast<ConstantExpr>(expr)) {
-    result = CE->isTrue() ? Solver::True : Solver::False;
+    res.validity = CE->isTrue() ? Solver::MustBeTrue : Solver::MustBeFalse;
     return true;
   }
 
@@ -37,7 +37,7 @@ bool TimingSolver::evaluate(const ConstraintSet &constraints, ref<Expr> expr,
   if (simplifyExprs)
     expr = ConstraintManager::simplifyExpr(constraints, expr);
 
-  bool success = solver->evaluate(Query(constraints, expr), result);
+  bool success = solver->evaluate(Query(constraints, expr), res);
 
   metaData.queryCost += timer.delta();
 
@@ -45,10 +45,10 @@ bool TimingSolver::evaluate(const ConstraintSet &constraints, ref<Expr> expr,
 }
 
 bool TimingSolver::mustBeTrue(const ConstraintSet &constraints, ref<Expr> expr,
-                              bool &result, SolverQueryMetaData &metaData) {
+                              Solver::TruthResponse &res, SolverQueryMetaData &metaData) {
   // Fast path, to avoid timer and OS overhead.
   if (ConstantExpr *CE = dyn_cast<ConstantExpr>(expr)) {
-    result = CE->isTrue() ? true : false;
+    res.result = CE->isTrue() ? true : false;
     return true;
   }
 
@@ -57,7 +57,7 @@ bool TimingSolver::mustBeTrue(const ConstraintSet &constraints, ref<Expr> expr,
   if (simplifyExprs)
     expr = ConstraintManager::simplifyExpr(constraints, expr);
 
-  bool success = solver->mustBeTrue(Query(constraints, expr), result);
+  bool success = solver->mustBeTrue(Query(constraints, expr), res);
 
   metaData.queryCost += timer.delta();
 
@@ -65,25 +65,25 @@ bool TimingSolver::mustBeTrue(const ConstraintSet &constraints, ref<Expr> expr,
 }
 
 bool TimingSolver::mustBeFalse(const ConstraintSet &constraints, ref<Expr> expr,
-                               bool &result, SolverQueryMetaData &metaData) {
-  return mustBeTrue(constraints, Expr::createIsZero(expr), result, metaData);
+                               Solver::TruthResponse &res, SolverQueryMetaData &metaData) {
+  return mustBeTrue(constraints, Expr::createIsZero(expr), res, metaData);
 }
 
 bool TimingSolver::mayBeTrue(const ConstraintSet &constraints, ref<Expr> expr,
-                             bool &result, SolverQueryMetaData &metaData) {
-  bool res;
+                             Solver::TruthResponse &res, SolverQueryMetaData &metaData) {
+
   if (!mustBeFalse(constraints, expr, res, metaData))
     return false;
-  result = !res;
+  res.result = !res.result;
   return true;
 }
 
 bool TimingSolver::mayBeFalse(const ConstraintSet &constraints, ref<Expr> expr,
-                              bool &result, SolverQueryMetaData &metaData) {
-  bool res;
+                              Solver::TruthResponse &res, SolverQueryMetaData &metaData) {
+
   if (!mustBeTrue(constraints, expr, res, metaData))
     return false;
-  result = !res;
+  res.result = !res.result;
   return true;
 }
 

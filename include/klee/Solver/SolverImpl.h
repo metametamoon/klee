@@ -23,6 +23,12 @@ namespace klee {
 
   /// SolverImpl - Abstract base clase for solver implementations.
   class SolverImpl {
+
+    using Validity = Solver::Validity;
+    using PartialValidity = Solver::PartialValidity;
+    using ValidityResponse = Solver::ValidityResponse;
+    using TruthResponse = Solver::TruthResponse;
+
     // DO NOT IMPLEMENT.
     SolverImpl(const SolverImpl&);
     void operator=(const SolverImpl&);
@@ -60,8 +66,9 @@ namespace klee {
     /// Solver::Unknown
     ///
     /// \return True on success
-    virtual bool computeValidity(const Query& query, Solver::Validity &result);
-    
+
+    virtual bool computeValidity(const Query &query, ValidityResponse &res);
+
     /// computeTruth - Determine whether the given query expression is provably true
     /// given the constraints.
     ///
@@ -77,7 +84,7 @@ namespace klee {
     ///
     /// \param [out] isValid - On success, true iff the logical formula is true.
     /// \return True on success
-    virtual bool computeTruth(const Query& query, bool &isValid) = 0;
+    virtual bool computeTruth(const Query& query, TruthResponse &res) = 0;
 
     /// computeValue - Compute a feasible value for the expression.
     ///
@@ -104,6 +111,17 @@ namespace klee {
     virtual char *getConstraintLog(const Query& query)  {
         // dummy
         return nullptr;
+    }
+
+    virtual Solver::PartialValidity validityToPartial(Solver::Validity v) {
+      switch (v) {
+      case Solver::Validity::True:
+        return Solver::PartialValidity::MustBeTrue;
+      case Solver::Validity::False:
+        return Solver::PartialValidity::MustBeFalse;
+      case Solver::Validity::Unknown:
+        return Solver::PartialValidity::TrueOrFalse;
+      }
     }
 
     virtual void setCoreSolverTimeout(time::Span timeout) {};

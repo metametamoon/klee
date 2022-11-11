@@ -44,19 +44,19 @@ public:
     return solver->getConstraintLog(query);
   }
 
-  bool evaluate(const ConstraintSet &, ref<Expr>, Solver::Validity &result,
+  bool evaluate(const ConstraintSet &, ref<Expr>, Solver::ValidityResponse &res,
                 SolverQueryMetaData &metaData);
 
-  bool mustBeTrue(const ConstraintSet &, ref<Expr>, bool &result,
+  bool mustBeTrue(const ConstraintSet &, ref<Expr>, Solver::TruthResponse &res,
                   SolverQueryMetaData &metaData);
 
-  bool mustBeFalse(const ConstraintSet &, ref<Expr>, bool &result,
+  bool mustBeFalse(const ConstraintSet &, ref<Expr>, Solver::TruthResponse &res,
                    SolverQueryMetaData &metaData);
 
-  bool mayBeTrue(const ConstraintSet &, ref<Expr>, bool &result,
+  bool mayBeTrue(const ConstraintSet &, ref<Expr>, Solver::TruthResponse &res,
                  SolverQueryMetaData &metaData);
 
-  bool mayBeFalse(const ConstraintSet &, ref<Expr>, bool &result,
+  bool mayBeFalse(const ConstraintSet &, ref<Expr>, Solver::TruthResponse &res,
                   SolverQueryMetaData &metaData);
 
   bool getValue(const ConstraintSet &, ref<Expr> expr,

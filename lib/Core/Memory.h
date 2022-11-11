@@ -13,7 +13,9 @@
 #include "Context.h"
 #include "TimingSolver.h"
 
+#include "klee/Expr/Assignment.h"
 #include "klee/Expr/Expr.h"
+#include "klee/Expr/SourceBuilder.h"
 
 #include "llvm/ADT/StringExtras.h"
 
@@ -172,8 +174,10 @@ private:
 
   ref<const MemoryObject> object;
 
+public: // _-_ temp
   /// @brief Holds all known concrete bytes
   uint8_t *concreteStore;
+private:
 
   /// @brief concreteMask[byte] is set if byte is known to be concrete
   BitArray *concreteMask;
@@ -182,10 +186,13 @@ private:
   /// if byte is known to be symbolic
   ref<Expr> *knownSymbolics;
 
+private:
+
   /// unflushedMask[byte] is set if byte is unflushed
   /// mutable because may need flushed during read of const
   mutable BitArray *unflushedMask;
 
+public: // Hack
   // mutable because we may need flush during read of const
   mutable UpdateList updates;
 
@@ -217,6 +224,8 @@ public:
   /// Make contents all concrete and random
   void initializeToRandom();
 
+  ref<Expr> hackRead() const;
+
   ref<Expr> read(ref<Expr> offset, Expr::Width width) const;
   ref<Expr> read(unsigned offset, Expr::Width width) const;
   ref<Expr> read8(unsigned offset) const;
@@ -237,8 +246,9 @@ public:
   void flushToConcreteStore(TimingSolver *solver,
                             const ExecutionState &state) const;
 
-private:
+public: // think this through
   const UpdateList &getUpdates() const;
+private:
 
   void makeConcrete();
 
@@ -248,10 +258,12 @@ private:
   void write8(unsigned offset, ref<Expr> value);
   void write8(ref<Expr> offset, ref<Expr> value);
 
+public: // _-_ Temporary
   void fastRangeCheckOffset(ref<Expr> offset, unsigned *base_r, 
                             unsigned *size_r) const;
   void flushRangeForRead(unsigned rangeBase, unsigned rangeSize) const;
   void flushRangeForWrite(unsigned rangeBase, unsigned rangeSize);
+private:
 
   /// isByteConcrete ==> !isByteKnownSymbolic
   bool isByteConcrete(unsigned offset) const;
@@ -269,8 +281,9 @@ private:
   void setKnownSymbolic(unsigned offset, Expr *value);
 
   ArrayCache *getArrayCache() const;
+  SourceBuilder *getSourceBuilder() const;
 };
-  
+
 } // End klee namespace
 
 #endif /* KLEE_MEMORY_H */

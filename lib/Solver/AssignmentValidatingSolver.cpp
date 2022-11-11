@@ -25,8 +25,8 @@ public:
   AssignmentValidatingSolver(Solver *_solver) : solver(_solver) {}
   ~AssignmentValidatingSolver() { delete solver; }
 
-  bool computeValidity(const Query &, Solver::Validity &result);
-  bool computeTruth(const Query &, bool &isValid);
+  bool computeValidity(const Query &, Solver::ValidityResponse &res);
+  bool computeTruth(const Query &, Solver::TruthResponse &res);
   bool computeValue(const Query &, ref<Expr> &result);
   bool computeInitialValues(const Query &,
                             const std::vector<const Array *> &objects,
@@ -39,12 +39,12 @@ public:
 
 // TODO: use computeInitialValues for all queries for more stress testing
 bool AssignmentValidatingSolver::computeValidity(const Query &query,
-                                                 Solver::Validity &result) {
-  return solver->impl->computeValidity(query, result);
+                                                 Solver::ValidityResponse &res) {
+  return solver->impl->computeValidity(query, res);
 }
 bool AssignmentValidatingSolver::computeTruth(const Query &query,
-                                              bool &isValid) {
-  return solver->impl->computeTruth(query, isValid);
+                                              Solver::TruthResponse &res) {
+  return solver->impl->computeTruth(query, res);
 }
 bool AssignmentValidatingSolver::computeValue(const Query &query,
                                               ref<Expr> &result) {
@@ -63,7 +63,7 @@ bool AssignmentValidatingSolver::computeInitialValues(
   // we can't compute a constant and flag this as a problem.
   Assignment assignment(objects, values, /*_allowFreeValues=*/true);
   // Check computed assignment satisfies query
-  for (const auto &constraint : query.constraints) {
+  for (const auto &constraint : query.constraints.constraints()) {
     ref<Expr> constraintEvaluated = assignment.evaluate(constraint);
     ConstantExpr *CE = dyn_cast<ConstantExpr>(constraintEvaluated);
     if (CE == NULL) {
@@ -124,8 +124,8 @@ void AssignmentValidatingSolver::dumpAssignmentQuery(
   auto constraints = assignment.createConstraintsFromAssignment();
 
   // Add Constraints from `query`
-  for (const auto &constraint : query.constraints)
-    constraints.push_back(constraint);
+  for (const auto &constraint : query.constraints.constraints())
+    constraints.add_constraint(constraint, {});
 
   Query augmentedQuery(constraints, query.expr);
 

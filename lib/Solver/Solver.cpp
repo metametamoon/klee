@@ -10,6 +10,7 @@
 #include "klee/Solver/Solver.h"
 
 #include "klee/Expr/Constraints.h"
+#include "klee/Expr/ExprUtil.h"
 #include "klee/Solver/SolverImpl.h"
 
 using namespace klee;
@@ -34,47 +35,48 @@ void Solver::setCoreSolverTimeout(time::Span timeout) {
     impl->setCoreSolverTimeout(timeout);
 }
 
-bool Solver::evaluate(const Query& query, Validity &result) {
+bool Solver::evaluate(const Query& query, ValidityResponse &res) {
+  assert(query.expr->getWidth() == Expr::Bool && "Invalid expression type!");
+
+  if (ConstantExpr *CE = dyn_cast<ConstantExpr>(query.expr)) {
+    if (CE->isTrue()) {
+      res.validity = PartialValidity::MustBeTrue;
+    } else {
+      res.validity = PartialValidity::MustBeFalse;
+    }
+    return true;
+  }
+
+  return impl->computeValidity(query, res);
+}
+
+bool Solver::mustBeTrue(const Query& query, TruthResponse &res) {
   assert(query.expr->getWidth() == Expr::Bool && "Invalid expression type!");
 
   // Maintain invariants implementations expect.
   if (ConstantExpr *CE = dyn_cast<ConstantExpr>(query.expr)) {
-    result = CE->isTrue() ? True : False;
+    res.result = CE->isTrue() ? true : false;
     return true;
   }
 
-  return impl->computeValidity(query, result);
+  return impl->computeTruth(query, res);
 }
 
-bool Solver::mustBeTrue(const Query& query, bool &result) {
-  assert(query.expr->getWidth() == Expr::Bool && "Invalid expression type!");
-
-  // Maintain invariants implementations expect.
-  if (ConstantExpr *CE = dyn_cast<ConstantExpr>(query.expr)) {
-    result = CE->isTrue() ? true : false;
-    return true;
-  }
-
-  return impl->computeTruth(query, result);
+bool Solver::mustBeFalse(const Query& query, TruthResponse &res) {
+  return mustBeTrue(query.negateExpr(), res);
 }
 
-bool Solver::mustBeFalse(const Query& query, bool &result) {
-  return mustBeTrue(query.negateExpr(), result);
-}
-
-bool Solver::mayBeTrue(const Query& query, bool &result) {
-  bool res;
+bool Solver::mayBeTrue(const Query& query, TruthResponse &res) {
   if (!mustBeFalse(query, res))
     return false;
-  result = !res;
+  res.result = !res.result;
   return true;
 }
 
-bool Solver::mayBeFalse(const Query& query, bool &result) {
-  bool res;
+bool Solver::mayBeFalse(const Query& query, TruthResponse &res) {
   if (!mustBeTrue(query, res))
     return false;
-  result = !res;
+  res.result = !res.result;
   return true;
 }
 
@@ -114,13 +116,13 @@ std::pair< ref<Expr>, ref<Expr> > Solver::getRange(const Query& query) {
   uint64_t min, max;
 
   if (width==1) {
-    Solver::Validity result;
+    Solver::ValidityResponse result;
     if (!evaluate(query, result))
       assert(0 && "computeValidity failed");
-    switch (result) {
-    case Solver::True: 
+    switch (result.validity) {
+    case Solver::MustBeTrue: 
       min = max = 1; break;
-    case Solver::False: 
+    case Solver::MustBeFalse: 
       min = max = 0; break;
     default:
       min = 0, max = 1; break;
@@ -132,7 +134,7 @@ std::pair< ref<Expr>, ref<Expr> > Solver::getRange(const Query& query) {
     uint64_t lo=0, hi=width, mid, bits=0;
     while (lo<hi) {
       mid = lo + (hi - lo)/2;
-      bool res;
+      TruthResponse res;
       bool success = 
         mustBeTrue(query.withExpr(
                      EqExpr::create(LShrExpr::create(e,
@@ -144,7 +146,7 @@ std::pair< ref<Expr>, ref<Expr> > Solver::getRange(const Query& query) {
       assert(success && "FIXME: Unhandled solver failure");
       (void) success;
 
-      if (res) {
+      if (res.result) {
         hi = mid;
       } else {
         lo = mid+1;
@@ -157,7 +159,7 @@ std::pair< ref<Expr>, ref<Expr> > Solver::getRange(const Query& query) {
     // min max but unlikely to be very useful
 
     // check common case
-    bool res = false;
+    TruthResponse res;
     bool success = 
       mayBeTrue(query.withExpr(EqExpr::create(e, ConstantExpr::create(0, 
                                                                       width))), 
@@ -166,14 +168,14 @@ std::pair< ref<Expr>, ref<Expr> > Solver::getRange(const Query& query) {
     assert(success && "FIXME: Unhandled solver failure");      
     (void) success;
 
-    if (res) {
+    if (res.result) {
       min = 0;
     } else {
       // binary search for min
       lo=0, hi=bits64::maxValueOfNBits(bits);
       while (lo<hi) {
         mid = lo + (hi - lo)/2;
-        bool res = false;
+        TruthResponse res;
         bool success = 
           mayBeTrue(query.withExpr(UleExpr::create(e, 
                                                    ConstantExpr::create(mid, 
@@ -183,7 +185,7 @@ std::pair< ref<Expr>, ref<Expr> > Solver::getRange(const Query& query) {
         assert(success && "FIXME: Unhandled solver failure");      
         (void) success;
 
-        if (res) {
+        if (res.result) {
           hi = mid;
         } else {
           lo = mid+1;
@@ -197,7 +199,7 @@ std::pair< ref<Expr>, ref<Expr> > Solver::getRange(const Query& query) {
     lo=min, hi=bits64::maxValueOfNBits(bits);
     while (lo<hi) {
       mid = lo + (hi - lo)/2;
-      bool res;
+      TruthResponse res;
       bool success = 
         mustBeTrue(query.withExpr(UleExpr::create(e, 
                                                   ConstantExpr::create(mid, 
@@ -207,7 +209,7 @@ std::pair< ref<Expr>, ref<Expr> > Solver::getRange(const Query& query) {
       assert(success && "FIXME: Unhandled solver failure");      
       (void) success;
 
-      if (res) {
+      if (res.result) {
         hi = mid;
       } else {
         lo = mid+1;
@@ -221,10 +223,22 @@ std::pair< ref<Expr>, ref<Expr> > Solver::getRange(const Query& query) {
                         ConstantExpr::create(max, width));
 }
 
+std::vector<const Array *> Query::gatherArrays() const {
+  std::vector<const Array *> arrays;
+  ObjectFinder of(arrays);
+  for (auto s : constraints.symcretes()) {
+    arrays.push_back(s.marker);
+    of.visit(s.symcretized);
+  }
+  for (auto array : constraints.constraints()) {
+    of.visit(array);
+  }
+  of.visit(expr);
+  return arrays;
+}
+
 void Query::dump() const {
-  llvm::errs() << "Constraints [\n";
-  for (const auto &constraint : constraints)
-    constraint->dump();
+  constraints.dump();
 
   llvm::errs() << "]\n";
   llvm::errs() << "Query [\n";

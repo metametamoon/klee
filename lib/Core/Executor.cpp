@@ -31,15 +31,19 @@
 #include "klee/Core/Interpreter.h"
 #include "klee/Expr/ArrayExprOptimizer.h"
 #include "klee/Expr/Assignment.h"
+#include "klee/Expr/Constraints.h"
 #include "klee/Expr/Expr.h"
 #include "klee/Expr/ExprPPrinter.h"
 #include "klee/Expr/ExprSMTLIBPrinter.h"
 #include "klee/Expr/ExprUtil.h"
+#include "klee/Expr/IndependentSet.h"
+#include "klee/Expr/SymbolicSource.h"
 #include "klee/Module/Cell.h"
 #include "klee/Module/InstructionInfoTable.h"
 #include "klee/Module/KInstruction.h"
 #include "klee/Module/KModule.h"
 #include "klee/Solver/Common.h"
+#include "klee/Solver/Solver.h"
 #include "klee/Solver/SolverCmdLine.h"
 #include "klee/Solver/SolverStats.h"
 #include "klee/Statistics/TimerStatIncrementer.h"
@@ -56,6 +60,7 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/IR/Attributes.h"
 #include "llvm/IR/BasicBlock.h"
+#include <llvm/Support/Casting.h>
 #if LLVM_VERSION_CODE < LLVM_VERSION(8, 0)
 #include "llvm/IR/CallSite.h"
 #endif
@@ -176,6 +181,7 @@ enum class ExternalCallPolicy {
   None,     // No external calls allowed
   Concrete, // Only external calls with concrete arguments allowed
   All,      // All external calls allowed
+  Symcrete
 };
 
 cl::opt<ExternalCallPolicy> ExternalCalls(
@@ -192,7 +198,9 @@ cl::opt<ExternalCallPolicy> ExternalCalls(
                    "allowed (default)"),
         clEnumValN(ExternalCallPolicy::All, "all",
                    "All external function calls are allowed.  This concretizes "
-                   "any symbolic arguments in calls to external functions.")),
+                   "any symbolic arguments in calls to external functions."),
+        clEnumValN(ExternalCallPolicy::Symcrete, "symcrete",
+                   "Same as 'all', but also executes some functions symcretely.")),
     cl::init(ExternalCallPolicy::Concrete),
     cl::cat(ExtCallsCat));
 
@@ -437,8 +445,7 @@ Executor::Executor(LLVMContext &ctx, const InterpreterOptions &opts,
                    InterpreterHandler *ih)
     : Interpreter(opts), interpreterHandler(ih), searcher(0),
       externalDispatcher(new ExternalDispatcher(ctx)), statsTracker(0),
-      pathWriter(0), symPathWriter(0), specialFunctionHandler(0), timers{time::Span(TimerInterval)},
-      replayKTest(0), replayPath(0), usingSeeds(0),
+      pathWriter(0), symPathWriter(0), specialFunctionHandler(0), timers{time::Span(TimerInterval)}, replayKTest(0), replayPath(0), usingSeeds(0),
       atMemoryLimit(false), inhibitForking(false), haltExecution(false),
       ivcEnabled(false), debugLogBuffer(debugBufferString) {
 
@@ -457,15 +464,23 @@ Executor::Executor(LLVMContext &ctx, const InterpreterOptions &opts,
     klee_error("Failed to create core solver\n");
   }
 
-  Solver *solver = constructSolverChain(
+  LLVMContext *ctxSolver = nullptr;
+  if (ExternalCalls == ExternalCallPolicy::Symcrete) {
+    ctxSolver = &ctx;
+  }
+
+  auto pair = constructSolverChain(
       coreSolver,
       interpreterHandler->getOutputFilename(ALL_QUERIES_SMT2_FILE_NAME),
       interpreterHandler->getOutputFilename(SOLVER_QUERIES_SMT2_FILE_NAME),
       interpreterHandler->getOutputFilename(ALL_QUERIES_KQUERY_FILE_NAME),
-      interpreterHandler->getOutputFilename(SOLVER_QUERIES_KQUERY_FILE_NAME));
+      interpreterHandler->getOutputFilename(SOLVER_QUERIES_KQUERY_FILE_NAME),
+      ctxSolver);
 
-  this->solver = new TimingSolver(solver, EqualitySubstitution);
-  memory = new MemoryManager(&arrayCache);
+  this->solver = new TimingSolver(pair.first, EqualitySubstitution);
+  this->fuzzer = pair.second;
+
+  memory = new MemoryManager(&arrayCache, &sourceBuilder);
 
   initializeSearchOptions();
 
@@ -863,6 +878,7 @@ bool Executor::branchingPermitted(const ExecutionState &state) const {
 
 void Executor::branch(ExecutionState &state,
                       const std::vector<ref<Expr>> &conditions,
+                      const std::vector<Assignment> &deltas,
                       std::vector<ExecutionState *> &result,
                       BranchType reason) {
   TimerStatIncrementer timer(stats::forkTime);
@@ -940,8 +956,9 @@ void Executor::branch(ExecutionState &state,
   }
 
   for (unsigned i=0; i<N; ++i)
-    if (result[i])
-      addConstraint(*result[i], conditions[i]);
+    if (result[i]) {
+      addConstraint(*result[i], conditions[i], deltas[i]);
+    }
 }
 
 ref<Expr> Executor::maxStaticPctChecks(ExecutionState &current,
@@ -994,7 +1011,7 @@ ref<Expr> Executor::maxStaticPctChecks(ExecutionState &current,
     os << current.prevPC->getSourceLocation();
     klee_warning_once(0, "%s", os.str().c_str());
 
-    addConstraint(current, EqExpr::create(value, condition));
+    addConstraint(current, EqExpr::create(value, condition), {});
     condition = value;
   }
   return condition;
@@ -1002,7 +1019,6 @@ ref<Expr> Executor::maxStaticPctChecks(ExecutionState &current,
 
 Executor::StatePair Executor::fork(ExecutionState &current, ref<Expr> condition,
                                    bool isInternal, BranchType reason) {
-  Solver::Validity res;
   std::map< ExecutionState*, std::vector<SeedInfo> >::iterator it = 
     seedMap.find(&current);
   bool isSeeding = it != seedMap.end();
@@ -1014,10 +1030,10 @@ Executor::StatePair Executor::fork(ExecutionState &current, ref<Expr> condition,
   if (isSeeding)
     timeout *= static_cast<unsigned>(it->second.size());
   solver->setTimeout(timeout);
-  bool success = solver->evaluate(current.constraints, condition, res,
-                                  current.queryMetaData);
+  Solver::ValidityResponse res;
+  solver->evaluate(current.constraints, condition, res, current.queryMetaData);
   solver->setTimeout(time::Span());
-  if (!success) {
+  if (res.validity == Solver::PartialValidity::None) {
     current.pc = current.prevPC;
     terminateStateOnSolverError(current, "Query timed out (fork).");
     return StatePair(nullptr, nullptr);
@@ -1029,31 +1045,31 @@ Executor::StatePair Executor::fork(ExecutionState &current, ref<Expr> condition,
              "ran out of branches in replay path mode");
       bool branch = (*replayPath)[replayPosition++];
       
-      if (res==Solver::True) {
+      if (res.validity == Solver::PartialValidity::MustBeTrue) {
         assert(branch && "hit invalid branch in replay path mode");
-      } else if (res==Solver::False) {
+      } else if (res.validity == Solver::MustBeFalse) {
         assert(!branch && "hit invalid branch in replay path mode");
       } else {
         // add constraints
         if(branch) {
-          res = Solver::True;
-          addConstraint(current, condition);
+          res.validity = Solver::PartialValidity::MustBeTrue;
+          addConstraint(current, condition, res.queryDelta);
         } else  {
-          res = Solver::False;
-          addConstraint(current, Expr::createIsZero(condition));
+          res.validity = Solver::PartialValidity::MustBeFalse;
+          addConstraint(current, Expr::createIsZero(condition), res.negatedQueryDelta);
         }
       }
-    } else if (res==Solver::Unknown) {
+    } else if (res.validity == Solver::PartialValidity::TrueOrFalse) {
       assert(!replayKTest && "in replay mode, only one branch can be true.");
       
       if (!branchingPermitted(current)) {
         TimerStatIncrementer timer(stats::forkTime);
         if (theRNG.getBool()) {
-          addConstraint(current, condition);
-          res = Solver::True;        
+          addConstraint(current, condition, res.queryDelta);
+          res.validity = Solver::PartialValidity::MustBeTrue;
         } else {
-          addConstraint(current, Expr::createIsZero(condition));
-          res = Solver::False;
+          addConstraint(current, Expr::createIsZero(condition), res.negatedQueryDelta);
+          res.validity = Solver::PartialValidity::MustBeFalse;
         }
       }
     }
@@ -1063,7 +1079,7 @@ Executor::StatePair Executor::fork(ExecutionState &current, ref<Expr> condition,
   // and false seeds.
   if (isSeeding && 
       (current.forkDisabled || OnlyReplaySeeds) && 
-      res == Solver::Unknown) {
+      res.validity == Solver::PartialValidity::TrueOrFalse) {
     bool trueSeed=false, falseSeed=false;
     // Is seed extension still ok here?
     for (std::vector<SeedInfo>::iterator siit = it->second.begin(), 
@@ -1084,9 +1100,12 @@ Executor::StatePair Executor::fork(ExecutionState &current, ref<Expr> condition,
     }
     if (!(trueSeed && falseSeed)) {
       assert(trueSeed || falseSeed);
-      
-      res = trueSeed ? Solver::True : Solver::False;
-      addConstraint(current, trueSeed ? condition : Expr::createIsZero(condition));
+
+      res.validity = trueSeed ? Solver::PartialValidity::MustBeTrue
+                     : Solver::PartialValidity::MustBeFalse;
+      addConstraint(current,
+                    trueSeed ? condition : Expr::createIsZero(condition),
+                    trueSeed ? res.queryDelta : res.negatedQueryDelta);
     }
   }
 
@@ -1098,21 +1117,25 @@ Executor::StatePair Executor::fork(ExecutionState &current, ref<Expr> condition,
   // the value it has been fixed at, we should take this as a nice
   // hint to just use the single constraint instead of all the binary
   // search ones. If that makes sense.
-  if (res==Solver::True) {
+  if (res.validity == Solver::PartialValidity::MustBeTrue ||
+      res.validity == Solver::PartialValidity::MayBeTrue) {
     if (!isInternal) {
       if (pathWriter) {
         current.pathOS << "1";
       }
     }
 
+    current.addConstraint(condition, res.queryDelta);
     return StatePair(&current, nullptr);
-  } else if (res==Solver::False) {
+  } else if (res.validity == Solver::PartialValidity::MustBeFalse ||
+             res.validity == Solver::PartialValidity::MayBeFalse) {
     if (!isInternal) {
       if (pathWriter) {
         current.pathOS << "0";
       }
     }
 
+    current.addConstraint(Expr::createIsZero(condition), res.negatedQueryDelta);
     return StatePair(nullptr, &current);
   } else {
     TimerStatIncrementer timer(stats::forkTime);
@@ -1177,8 +1200,8 @@ Executor::StatePair Executor::fork(ExecutionState &current, ref<Expr> condition,
       }
     }
 
-    addConstraint(*trueState, condition);
-    addConstraint(*falseState, Expr::createIsZero(condition));
+    addConstraint(*trueState, condition, res.queryDelta);
+    addConstraint(*falseState, Expr::createIsZero(condition), res.negatedQueryDelta);
 
     // Kinda gross, do we even really still want this option?
     if (MaxDepth && MaxDepth<=trueState->depth) {
@@ -1191,7 +1214,8 @@ Executor::StatePair Executor::fork(ExecutionState &current, ref<Expr> condition,
   }
 }
 
-void Executor::addConstraint(ExecutionState &state, ref<Expr> condition) {
+void Executor::addConstraint(ExecutionState &state, ref<Expr> condition,
+                             const Assignment &delta) {
   if (ConstantExpr *CE = dyn_cast<ConstantExpr>(condition)) {
     if (!CE->isTrue())
       llvm::report_fatal_error("attempt to add invalid constraint");
@@ -1205,13 +1229,13 @@ void Executor::addConstraint(ExecutionState &state, ref<Expr> condition) {
     bool warn = false;
     for (std::vector<SeedInfo>::iterator siit = it->second.begin(), 
            siie = it->second.end(); siit != siie; ++siit) {
-      bool res;
+      Solver::TruthResponse res;
       bool success = solver->mustBeFalse(state.constraints,
                                          siit->assignment.evaluate(condition),
                                          res, state.queryMetaData);
       assert(success && "FIXME: Unhandled solver failure");
       (void) success;
-      if (res) {
+      if (res.result) {
         siit->patchSeed(state, condition, solver);
         warn = true;
       }
@@ -1220,7 +1244,8 @@ void Executor::addConstraint(ExecutionState &state, ref<Expr> condition) {
       klee_warning("seeds patched for violating constraint"); 
   }
 
-  state.addConstraint(condition);
+  state.addConstraint(condition, delta);
+  assert(checkSAT(state));
   if (ivcEnabled)
     doImpliedValueConcretization(state, condition, 
                                  ConstantExpr::alloc(1, Expr::Bool));
@@ -1261,7 +1286,7 @@ ref<Expr> Executor::toUnique(const ExecutionState &state,
 
   if (!isa<ConstantExpr>(e)) {
     ref<ConstantExpr> value;
-    bool isTrue = false;
+    Solver::TruthResponse isTrue;
     e = optimizer.optimizeExpr(e, true);
     solver->setTimeout(coreSolverTimeout);
     if (solver->getValue(state.constraints, e, value, state.queryMetaData)) {
@@ -1269,7 +1294,7 @@ ref<Expr> Executor::toUnique(const ExecutionState &state,
       cond = optimizer.optimizeExpr(cond, false);
       if (solver->mustBeTrue(state.constraints, cond, isTrue,
                              state.queryMetaData) &&
-          isTrue)
+          isTrue.result)
         result = value;
     }
     solver->setTimeout(time::Span());
@@ -1306,7 +1331,7 @@ Executor::toConstant(ExecutionState &state,
   else
     klee_warning_once(reason, "%s", os.str().c_str());
 
-  addConstraint(state, EqExpr::create(e, value));
+  addConstraint(state, EqExpr::create(e, value), {});
     
   return value;
 }
@@ -1345,7 +1370,7 @@ void Executor::executeGetValue(ExecutionState &state,
       conditions.push_back(EqExpr::create(e, *vit));
 
     std::vector<ExecutionState*> branches;
-    branch(state, conditions, branches, BranchType::GetVal);
+    branch(state, conditions, {}, branches, BranchType::GetVal);
     
     std::vector<ExecutionState*>::iterator bit = branches.begin();
     for (std::set< ref<Expr> >::iterator vit = values.begin(), 
@@ -2043,6 +2068,7 @@ Function* Executor::getTargetFunction(Value *calledVal, ExecutionState &state) {
 }
 
 void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
+  fuzzer->current = ki;
   Instruction *i = ki->inst;
   switch (i->getOpcode()) {
     // Control flow
@@ -2193,6 +2219,8 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     targets.reserve(numDestinations);
     std::vector<ref<Expr>> expressions;
     expressions.reserve(numDestinations);
+    std::vector<Assignment> deltas;
+    deltas.reserve(numDestinations);
 
     ref<Expr> errorCase = ConstantExpr::alloc(1, Expr::Bool);
     SmallPtrSet<BasicBlock *, 5> destinations;
@@ -2211,30 +2239,32 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       errorCase = AndExpr::create(errorCase, Expr::createIsZero(e));
 
       // check feasibility
-      bool result;
+      Solver::TruthResponse res;
       bool success __attribute__((unused)) =
-          solver->mayBeTrue(state.constraints, e, result, state.queryMetaData);
+          solver->mayBeTrue(state.constraints, e, res, state.queryMetaData);
       assert(success && "FIXME: Unhandled solver failure");
-      if (result) {
+      if (res.result) {
         targets.push_back(d);
         expressions.push_back(e);
+        deltas.push_back(res.counterexampleDelta);
       }
     }
     // check errorCase feasibility
-    bool result;
+    Solver::TruthResponse res;
     bool success __attribute__((unused)) = solver->mayBeTrue(
-        state.constraints, errorCase, result, state.queryMetaData);
+        state.constraints, errorCase, res, state.queryMetaData);
     assert(success && "FIXME: Unhandled solver failure");
-    if (result) {
+    if (res.result) {
       expressions.push_back(errorCase);
+      deltas.push_back(res.counterexampleDelta);
     }
 
     // fork states
     std::vector<ExecutionState *> branches;
-    branch(state, expressions, branches, BranchType::IndirectBranch);
+    branch(state, expressions, deltas, branches, BranchType::IndirectBranch);
 
     // terminate error state
-    if (result) {
+    if (res.result) {
       terminateStateOnExecError(*branches.back(), "indirectbr: illegal label address");
       branches.pop_back();
     }
@@ -2271,6 +2301,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       //   the case values, still default is handled last
       std::vector<BasicBlock *> bbOrder;
       std::map<BasicBlock *, ref<Expr> > branchTargets;
+      std::map<BasicBlock *, Assignment> targetDeltas;
 
       std::map<ref<Expr>, BasicBlock *> expressionOrder;
 
@@ -2300,13 +2331,17 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
         defaultValue = AndExpr::create(defaultValue, Expr::createIsZero(match));
 
         // Check if control flow could take this case
-        bool result;
+        Solver::TruthResponse res;
         match = optimizer.optimizeExpr(match, false);
-        bool success = solver->mayBeTrue(state.constraints, match, result,
+        bool success = solver->mayBeTrue(state.constraints, match, res,
                                          state.queryMetaData);
+        if (!success) {
+          terminateStateOnSolverError(state, "Solver failed _-_");
+          break;
+        }
         assert(success && "FIXME: Unhandled solver failure");
         (void) success;
-        if (result) {
+        if (res.result) {
           BasicBlock *caseSuccessor = it->second;
 
           // Handle the case that a basic block might be the target of multiple
@@ -2315,14 +2350,15 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
           // values for the same target basic block. We spare us forking too
           // many times but we generate more complex condition expressions
           // TODO Add option to allow to choose between those behaviors
-          std::pair<std::map<BasicBlock *, ref<Expr> >::iterator, bool> res =
+          std::pair<std::map<BasicBlock *, ref<Expr> >::iterator, bool> _res =
               branchTargets.insert(std::make_pair(
                   caseSuccessor, ConstantExpr::alloc(0, Expr::Bool)));
 
-          res.first->second = OrExpr::create(match, res.first->second);
+          _res.first->second = OrExpr::create(match, _res.first->second);
+          targetDeltas.insert({caseSuccessor, res.counterexampleDelta});
 
           // Only add basic blocks which have not been target of a branch yet
-          if (res.second) {
+          if (_res.second) {
             bbOrder.push_back(caseSuccessor);
           }
         }
@@ -2330,12 +2366,12 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
 
       // Check if control could take the default case
       defaultValue = optimizer.optimizeExpr(defaultValue, false);
-      bool res;
+      Solver::TruthResponse res;
       bool success = solver->mayBeTrue(state.constraints, defaultValue, res,
                                        state.queryMetaData);
       assert(success && "FIXME: Unhandled solver failure");
       (void) success;
-      if (res) {
+      if (res.result) {
         std::pair<std::map<BasicBlock *, ref<Expr> >::iterator, bool> ret =
             branchTargets.insert(
                 std::make_pair(si->getDefaultDest(), defaultValue));
@@ -2347,13 +2383,15 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       // Fork the current state with each state having one of the possible
       // successors of this switch
       std::vector< ref<Expr> > conditions;
+      std::vector<Assignment> deltas;
       for (std::vector<BasicBlock *>::iterator it = bbOrder.begin(),
                                                ie = bbOrder.end();
            it != ie; ++it) {
         conditions.push_back(branchTargets[*it]);
+        deltas.push_back(targetDeltas[*it]);
       }
       std::vector<ExecutionState*> branches;
-      branch(state, conditions, branches, BranchType::Switch);
+      branch(state, conditions, deltas, branches, BranchType::Switch);
 
       std::vector<ExecutionState*>::iterator bit = branches.begin();
       for (std::vector<BasicBlock *>::iterator it = bbOrder.begin(),
@@ -3778,6 +3816,15 @@ static std::set<std::string> okExternals(okExternalsList,
                                          okExternalsList + 
                                          (sizeof(okExternalsList)/sizeof(okExternalsList[0])));
 
+static const char *stringFunctionsList[] = {
+    "strlen", "strcat",  "strncat", "strcpy",  "strncpy", "strcmp",  "strncmp",
+    "strchr", "strrchr", "strstr",  "strcspn", "strspn",  "strpbrk", "strtok"};
+
+static std::set<std::string>
+    stringFunctions(stringFunctionsList,
+                    stringFunctionsList + (sizeof(stringFunctionsList) /
+                                           sizeof(stringFunctionsList[0])));
+
 void Executor::callExternalFunction(ExecutionState &state,
                                     KInstruction *target,
                                     Function *function,
@@ -3794,6 +3841,39 @@ void Executor::callExternalFunction(ExecutionState &state,
     return;
   }
 
+  // Decide if the function must be executed symcretely
+  bool executeSymcretely;
+  bool stringFunction = stringFunctions.count(function->getName().str());
+  if (ExternalCalls == ExternalCallPolicy::Symcrete && stringFunction) {
+    bool nofuzz = true;
+    for (auto i : arguments) {
+      auto ce = dyn_cast<ConstantExpr>(i);
+      if (!ce) {
+        nofuzz = false;
+        break;
+      }
+      ObjectPair op;
+      if (ce->getWidth() == Context::get().getPointerWidth() &&
+          state.addressSpace.resolveOne(ce, op)) {
+        auto arr = op.second->updates.root;
+        if (arr) {
+          if (isa<MakeSymbolicSource>(arr->source)) {
+            nofuzz = false;
+            break;
+          } else if (auto s = dyn_cast<ExternalCallSource>(arr->source)) {
+            if (s->symcrete == false) {
+              nofuzz = false;
+              break;
+            }
+          }
+        }
+      }
+    }
+    executeSymcretely = !nofuzz;
+  } else {
+    executeSymcretely = false;
+  }
+
   // normal external function handling path
   // allocate 128 bits for each argument (+return value) to support fp80's;
   // we could iterate through all the arguments first and determine the exact
@@ -3801,25 +3881,94 @@ void Executor::callExternalFunction(ExecutionState &state,
   uint64_t *args = (uint64_t*) alloca(2*sizeof(*args) * (arguments.size() + 1));
   memset(args, 0, 2 * sizeof(*args) * (arguments.size() + 1));
   unsigned wordIndex = 2;
-  for (std::vector<ref<Expr> >::iterator ai = arguments.begin(), 
-       ae = arguments.end(); ai!=ae; ++ai) {
-    if (ExternalCalls == ExternalCallPolicy::All) { // don't bother checking uniqueness
-      *ai = optimizer.optimizeExpr(*ai, true);
-      ref<ConstantExpr> ce;
-      bool success =
-          solver->getValue(state.constraints, *ai, ce, state.queryMetaData);
-      assert(success && "FIXME: Unhandled solver failure");
-      (void) success;
-      ce->toMemory(&args[wordIndex]);
+
+  static unsigned callCounter;
+  ref<ExternalCall> call = new ExternalCall;
+  call->f = function;
+  call->num = ++callCounter;
+  auto callNum = llvm::utostr(callCounter);
+
+  std::vector<ref<ConstantExpr>> concretizedArgs(arguments.size());
+  std::vector<ExternalCall::Argument> callArguments(arguments.size());
+  std::map<ref<Expr>, ObjectPair> resolved;
+
+  for (unsigned i = 0; i < arguments.size(); i++) {
+    ref<ConstantExpr> ce;
+    if (!solver->getValue(state.constraints, arguments[i], ce,
+                          state.queryMetaData)) {
+      assert(0 && "Debug");
+    }
+    concretizedArgs[i] = ce;
+    if (ce->getWidth() == Context::get().getPointerWidth()) {
       ObjectPair op;
-      // Checking to see if the argument is a pointer to something
-      if (ce->getWidth() == Context::get().getPointerWidth() &&
-          state.addressSpace.resolveOne(ce, op)) {
-        op.second->flushToConcreteStore(solver, state);
+      if (state.addressSpace.resolveOne(ce, op)) {
+        resolved[arguments[i]] = op;
       }
-      wordIndex += (ce->getWidth()+63)/64;
+    }
+  }
+
+  std::map<const MemoryObject *, ref<ExternalCall::MO>> MOs;
+  std::vector<std::pair<Symcrete, std::vector<unsigned char>>> symcretes;
+
+  if (executeSymcretely) {
+    for (unsigned i = 0; i < arguments.size(); i++) {
+      Symcrete s(arguments[i], "arg" + callNum + "_" + llvm::utostr(i + 1),
+                 sourceBuilder.externalCall(call, true));
+      callArguments[i].expr = arguments[i];
+      callArguments[i].symcrete = s.marker;
+      auto ce = concretizedArgs[i];
+      symcretes.push_back({s, ce->toByteVector()});
+      // state.constraints.add_symcrete(s, ce->toByteVector());
+
+      if (resolved.count(arguments[i])) {
+        auto op = resolved[arguments[i]];
+        callArguments[i].pointer = true;
+        if (!MOs.count(op.first)) {
+          auto MO = ref<ExternalCall::MO>(new ExternalCall::MO);
+          auto read = op.second->read(0, op.first->size * 8);
+          Symcrete s(read,
+                     "arg_pointee_pre" + callNum + "_" + llvm::utostr(i + 1),
+                     sourceBuilder.externalCall(call, true));
+          MO->SymcretePre = s.marker;
+          auto os = ObjectState(*(op.second));
+          os.flushRangeForWrite(0, os.size);
+          MO->MOState = (UpdateList)os.getUpdates();
+          MO->address = op.first->address;
+          ref<ConstantExpr> ce;
+          if (!solver->getValue(state.constraints, read, ce,
+                                state.queryMetaData)) {
+            assert(0 && "Debug");
+          }
+          symcretes.push_back({s, ce->toByteVector()});
+          // state.constraints.add_symcrete(s, ce->toByteVector());
+          MOs[op.first] = MO;
+        }
+        callArguments[i].mo = MOs[op.first];
+        if (!dyn_cast<ConstantExpr>(arguments[i])) {
+          auto lower = ConstantExpr::create(op.first->address, 64);
+          auto upper = ConstantExpr::create(op.first->address + op.first->size, 64);
+          state.addConstraint(UleExpr::alloc(lower, arguments[i]), {});
+          state.addConstraint(UltExpr::alloc(arguments[i], upper), {});
+        }
+      }
+    }
+  }
+
+  for (unsigned i = 0; i < arguments.size(); i++) {
+    if (ExternalCalls == ExternalCallPolicy::All ||
+        ExternalCalls == ExternalCallPolicy::Symcrete) {
+      std::unordered_set<const MemoryObject *> flushed;
+      concretizedArgs[i]->toMemory(&args[wordIndex]);
+      if (resolved.count(arguments[i])) {
+        auto op = resolved[arguments[i]];
+        if (flushed.count(op.first)) {
+          flushed.insert(op.first);
+          op.second->flushToConcreteStore(solver, state);
+        }
+      }
+      wordIndex += (concretizedArgs[i]->getWidth() + 63) / 64;
     } else {
-      ref<Expr> arg = toUnique(state, *ai);
+      ref<Expr> arg = toUnique(state, arguments[i]);
       if (ConstantExpr *ce = dyn_cast<ConstantExpr>(arg)) {
         // fp80 must be aligned to 16 according to the System V AMD 64 ABI
         if (ce->getWidth() == Expr::Fl80 && wordIndex & 0x01)
@@ -3843,9 +3992,9 @@ void Executor::callExternalFunction(ExecutionState &state,
   // Update external errno state with local state value
   int *errno_addr = getErrnoLocation(state);
   ObjectPair result;
-  bool resolved = state.addressSpace.resolveOne(
+  bool resolvedErrno = state.addressSpace.resolveOne(
       ConstantExpr::create((uint64_t)errno_addr, Expr::Int64), result);
-  if (!resolved)
+  if (!resolvedErrno)
     klee_error("Could not resolve memory object for errno");
   ref<Expr> errValueExpr = result.second->read(0, sizeof(*errno_addr) * 8);
   ConstantExpr *errnoValue = dyn_cast<ConstantExpr>(errValueExpr);
@@ -3891,6 +4040,42 @@ void Executor::callExternalFunction(ExecutionState &state,
     return;
   }
 
+  if (executeSymcretely) {
+    std::set<ref<ExternalCall::MO>> postProcessed;
+    for (unsigned i = 0; i < arguments.size(); i++) {
+      if (resolved.count(arguments[i])) {
+        auto op = resolved[arguments[i]];
+        auto MO = MOs[op.first];
+        if (!postProcessed.count(MO)) {
+          std::vector<unsigned char> concreteStore;
+          for (unsigned j = 0; j < op.second->size; j++) {
+            concreteStore.push_back(op.second->concreteStore[j]);
+          }
+          if (op.second->readOnly) {
+            MO->readOnly = true;
+          } else {
+            MO->readOnly = false;
+            const Array *newPointee = arrayCache.CreateArray(
+                "new_pointee_" + callNum + "_" + llvm::utostr(i + 1),
+                op.first->size, sourceBuilder.externalCall(call, false));
+            auto os = bindObjectInState(state, op.first, false, newPointee);
+            auto read = os->read(0, op.first->size * 8);
+            Symcrete s(
+                read, "arg_pointee_post_" + callNum + "_" + llvm::utostr(i + 1),
+                sourceBuilder.externalCall(call, true));
+            symcretes.push_back({s, concreteStore});
+            // state.constraints.add_symcrete(s, concreteStore);
+            MO->SymcretePost = s.marker;
+            MO->postArray = newPointee;
+          }
+          postProcessed.insert(MO);
+        }
+      }
+    }
+  }
+
+  call->args = callArguments;
+
 #ifndef WINDOWS
   // Update errno memory object with the errno value from the call
   int error = externalDispatcher->getLastErrno();
@@ -3900,9 +4085,30 @@ void Executor::callExternalFunction(ExecutionState &state,
 
   Type *resultType = target->inst->getType();
   if (resultType != Type::getVoidTy(function->getContext())) {
-    ref<Expr> e = ConstantExpr::fromMemory((void*) args, 
-                                           getWidthForLLVMType(resultType));
-    bindLocal(target, state, e);
+    ref<ConstantExpr> e =
+        ConstantExpr::fromMemory((void *)args, getWidthForLLVMType(resultType));
+    if (executeSymcretely) {
+      auto width = e->getWidth();
+      auto widthInBytes = width % 8 == 0 ? width / 8 : width / 8 + 1;
+      const Array *array =
+          arrayCache.CreateArray("retval_" + callNum, widthInBytes,
+                                 sourceBuilder.externalCall(call, false));
+      call->retval.array = array;
+      auto read = array->readWhole();
+      Symcrete s(read, "retval_symcrete_" + callNum,
+                 sourceBuilder.externalCall(call, true));
+      symcretes.push_back({s, e->toByteVector()});
+      // state.constraints.add_symcrete(s, e->toByteVector());
+      call->retval.symcrete = s.marker;
+      bindLocal(target, state, read);
+    } else {
+      bindLocal(target, state, e);
+    }
+  }
+  if (executeSymcretely) {
+    for (auto i : symcretes) {
+      state.constraints.add_symcrete(i.first, i.second);
+    }
   }
 }
 
@@ -3925,13 +4131,13 @@ ref<Expr> Executor::replaceReadWithSymbolic(ExecutionState &state,
   // and return it.
   
   static unsigned id;
-  const Array *array =
-      arrayCache.CreateArray("rrws_arr" + llvm::utostr(++id),
-                             Expr::getMinBytesForWidth(e->getWidth()));
+  const Array *array = arrayCache.CreateArray(
+      "rrws_arr" + llvm::utostr(++id), Expr::getMinBytesForWidth(e->getWidth()),
+      sourceBuilder.makeSymbolic());
   ref<Expr> res = Expr::createTempRead(array, e->getWidth());
   ref<Expr> eq = NotOptimizedExpr::create(EqExpr::create(e, res));
   llvm::errs() << "Making symbolic: " << eq << "\n";
-  state.addConstraint(eq);
+  state.addConstraint(eq, {});
   return res;
 }
 
@@ -3968,6 +4174,7 @@ void Executor::executeAlloc(ExecutionState &state,
     MemoryObject *mo =
         memory->allocate(CE->getZExtValue(), isLocal, /*isGlobal=*/false,
                          allocSite, allocationAlignment);
+    
     if (!mo) {
       bindLocal(target, state, 
                 ConstantExpr::alloc(0, Context::get().getPointerWidth()));
@@ -4011,13 +4218,13 @@ void Executor::executeAlloc(ExecutionState &state,
     Expr::Width W = example->getWidth();
     while (example->Ugt(ConstantExpr::alloc(128, W))->isTrue()) {
       ref<ConstantExpr> tmp = example->LShr(ConstantExpr::alloc(1, W));
-      bool res;
+      Solver::TruthResponse res;
       bool success =
           solver->mayBeTrue(state.constraints, EqExpr::create(tmp, size), res,
                             state.queryMetaData);
       assert(success && "FIXME: Unhandled solver failure");      
       (void) success;
-      if (!res)
+      if (!res.result)
         break;
       example = tmp;
     }
@@ -4032,13 +4239,13 @@ void Executor::executeAlloc(ExecutionState &state,
                                       fixedSize.second->queryMetaData);
       assert(success && "FIXME: Unhandled solver failure");      
       (void) success;
-      bool res;
+      Solver::TruthResponse res;
       success = solver->mustBeTrue(fixedSize.second->constraints,
                                    EqExpr::create(tmp, size), res,
                                    fixedSize.second->queryMetaData);
       assert(success && "FIXME: Unhandled solver failure");      
       (void) success;
-      if (res) {
+      if (res.result) {
         executeAlloc(*fixedSize.second, tmp, isLocal,
                      target, zeroMemory, reallocFrom);
       } else {
@@ -4177,7 +4384,7 @@ void Executor::executeMemoryOperation(ExecutionState &state,
     ref<Expr> check = mo->getBoundsCheckOffset(offset, bytes);
     check = optimizer.optimizeExpr(check, true);
 
-    bool inBounds;
+    Solver::TruthResponse inBounds;
     solver->setTimeout(coreSolverTimeout);
     bool success = solver->mustBeTrue(state.constraints, check, inBounds,
                                       state.queryMetaData);
@@ -4188,7 +4395,7 @@ void Executor::executeMemoryOperation(ExecutionState &state,
       return;
     }
 
-    if (inBounds) {
+    if (inBounds.result) {
       const ObjectState *os = op.second;
       if (isWrite) {
         if (os->readOnly) {
@@ -4277,7 +4484,8 @@ void Executor::executeMakeSymbolic(ExecutionState &state,
     while (!state.arrayNames.insert(uniqueName).second) {
       uniqueName = name + "_" + llvm::utostr(++id);
     }
-    const Array *array = arrayCache.CreateArray(uniqueName, mo->size);
+    const Array *array = arrayCache.CreateArray(uniqueName, mo->size,
+                                                sourceBuilder.makeSymbolic());
     bindObjectInState(state, mo, false, array);
     state.addSymbolic(mo, array);
     
@@ -4438,7 +4646,7 @@ void Executor::runFunctionAsMain(Function *f,
 
   // hack to clear memory objects
   delete memory;
-  memory = new MemoryManager(NULL);
+  memory = new MemoryManager(NULL, NULL);
 
   globalObjects.clear();
   globalAddresses.clear();
@@ -4509,7 +4717,7 @@ bool Executor::getSymbolicSolution(const ExecutionState &state,
   // an example) While this process can be very expensive, it can
   // also make understanding individual test cases much easier.
   for (auto& pi: state.cexPreferences) {
-    bool mustBeTrue;
+    Solver::TruthResponse mustBeTrue;
     // Attempt to bound byte to constraints held in cexPreferences
     bool success =
       solver->mustBeTrue(extendedConstraints, Expr::createIsZero(pi),
@@ -4519,14 +4727,15 @@ bool Executor::getSymbolicSolution(const ExecutionState &state,
     if (!success) break;
     // If the particular constraint operated on in this iteration through
     // the loop isn't implied then add it to the list of constraints.
-    if (!mustBeTrue)
-      cm.addConstraint(pi);
+    if (!mustBeTrue.result)
+      cm.addConstraint(pi, mustBeTrue.counterexampleDelta);
   }
 
   std::vector< std::vector<unsigned char> > values;
   std::vector<const Array*> objects;
   for (unsigned i = 0; i != state.symbolics.size(); ++i)
     objects.push_back(state.symbolics[i].second);
+
   bool success = solver->getInitialValues(extendedConstraints, objects, values,
                                           state.queryMetaData);
   solver->setTimeout(time::Span());
@@ -4534,12 +4743,28 @@ bool Executor::getSymbolicSolution(const ExecutionState &state,
     klee_warning("unable to compute initial values (invalid constraints?)!");
     ExprPPrinter::printQuery(llvm::errs(), state.constraints,
                              ConstantExpr::alloc(0, Expr::Bool));
+    llvm::errs() << "------------- concretized ---------------\n";
+    auto concretized =
+        Query(state.constraints, ConstantExpr::alloc(0, Expr::Bool))
+            .concretized();
+    ExprPPrinter::printQuery(llvm::errs(), concretized.constraints,
+                             concretized.expr);
     return false;
   }
-  
   for (unsigned i = 0; i != state.symbolics.size(); ++i)
     res.push_back(std::make_pair(state.symbolics[i].first->name, values[i]));
   return true;
+}
+
+bool Executor::checkSAT(ExecutionState &state) {
+  std::vector< std::vector<unsigned char> > values;
+  std::vector<const Array*> objects;
+  for (unsigned i = 0; i != state.symbolics.size(); ++i)
+    objects.push_back(state.symbolics[i].second);
+
+  bool success = solver->getInitialValues(state.constraints, objects, values,
+                                          state.queryMetaData);
+  return success;
 }
 
 void Executor::getCoveredLines(const ExecutionState &state,
