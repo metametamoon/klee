@@ -289,10 +289,10 @@ cl::opt<bool> MockExternalCalls(
              "If false, fails on externall calls."),
     cl::cat(ExtCallsCat));
 
-cl::opt<bool> MockAllExternalCalls(
-    "mock-all-external-calls",
+cl::opt<bool> MockAllExternals(
+    "mock-all-externals",
     cl::init(false),
-    cl::desc("If true, all external calls are mocked."),
+    cl::desc("If true, all externals are mocked."),
     cl::cat(ExtCallsCat));
 
 /*** Seeding options ***/
@@ -1100,10 +1100,13 @@ void Executor::initializeGlobalObjects(ExecutionState &state) {
       } else {
         addr = externalDispatcher->resolveSymbol(v.getName().str());
       }
-      if (!addr) {
+      if (MockAllExternals && !addr) {
         executeMakeSymbolic(
             state, mo, typeSystemManager->getWrappedType(v.getType()),
             "mocked_extern", SourceBuilder::irreproducible(), false);
+      } else if (!addr) {
+        klee_error("Unable to load symbol(%.*s) while initializing globals",
+                   static_cast<int>(v.getName().size()), v.getName().data());
       } else {
         for (unsigned offset = 0; offset < mo->size; offset++) {
           os->write8(offset, static_cast<unsigned char *>(addr)[offset]);
@@ -2883,7 +2886,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     } else {
       ref<Expr> v = eval(ki, 0, state).value;
 
-      if (MockExternalCalls) {
+      if (!isa<ConstantExpr>(v) && MockExternalCalls) {
         if (ki->inst->getType()->isSized()) {
           prepareSymbolicValue(state, ki);
         }
@@ -4699,7 +4702,7 @@ void Executor::callExternalFunction(ExecutionState &state,
     return;
   }
 
-  if (ExternalCalls == ExternalCallPolicy::All && MockAllExternalCalls) {
+  if (ExternalCalls == ExternalCallPolicy::All && MockAllExternals) {
     std::string TmpStr;
     llvm::raw_string_ostream os(TmpStr);
     os << "calling external: " << callable->getName().str() << "(";
@@ -5867,10 +5870,7 @@ ref<Expr> Executor::makeSymbolicValue(Value *value, ExecutionState &state, uint6
   state.addSymbolic(mo, array,
                     typeSystemManager->getWrappedType(value->getType()));
   assert(value && "Attempted to make symbolic value from nullptr Value");
-  ObjectState *os = bindObjectInState(
-      state, mo, typeSystemManager->getWrappedType(value->getType()), false,
-      array);
-  ref<Expr> result = os->read(0, width);
+  ref<Expr> result = Expr::createTempRead(array, width);
   return result;
 }
 
@@ -5921,7 +5921,7 @@ void Executor::runFunctionGuided(Function *fn, int argc, char **argv,
 ExecutionState *Executor::prepareStateForPOSIX(KInstIterator &caller, ExecutionState *state) {
   Function *mainFn = kmodule->module->getFunction("__klee_posix_wrapped_main");
 
-  assert(mainFn && "klee_posix_wrapped_main not found");
+  assert(mainFn && "__klee_posix_wrapped_main not found");
   KBlock *target = kmodule->functionMap[mainFn]->entryKBlock;
 
   if (pathWriter)
@@ -6001,7 +6001,7 @@ void Executor::runThroughLocations(llvm::Function *f, int argc, char **argv,
     return;
   }
   guidanceKind = GuidanceKind::ErrorGuidance;
-  MockAllExternalCalls = true;
+  MockAllExternals = true;
   ExternCallsCanReturnNull = true;
   ForkPartialValidity = true;
   AlignSymbolicPointers = false;

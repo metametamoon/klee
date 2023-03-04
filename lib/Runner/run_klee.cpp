@@ -1703,6 +1703,7 @@ int run_klee(int argc, char **argv, char **envp) {
 
   llvm::Module *mainModule = M.get();
 
+  std::vector<std::string> mainModuleFunctions;
   if (ExecutionMode == Interpreter::GuidanceKind::ErrorGuidance) {
     std::vector<llvm::Type *> args;
     args.push_back(llvm::Type::getInt32Ty(ctx)); // argc
@@ -1724,10 +1725,9 @@ int run_klee(int argc, char **argv, char **envp) {
     UseIndependentSolver = false;
   }
 
-  std::vector<std::string> mainFunctions;
   for (auto &Function : *mainModule) {
     if (!Function.isDeclaration()) {
-      mainFunctions.push_back(Function.getName().str());
+      mainModuleFunctions.push_back(Function.getName().str());
     }
   }
 
@@ -1940,7 +1940,7 @@ int run_klee(int argc, char **argv, char **envp) {
   // locale and other data and then calls main.
 
   auto finalModule =
-      interpreter->setModule(std::move(OM), loadedModules, Opts, mainFunctions);
+      interpreter->setModule(std::move(OM), loadedModules, Opts, mainModuleFunctions);
 
   if (InteractiveMode) {
     klee_message("KLEE finish preprocessing.");
@@ -2002,7 +2002,6 @@ int run_klee(int argc, char **argv, char **envp) {
       if (TimeoutPerFunction != 0) {
         while (!child_processes.empty()) {
           wait_until_any_child_dies(child_processes);
-
           std::vector<std::pair<pid_t, time_point>> alive_child;
           for (const auto &child_process : child_processes) {
             if (kill(child_process.first, 0) == 0) {

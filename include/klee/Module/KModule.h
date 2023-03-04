@@ -91,12 +91,12 @@ namespace klee {
 
   struct KCallBlock : KBlock {
     KInstruction *kcallInstruction;
-    llvm::Function *calledFunction;
+    std::set<llvm::Function *> calledFunctions;
 
   public:
     KCallBlock(KFunction *, llvm::BasicBlock *, KModule *,
                std::unordered_map<llvm::Instruction *, unsigned> &,
-               std::unordered_map<unsigned, KInstruction *> &, llvm::Function *,
+               std::unordered_map<unsigned, KInstruction *> &, std::set<llvm::Function *>,
                KInstruction **);
     static bool classof(const KCallBlock *) { return true; }
     static bool classof(const KBlock *E) {
