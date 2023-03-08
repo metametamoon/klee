@@ -10,7 +10,9 @@
 #include "klee/Module/Locations.h"
 #include "klee/Module/KModule.h"
 #include "klee/Module/KInstruction.h"
+#include "llvm/Support/CommandLine.h"
 #include "klee/Support/ErrorHandling.h"
+#include "llvm/IR/Instruction.h"
 #include "llvm/IR/Module.h"
 
 #include <sstream>
@@ -18,6 +20,12 @@
 using namespace klee;
 using namespace llvm;
 
+namespace {
+cl::opt<bool> LocationAccuracy(
+    "location-accuracy", cl::init(false),
+    cl::desc(
+        "Check location with line, column and opcode accuracy (default=false)"));
+}
 
 KFunction *Location::getFunction(KModule *module, std::ostringstream &error) const {
   assert(hasFunctionWithOffset());
@@ -69,7 +77,9 @@ std::set<KInstruction *> Location::initInstructions(KModule *origModule, KModule
 }
 
 bool Location::isTheSameAsIn(KInstruction *instr) const {
-  return instr->info->line == line;
+  return instr->info->line == line &&
+         (!LocationAccuracy || (instr->info->column == column &&
+                                instr->inst->getOpcode() == instructionOpcode));
 }
 
 bool isOSSeparator(char c) {
