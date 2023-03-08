@@ -508,30 +508,28 @@ bool GuidedSearcher::updateTargetedSearcher(
   if (historiedTargetedSearchers.count(target) != 0 ||
       tryAddTarget(history, target)) {
 
-    if (reachedTargets.count(history) != 0) {
-      if (current) {
-        assert(current->targetForest.contains(target));
-        for (auto &reached : reachedTargets[history]) {
-          current->targetForest.blockIn(target, reached);
-        }
-        if (!current->targetForest.contains(target)) {
-          removedStates.push_back(current);
-        }
+    if (current) {
+      assert(current->targetForest.contains(target));
+      for (auto &reached : reachedTargets) {
+        current->targetForest.blockIn(target, reached);
       }
-      for (std::vector<ExecutionState *>::iterator is = addedStates.begin(),
-                                                   ie = addedStates.end();
-           is != ie;) {
-        ExecutionState *state = *is;
-        assert(state->targetForest.contains(target));
-        for (auto &reached : reachedTargets[history]) {
-          state->targetForest.blockIn(target, reached);
-        }
-        if (!state->targetForest.contains(target)) {
-          is = addedStates.erase(is);
-          ie = addedStates.end();
-        } else {
-          ++is;
-        }
+      if (!current->targetForest.contains(target)) {
+        removedStates.push_back(current);
+      }
+    }
+    for (std::vector<ExecutionState *>::iterator is = addedStates.begin(),
+                                                  ie = addedStates.end();
+          is != ie;) {
+      ExecutionState *state = *is;
+      assert(state->targetForest.contains(target));
+      for (auto &reached : reachedTargets) {
+        state->targetForest.blockIn(target, reached);
+      }
+      if (!state->targetForest.contains(target)) {
+        is = addedStates.erase(is);
+        ie = addedStates.end();
+      } else {
+        ++is;
       }
     }
 
@@ -579,15 +577,18 @@ void GuidedSearcher::innerUpdate(
                            removedStates.end());
 
   if (ErrorGuidance == guidance) {
-    if (current && isStuck(*current)) {
+    if (current &&
+        (std::find(baseRemovedStates.begin(), baseRemovedStates.end(),
+                   current) == baseRemovedStates.end()) &&
+        isStuck(*current)) {
       pausedStates.insert(current);
       baseRemovedStates.push_back(current);
     }
     for (const auto state : addedStates) {
       if (isStuck(*state)) {
         pausedStates.insert(state);
-        auto is = std::find(baseAddedStates.begin(),
-                            baseAddedStates.end(), state);
+        auto is =
+            std::find(baseAddedStates.begin(), baseAddedStates.end(), state);
         assert(is != baseAddedStates.end());
         baseAddedStates.erase(is);
       }
@@ -794,7 +795,7 @@ void GuidedSearcher::clearReached(const std::vector<ExecutionState *> &removedSt
       for (auto &state : states) {
         auto history = state->targetForest.getHistory();
         if (target->shouldFailOnThisTarget()) {
-          reachedTargets[history].insert(target);
+          reachedTargets.insert(target);
         }
         targetedSearchers.at(history).at(target)->removeReached();
         if (CoverageGuidance == guidance ||
@@ -831,8 +832,7 @@ void GuidedSearcher::printName(llvm::raw_ostream &os) {
 }
 
 bool GuidedSearcher::isReached(ref<TargetForest::History> history, ref<Target> target) {
-  return reachedTargets.count(history) != 0 &&
-         reachedTargets[history].count(target) != 0;
+  return reachedTargets.count(target) != 0;
 }
 
 bool GuidedSearcher::tryAddTarget(ref<TargetForest::History> history,

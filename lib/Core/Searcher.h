@@ -204,7 +204,7 @@ namespace klee {
     TargetForestHistoryToSearcherMap targetedSearchers;
     CodeGraphDistance &codeGraphDistance;
     TargetCalculator *stateHistory;
-    TargetForestHisoryToTargetSet reachedTargets;
+    std::unordered_set<ref<Target>, RefTargetHash, RefTargetCmp> reachedTargets;
     std::set<ExecutionState *, ExecutionStateIDCompare> &removedButReachableStates;
     std::set<ExecutionState *, ExecutionStateIDCompare> &pausedStates;
     std::size_t bound;

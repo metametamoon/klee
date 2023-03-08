@@ -114,6 +114,9 @@ bool TargetForest::Layer::deepFindIn(ref<Target> child, ref<Target> target) cons
   if (res == forest.end()) {
     return false;
   }
+  if (child == target) {
+    return true;
+  }
   return res->second->deepFind(target);
 }
 
