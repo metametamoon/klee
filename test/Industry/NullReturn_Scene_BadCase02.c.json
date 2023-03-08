@@ -23,7 +23,7 @@
                         "reportLine": 38,
                         "function": "TestBad2",
                         "instructionOffset": 7,
-                        "column": 32,
+                        "column": 38,
                         "instructionOpcode": 32
                     },
                     "event": {

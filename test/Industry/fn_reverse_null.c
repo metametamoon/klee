@@ -12,7 +12,7 @@ extern int CheckValid(int value);
 void TestErr1(TreeNode *stru)
 {
     stru->value = 0;
-    if (stru == NULL) { // CHECK: KLEE: WARNING: 100.00% NullCheckAfterDerefException True Positive at trace 3
+    if (stru == NULL) { // CHECK-DAG: KLEE: WARNING: 100.00% NullCheckAfterDerefException True Positive at trace 3
         return;
     }
 }
@@ -22,7 +22,7 @@ void TestErr2(TreeNode *stru, int *flag)
     if (CheckValid(stru->value) != OK) {
         return;
     }
-    if (flag == NULL || stru == NULL) { // CHECK: KLEE: WARNING: 100.00% NullCheckAfterDerefException True Positive at trace 1
+    if (flag == NULL || stru == NULL) { // CHECK-DAG: KLEE: WARNING: 100.00% NullCheckAfterDerefException True Positive at trace 1
         return;
     }
     BusinessFunc();
@@ -33,7 +33,7 @@ void TestErr2(TreeNode *stru, int *flag)
 
 int TestErr3(int *arr) 
 {
-    if (arr[0] == 0 || arr == NULL) { // CHECK: KLEE: WARNING: 100.00% NullCheckAfterDerefException True Positive at trace 2
+    if (arr[0] == 0 || arr == NULL) { // CHECK-DAG: KLEE: WARNING: 100.00% NullCheckAfterDerefException True Positive at trace 2
         return ERR;
     }
     return OK;
@@ -55,5 +55,5 @@ void TestErr4(TreeNode *head)
 
 // RUN: %clang %s -emit-llvm -c -g -O0 -Xclang -disable-O0-optnone -o %t1.bc
 // RUN: rm -rf %t.klee-out
-// RUN: %klee --output-dir=%t.klee-out --execution-mode=error-guided --mock-external-calls --posix-runtime --libc=klee --skip-not-lazy-and-symbolic-pointers --check-out-of-memory --max-time=120s --analysis-reproduce=%s.json %t1.bc
+// RUN: %klee --output-dir=%t.klee-out --execution-mode=error-guided --external-calls=all --mock-external-calls --posix-runtime --libc=klee --skip-not-lazy-and-symbolic-pointers --check-out-of-memory --analysis-reproduce=%s.json %t1.bc
 // RUN: FileCheck -input-file=%t.klee-out/warnings.txt %s
