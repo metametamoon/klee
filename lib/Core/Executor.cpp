@@ -2621,11 +2621,11 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
         }
         if (eqPointerCheck && eqPointerCheck->left->isZero()) {
           if (isa<EqExpr>(cond) && !branches.first) {
-            terminateStateOnTargetError(*branches.second,
+            reportStateOnTargetError(*branches.second,
                                         ReachWithError::NullCheckAfterDerefException);
           }
           if (isa<EqExpr>(Expr::createIsZero(cond)) && !branches.second) {
-            terminateStateOnTargetError(*branches.first,
+            reportStateOnTargetError(*branches.first,
                                         ReachWithError::NullCheckAfterDerefException);
           }
         }
@@ -4595,14 +4595,20 @@ bool shouldExitOn(StateTerminationType reason) {
   return it != ExitOnErrorType.end();
 }
 
-void Executor::terminateStateOnTargetError(ExecutionState &state,
-                                           ReachWithError error) {
+void Executor::reportStateOnTargetError(ExecutionState &state,
+                                        ReachWithError error) {
   if (guidanceKind == GuidanceKind::ErrorGuidance) {
-    bool reportedTruePositive = targetedExecutionManager.reportTruePositive(state, error);
+    bool reportedTruePositive =
+        targetedExecutionManager.reportTruePositive(state, error);
     if (!reportedTruePositive) {
       targetedExecutionManager.reportFalseNegative(state, error);
     }
   }
+}
+
+void Executor::terminateStateOnTargetError(ExecutionState &state,
+                                           ReachWithError error) {
+  reportStateOnTargetError(state, error);
 
   // Proceed with normal `terminateStateOnError` call
   std::string messaget;
