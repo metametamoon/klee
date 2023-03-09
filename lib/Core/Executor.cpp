@@ -810,8 +810,12 @@ Executor::setModule(std::unique_ptr<llvm::Module> mainModule,
 
   // Initialize the context.
   DataLayout *TD = kmodule->targetData.get();
-  Context::initialize(TD->isLittleEndian(),
-                      (Expr::Width)TD->getPointerSizeInBits());
+  if (guidanceKind == GuidanceKind::ErrorGuidance) {
+    Context::initialize(true, 64);
+  } else {
+    Context::initialize(TD->isLittleEndian(),
+                        (Expr::Width)TD->getPointerSizeInBits());
+  }
 
   targetCalculator = std::unique_ptr<TargetCalculator>(
       new TargetCalculator(*kmodule.get(), *codeGraphDistance.get()));
