@@ -11,12 +11,8 @@ add_subdirectory(Runtest)
 
 # Handle bitcode libraries
 # Define the different configurations to be compiled and made available using a specific suffix
-set(bc_architectures 64)
 
-# Compile 32bit support if available
-if (M32_SUPPORTED)
-    list(APPEND bc_architectures "32")
-endif ()
+set(bc_architectures 32 64)
 
 set(LIB_BC_SUFFIX "")
 
