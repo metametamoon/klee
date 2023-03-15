@@ -2912,7 +2912,8 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
 
       if (!isa<ConstantExpr>(v) && MockExternalCalls) {
         if (ki->inst->getType()->isSized()) {
-          prepareSymbolicValue(state, ki);
+          prepareSymbolicValue(state, ki, "mocked_extern",
+                               SourceBuilder::irreproducible());
         }
       } else {
         ExecutionState *free = &state;
@@ -4751,7 +4752,8 @@ void Executor::callExternalFunction(ExecutionState &state,
       klee_warning_once(callable->getValue(), "%s", os.str().c_str());
 
     if (target->inst->getType()->isSized()) {
-      prepareSymbolicValue(state, target);
+      prepareSymbolicValue(state, target, "mocked_extern",
+                           SourceBuilder::irreproducible());
     }
     return;
   }
@@ -4878,7 +4880,8 @@ void Executor::callExternalFunction(ExecutionState &state,
   if (!success) {
     if (MockExternalCalls) {
       if (target->inst->getType()->isSized()) {
-        prepareSymbolicValue(state, target);
+        prepareSymbolicValue(state, target, "mocked_extern",
+                             SourceBuilder::irreproducible());
       }
     } else {
       terminateStateOnError(state,
@@ -5863,25 +5866,27 @@ void Executor::clearMemory() {
   memory = new MemoryManager(NULL);
 }
 
-void Executor:: prepareSymbolicValue(ExecutionState &state, KInstruction *target) {
+void Executor::prepareSymbolicValue(ExecutionState &state, KInstruction *target,
+                                    std::string name,
+                                    ref<SymbolicSource> source) {
   Instruction *allocSite = target->inst;
   uint64_t size = kmodule->targetData->getTypeStoreSize(allocSite->getType());
   uint64_t width = kmodule->targetData->getTypeSizeInBits(allocSite->getType());
-  ref<Expr> result = makeSymbolicValue(allocSite, state, size, width, "symbolic_value");
+  ref<Expr> result = makeSymbolic(allocSite, state, size, width, name, source);
   bindLocal(target, state, result);
   if (isa<AllocaInst>(allocSite)) {
-      AllocaInst *ai = cast<AllocaInst>(allocSite);
-      unsigned elementSize =
+    AllocaInst *ai = cast<AllocaInst>(allocSite);
+    unsigned elementSize =
         kmodule->targetData->getTypeStoreSize(ai->getAllocatedType());
-      ref<Expr> size = Expr::createPointer(elementSize);
-      if (ai->isArrayAllocation()) {
-        ref<Expr> count = eval(target, 0, state).value;
-        count = Expr::createZExtToPointerWidth(count);
-        size = MulExpr::create(size, count);
-      }
-      lazyInitializeObject(state, result, target,
-                              typeSystemManager->getWrappedType(ai->getType()),
-                              elementSize);
+    ref<Expr> size = Expr::createPointer(elementSize);
+    if (ai->isArrayAllocation()) {
+      ref<Expr> count = eval(target, 0, state).value;
+      count = Expr::createZExtToPointerWidth(count);
+      size = MulExpr::create(size, count);
+    }
+    lazyInitializeObject(state, result, target,
+                         typeSystemManager->getWrappedType(ai->getType()),
+                         elementSize);
   }
 }
 
@@ -5900,17 +5905,25 @@ void Executor::prepareSymbolicArgs(ExecutionState &state, KFunction *kf) {
   }
 }
 
-ref<Expr> Executor::makeSymbolicValue(Value *value, ExecutionState &state, uint64_t size, Expr::Width width, const std::string &name) {
-  MemoryObject *mo = 
-    memory->allocate(size, true, /*isGlobal=*/false,
-                     value, /*allocationAlignment=*/8);
+ref<Expr> Executor::makeSymbolic(Value *value, ExecutionState &state,
+                                      uint64_t size, Expr::Width width,
+                                      const std::string &name,
+                                      ref<SymbolicSource> source) {
+  MemoryObject *mo = memory->allocate(size, true, /*isGlobal=*/false, value,
+                                      /*allocationAlignment=*/8);
   const Array *array = makeArray(state, Expr::createPointer(size), name,
-                                 SourceBuilder::symbolicValue());
+                                 source);
   state.addSymbolic(mo, array,
                     typeSystemManager->getWrappedType(value->getType()));
   assert(value && "Attempted to make symbolic value from nullptr Value");
   ref<Expr> result = Expr::createTempRead(array, width);
   return result;
+}
+
+ref<Expr> Executor::makeSymbolicValue(Value *value, ExecutionState &state,
+                                      uint64_t size, Expr::Width width,
+                                      const std::string &name) {
+  return makeSymbolic(value, state, size, width, name, SourceBuilder::symbolicValue());
 }
 
 void Executor::runFunctionAsMain(Function *f,

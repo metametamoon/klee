@@ -628,12 +628,19 @@ public:
 
   void clearMemory();
 
-  void prepareSymbolicValue(ExecutionState &state, KInstruction *targetW);
+  void prepareSymbolicValue(ExecutionState &state, KInstruction *targetW,
+                            std::string name = "symbolic_value",
+                            ref<SymbolicSource> source = SourceBuilder::symbolicValue());
 
   void prepareSymbolicRegister(ExecutionState &state, StackFrame &sf,
                                unsigned index);
 
   void prepareSymbolicArgs(ExecutionState &state, KFunction *kf);
+
+  ref<Expr> makeSymbolic(llvm::Value *value, ExecutionState &state,
+                              uint64_t size, Expr::Width width,
+                              const std::string &name,
+                              ref<SymbolicSource> source);
 
   ref<Expr> makeSymbolicValue(llvm::Value *value, ExecutionState &state,
                               uint64_t size, Expr::Width width,
