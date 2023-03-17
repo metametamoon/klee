@@ -18,7 +18,7 @@ The following flags should be used when calling klee binary.
 | --mock-external-calls | All external calls will be treated symbolically |
 | --posix-runtime | POSIX environment is emulated |
 | --libc=klee | **To UtBotTeam: why not uclibc?** |
-| --skip-not-lazy-and-symbolic-pointers | Lazy initialization optimization; crucial for performance |
+| --skip-not-lazy-initialized | Lazy initialization optimization; crucial for performance |
 | --analysis-reproduce=/analyzer/result.json | Path of JSON file containing static analysis paths to be reproduced |
 
 ### Nonessential flags
@@ -37,6 +37,7 @@ The following flags should be used when calling klee binary.
 | --max-instructions=N | Stop execution after N instructions. Set to 0 to disable. |
 | --max-forks=N | Only fork N times. Set to -1 to disable. |
 | --max-stack-frames=N | Terminate a symbolic state after N stack frames in symbolic state. Set to 0 to disable. |
+| --max-sym-alloc=N | Maximum available size for single array allocation. By default 10Mb. |
 
 ### Our KLEE reports results to **stderr** as lines of the form:
 

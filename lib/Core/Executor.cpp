@@ -212,12 +212,6 @@ cl::opt<bool> EmitAllErrors(
              "(default=false, i.e. one per (error,instruction) pair)"),
     cl::cat(TestGenCat));
 
-cl::opt<bool> SkipNotLazyAndSymbolicPointers(
-    "skip-not-lazy-and-symbolic-pointers", cl::init(false),
-    cl::desc("Set pointers only on lazy and make_symbolic variables "
-             "(default=false)"),
-    cl::cat(TestGenCat));
-
 /* Constraint solving options */
 
 cl::opt<unsigned> MaxSymArraySize(

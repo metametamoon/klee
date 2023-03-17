@@ -36,6 +36,11 @@ llvm::cl::opt<bool> SkipNotLazyInitialized(
                    "use only with timestamps (default=false)"),
     llvm::cl::cat(PointerResolvingCat));
 
+llvm::cl::alias SkipNotLazyAndSymbolicPointers(
+    "skip-not-lazy-and-symbolic-pointers",
+    llvm::cl::desc("Alias for --skip-not-lazy-initialized"),
+    llvm::cl::aliasopt(SkipNotLazyInitialized));
+
 llvm::cl::opt<bool> UseTimestamps(
     "use-timestamps", llvm::cl::init(true),
     llvm::cl::desc("Set symbolic pointers only to objects created before those "
