@@ -4408,12 +4408,12 @@ std::string Executor::getAddressInfo(ExecutionState &state, ref<Expr> address,
     (void) success;
     example = value->getZExtValue();
     info << "\texample: " << example << "\n";
-    std::pair<ref<Expr>, ref<Expr>> res =
-        mo ? std::make_pair(
-                 mo->getBaseExpr(),
-                 AddExpr::create(mo->getBaseExpr(), mo->getSizeExpr()))
-           : solver->getRange(state.constraints, address, state.queryMetaData);
-    info << "\trange: [" << res.first << ", " << res.second <<"]\n";
+    if (mo) {
+      std::pair<ref<Expr>, ref<Expr>> res =
+          std::make_pair(mo->getBaseExpr(),
+                         AddExpr::create(mo->getBaseExpr(), mo->getSizeExpr()));
+      info << "\trange: [" << res.first << ", " << res.second <<"]\n";
+    }
   }
   
   MemoryObject hack((unsigned) example);    
@@ -5082,7 +5082,10 @@ bool Executor::resolveExact(ExecutionState &state, ref<Expr> p, KType *type,
 
   /* We do not need this variable here, just a placeholder for resolve */
   ResolutionList rlSkipped;
-  state.addressSpace.resolve(state, solver, p, type, rl, rlSkipped);
+  solver->setTimeout(coreSolverTimeout);
+  bool incomplete = state.addressSpace.resolve(state, solver, p, type, rl, rlSkipped, 0,
+                             coreSolverTimeout);
+  solver->setTimeout(time::Span());
 
   ExecutionState *unbound = &state;
   for (ResolutionList::iterator it = rl.begin(), ie = rl.end(); 
@@ -5106,8 +5109,13 @@ bool Executor::resolveExact(ExecutionState &state, ref<Expr> p, KType *type,
   }
 
   if (unbound) {
-    terminateStateOnError(*unbound, "memory error: invalid pointer: " + name,
-                          StateTerminationType::Ptr, getAddressInfo(*unbound, p));
+    if (incomplete) {
+      terminateStateOnSolverError(*unbound, "Query timed out (resolve).");
+    } else {
+      terminateStateOnError(*unbound, "memory error: invalid pointer: " + name,
+                            StateTerminationType::Ptr,
+                            getAddressInfo(*unbound, p));
+    }
   }
   return true;
 }
