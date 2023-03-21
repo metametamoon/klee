@@ -32,9 +32,15 @@ void TargetForest::Layer::pathForestToTargetForest(
     for (auto &target : *targets) {
       if (broken_traces.count(target->getId()))
         continue;
-      ref<TargetForest::Layer> next = new TargetForest::Layer();
-      pathForestToTargetForest(next.get(), p.second, loc2Targets, broken_traces);
-      self->insert(target, next);
+      auto selfForChildIt = self->find(target);
+      TargetForest::Layer *next = nullptr;
+      if (selfForChildIt == self->end()) {
+        next = new TargetForest::Layer();
+        self->insert(target, next);
+      } else {
+        next = selfForChildIt->second.get();
+      }
+      pathForestToTargetForest(next, p.second, loc2Targets, broken_traces);
     }
   }
 }
