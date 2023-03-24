@@ -289,6 +289,12 @@ cl::opt<bool> MockAllExternals(
     cl::desc("If true, all externals are mocked."),
     cl::cat(ExtCallsCat));
 
+cl::opt<bool> MockMutableGlobals(
+    "mock-mutable-globals",
+    cl::init(false),
+    cl::desc("If true, all mutable globals are mocked."),
+    cl::cat(ExtCallsCat));
+
 /*** Seeding options ***/
 
 cl::opt<bool> AlwaysOutputSeeds(
@@ -4947,6 +4953,17 @@ ref<Expr> Executor::replaceReadWithSymbolic(ExecutionState &state,
   return res;
 }
 
+ref<Expr> Executor::mockValue(ExecutionState &state, 
+                                    ref<Expr> result) {
+  static unsigned id;
+  const Array *array = makeArray(
+      state,
+      Expr::createPointer(Expr::getMinBytesForWidth(result->getWidth())),
+      "mockedGlobalValue" + llvm::utostr(++id), SourceBuilder::irreproducible());
+  result = Expr::createTempRead(array, result->getWidth());
+  return result;
+}
+
 ObjectState *Executor::bindObjectInState(ExecutionState &state,
                                          const MemoryObject *mo,
                                          KType *dynamicType, bool isLocal,
@@ -5351,6 +5368,13 @@ void Executor::executeMemoryOperation(
         if (interpreterOpts.MakeConcreteSymbolic)
           result = replaceReadWithSymbolic(state, result);
 
+        if (MockMutableGlobals && mo->isGlobal && !wos->readOnly &&
+            !isa<ConstantExpr>(result) &&
+            !targetType->getRawType()->isPointerTy()) {
+          result = mockValue(state, result);
+          wos->write(offset, result);
+        }
+
         bindLocal(target, state, result);
       }
 
@@ -5460,6 +5484,14 @@ void Executor::executeMemoryOperation(
             targetType, mo->getOffsetExpr(address),
             ConstantExpr::alloc(size, Context::get().getPointerWidth()), false);
         ref<Expr> result = wos->read(mo->getOffsetExpr(address), type);
+
+        if (MockMutableGlobals &&
+            mo->isGlobal && !wos->readOnly && !isa<ConstantExpr>(result) &&
+            !targetType->getRawType()->isPointerTy()) {
+          result = mockValue(state, result);
+          wos->write(mo->getOffsetExpr(address), result);
+        }
+
         bindLocal(target, *bound, result);
       }
     }
@@ -6060,6 +6092,7 @@ void Executor::runThroughLocations(llvm::Function *f, int argc, char **argv,
   }
   guidanceKind = GuidanceKind::ErrorGuidance;
   MockAllExternals = true;
+  MockMutableGlobals = true;
   ExternCallsCanReturnNull = true;
   ForkPartialValidity = true;
   AlignSymbolicPointers = false;

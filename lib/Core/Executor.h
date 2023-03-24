@@ -413,6 +413,8 @@ private:
   // Used for testing.
   ref<Expr> replaceReadWithSymbolic(ExecutionState &state, ref<Expr> e);
 
+  ref<Expr> mockValue(ExecutionState &state, ref<Expr> result);
+
   const Cell &eval(KInstruction *ki, unsigned index, ExecutionState &state,
                    bool isSymbolic = true);
 
