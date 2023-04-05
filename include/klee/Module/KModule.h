@@ -229,7 +229,7 @@ namespace klee {
     /// @param forceSourceOutput true if assembly.ll should be created
     ///
     // FIXME: ihandler should not be here
-    void manifestFunctions(std::vector<llvm::Function *> &declarations);
+    void manifestFunctions(std::vector<llvm::Function *> &declarations, std::unique_ptr<llvm::raw_fd_ostream> assemblyFS);
     void manifest(InterpreterHandler *ih, bool forceSourceOutput);
 
     /// Link the provided modules together as one KLEE module.

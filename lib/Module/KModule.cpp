@@ -351,10 +351,10 @@ void KModule::optimiseAndPrepare(
   pm3.run(*module);
 }
 
-void KModule::manifestFunctions(std::vector<Function *> &declarations) {
-  infos = std::unique_ptr<InstructionInfoTable>(new InstructionInfoTable(*module.get()));
+void KModule::manifestFunctions(std::vector<Function *> &declarations, std::unique_ptr<llvm::raw_fd_ostream> assemblyFS) {
+  infos = std::unique_ptr<InstructionInfoTable>(new InstructionInfoTable(*module.get(), std::move(assemblyFS)));
 
-  for (auto &Function : *module) {
+  for (auto &Function : module->functions()) {
     if (Function.isDeclaration()) {
       declarations.push_back(&Function);
     }
@@ -377,12 +377,10 @@ void KModule::manifestFunctions(std::vector<Function *> &declarations) {
 }
 
 void KModule::manifest(InterpreterHandler *ih, bool forceSourceOutput) {
+  std::unique_ptr<llvm::raw_fd_ostream> assemblyFS;
   if (OutputSource || forceSourceOutput) {
-    std::unique_ptr<llvm::raw_fd_ostream> os(ih->openOutputFile("assembly.ll"));
-    assert(os && !os->has_error() && "unable to open source output");
-    *os << *module;
+    assemblyFS = ih->openOutputFile("assembly.ll");
   }
-
   if (OutputModule) {
     std::unique_ptr<llvm::raw_fd_ostream> f(ih->openOutputFile("final.bc"));
 #if LLVM_VERSION_CODE >= LLVM_VERSION(7, 0)
@@ -392,10 +390,8 @@ void KModule::manifest(InterpreterHandler *ih, bool forceSourceOutput) {
 #endif
   }
 
-  /* Build shadow structures */
-
   std::vector<Function *> declarations;
-  manifestFunctions(declarations);
+  manifestFunctions(declarations, std::move(assemblyFS));
 
   /* Compute various interesting properties */
 

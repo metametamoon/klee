@@ -25,6 +25,7 @@ set(KLEE_MODULE_COMPONENT_SRCS
   PhiCleaner.cpp
   RaiseAsm.cpp
   ReturnSplitter.cpp
+  StreamWithLine.cpp
 )
 
 if (USE_WORKAROUND_LLVM_PR39177)
