@@ -38,6 +38,7 @@ The following flags should be used when calling klee binary.
 | --max-forks=N | Only fork N times. Set to -1 to disable. |
 | --max-stack-frames=N | Terminate a symbolic state after N stack frames in symbolic state. Set to 0 to disable. |
 | --max-sym-alloc=N | Maximum available size for single array allocation. By default 10Mb. |
+| --mock-mutable-globals="none" or "primitive-fields" or "all" | Policy of symbolization mutable global objects |
 
 ### Our KLEE reports results to **stderr** as lines of the form:
 
