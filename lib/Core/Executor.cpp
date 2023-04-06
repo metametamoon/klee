@@ -163,31 +163,50 @@ cl::opt<TypeSystemKind>
                                      "Use plain type system from LLVM"),
                           clEnumValN(TypeSystemKind::CXX, "CXX",
                                      "Use type system from CXX")),
-               cl::init(TypeSystemKind::LLVM));
+               cl::init(TypeSystemKind::LLVM), cl::cat(ExecCat));
 
 cl::opt<bool>
     UseTBAA("use-tbaa",
             cl::desc("Turns on restrictions based on types compatibility for "
                      "symbolic pointers (default=false)"),
-            cl::init(false));
+            cl::init(false), cl::cat(ExecCat));
 
 cl::opt<bool>
     AlignSymbolicPointers("align-symbolic-pointers",
                           cl::desc("Makes symbolic pointers aligned according"
                                    "to the used type system (default=true)"),
-                          cl::init(true));
+                          cl::init(true), cl::cat(ExecCat));
 
 cl::opt<bool>
     OutOfMemAllocs("out-of-mem-allocs",
                    cl::desc("Model malloc behavior, i.e. model NULL on 0 "
                             "or huge symbolic allocations."),
-                   cl::init(false));
+                   cl::init(false), cl::cat(ExecCat));
 
 cl::opt<bool>
     ExternCallsCanReturnNull("extern-calls-can-return-null", cl::init(false),
                              cl::desc("Enable case when extern call can crash "
                                       "and return null (default=false)"),
                              cl::cat(ExecCat));
+
+enum class MockMutableGlobalsPolicy {
+  None,
+  PrimitiveFields,
+  All,
+};
+
+cl::opt<MockMutableGlobalsPolicy> MockMutableGlobals(
+    "mock-mutable-globals",
+    cl::values(clEnumValN(MockMutableGlobalsPolicy::None, "none",
+                          "No mutable global object are allowed o mock except "
+                          "external (default)"),
+               clEnumValN(MockMutableGlobalsPolicy::PrimitiveFields,
+                          "primitive-fields",
+                          "Only primitive fileds of mutable global objects are "
+                          "allowed to mock."),
+               clEnumValN(MockMutableGlobalsPolicy::All, "all",
+                          "All mutable global object are allowed o mock.")),
+    cl::init(MockMutableGlobalsPolicy::None), cl::cat(ExecCat));
 } // namespace klee
 
 namespace {
@@ -287,12 +306,6 @@ cl::opt<bool> MockAllExternals(
     "mock-all-externals",
     cl::init(false),
     cl::desc("If true, all externals are mocked."),
-    cl::cat(ExtCallsCat));
-
-cl::opt<bool> MockMutableGlobals(
-    "mock-mutable-globals",
-    cl::init(false),
-    cl::desc("If true, all mutable globals are mocked."),
     cl::cat(ExtCallsCat));
 
 /*** Seeding options ***/
@@ -5368,9 +5381,10 @@ void Executor::executeMemoryOperation(
         if (interpreterOpts.MakeConcreteSymbolic)
           result = replaceReadWithSymbolic(state, result);
 
-        if (MockMutableGlobals && mo->isGlobal && !wos->readOnly &&
-            !isa<ConstantExpr>(result) &&
-            !targetType->getRawType()->isPointerTy()) {
+        if (MockMutableGlobals != MockMutableGlobalsPolicy::None &&
+            mo->isGlobal && !wos->readOnly && !isa<ConstantExpr>(result) &&
+            (MockMutableGlobals != MockMutableGlobalsPolicy::PrimitiveFields ||
+             !targetType->getRawType()->isPointerTy())) {
           result = mockValue(state, result);
           wos->write(offset, result);
         }
@@ -5485,9 +5499,10 @@ void Executor::executeMemoryOperation(
             ConstantExpr::alloc(size, Context::get().getPointerWidth()), false);
         ref<Expr> result = wos->read(mo->getOffsetExpr(address), type);
 
-        if (MockMutableGlobals &&
+        if (MockMutableGlobals != MockMutableGlobalsPolicy::None &&
             mo->isGlobal && !wos->readOnly && !isa<ConstantExpr>(result) &&
-            !targetType->getRawType()->isPointerTy()) {
+            (MockMutableGlobals != MockMutableGlobalsPolicy::PrimitiveFields ||
+             !targetType->getRawType()->isPointerTy())) {
           result = mockValue(state, result);
           wos->write(mo->getOffsetExpr(address), result);
         }
@@ -6092,7 +6107,6 @@ void Executor::runThroughLocations(llvm::Function *f, int argc, char **argv,
   }
   guidanceKind = GuidanceKind::ErrorGuidance;
   MockAllExternals = true;
-  MockMutableGlobals = true;
   ExternCallsCanReturnNull = true;
   ForkPartialValidity = true;
   AlignSymbolicPointers = false;
