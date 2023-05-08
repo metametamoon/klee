@@ -3922,8 +3922,10 @@ bool Executor::decreaseConfidenceFromStoppedStates(
     hasStateWhichCanReachSomeTarget = true;
     auto realReason = reason ? reason : state->terminationReasonType.load();
     if (state->progressVelocity >= 0) {
-      assert(targets.count(state->targetForest.getEntryFunction()) != 0);
-      targets.at(state->targetForest.getEntryFunction())
+      assert(targetedExecutionManager.targets.count(
+                 state->targetForest.getEntryFunction()) != 0);
+      targetedExecutionManager.targets
+          .at(state->targetForest.getEntryFunction())
           .subtractConfidencesFrom(state->targetForest, realReason);
     }
   }
@@ -4057,10 +4059,7 @@ void Executor::run(std::vector<ExecutionState *> initialStates) {
     bool canReachNew2 =
         decreaseConfidenceFromStoppedStates(states, haltExecution);
 
-    for (auto &startBlockAndWhiteList : targets) {
-      startBlockAndWhiteList.second.reportFalsePositives(canReachNew1 ||
-                                                         canReachNew2);
-    }
+    targetedExecutionManager.reportFalsePositive(canReachNew1 || canReachNew2);
 
     if (searcher->empty())
       haltExecution = HaltExecution::NoMoreStates;
@@ -5785,7 +5784,8 @@ void Executor::runFunctionAsMain(Function *f, int argc, char **argv,
         continue;
       }
       auto whitelist = startFunctionAndWhiteList.second;
-      targets.emplace(kf, TargetedHaltsOnTraces(whitelist));
+      targetedExecutionManager.targets.emplace(
+          kf, TargetedHaltsOnTraces(whitelist));
       ExecutionState *initialState = state->withStackFrame(caller, kf);
       prepareSymbolicArgs(*initialState, kf);
       prepareTargetedExecution(initialState, whitelist);

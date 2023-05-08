@@ -93,7 +93,7 @@ public:
                                HaltExecution::Reason reason);
 
   /* Report for targeted static analysis mode */
-  void reportFalsePositives(bool canReachSomeTarget);
+  void reportFalsePositives(bool canReachSomeTarget, AnalysisReport &report);
 };
 
 class TargetedExecutionManager {
@@ -110,7 +110,7 @@ private:
           unsigned int,
           std::unordered_map<unsigned int, std::unordered_set<unsigned int>>>>;
   std::unordered_set<unsigned> broken_traces;
-  std::unordered_set<unsigned> reported_traces;
+  std::unordered_set<unsigned> reportedTraces;
 
   bool tryResolveLocations(Result &result, LocationToBlocks &locToBlocks) const;
   LocationToBlocks prepareAllLocations(KModule *kmodule,
@@ -126,6 +126,10 @@ private:
   CodeGraphDistance &codeGraphDistance;
 
 public:
+  SarifReport sarifReport;
+  AnalysisReport analysisReport;
+  std::unordered_map<KFunction *, TargetedHaltsOnTraces> targets;
+
   explicit TargetedExecutionManager(CodeGraphDistance &codeGraphDistance_)
       : codeGraphDistance(codeGraphDistance_) {}
   std::unordered_map<KFunction *, ref<TargetForest>>
@@ -135,6 +139,7 @@ public:
 
   // Return true if report is successful
   bool reportTruePositive(ExecutionState &state, ReachWithError error);
+  void reportFalsePositive(bool canReachSomeTarget);
 };
 
 } // namespace klee

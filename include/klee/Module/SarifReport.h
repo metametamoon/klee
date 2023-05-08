@@ -267,6 +267,20 @@ struct SarifReport {
 
 SarifReport convertAndFilterSarifJson(const SarifReportJson &reportJson);
 
+enum Verdict { FalsePositive, TruePositive };
+
+struct AnalysisResult { // structure representing the result of checking a trace
+  unsigned id;          // unique identifier of the trace
+  Verdict verdict;      // the verdict on the trace (FP or TP)
+  double confidence;    // confidence in the verdict
+  AnalysisResult(unsigned _id, Verdict _verdict, double _confidence)
+      : id(_id), verdict(_verdict), confidence(_confidence) {}
+};
+
+struct AnalysisReport {
+  std::vector<AnalysisResult> results; // list of check results
+};
+
 } // namespace klee
 
 #endif /* KLEE_SARIF_REPORT_H */

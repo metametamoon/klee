@@ -274,7 +274,8 @@ getAdviseWhatToIncreaseConfidenceRate(HaltExecution::Reason reason) {
   return what;
 }
 
-void TargetedHaltsOnTraces::reportFalsePositives(bool canReachSomeTarget) {
+void TargetedHaltsOnTraces::reportFalsePositives(bool canReachSomeTarget,
+                                                 AnalysisReport &report) {
   confidence::ty confidence;
   HaltExecution::Reason reason;
   for (const auto &targetSetWithConfidences : traceToHaltTypeToConfidence) {
@@ -305,6 +306,8 @@ void TargetedHaltsOnTraces::reportFalsePositives(bool canReachSomeTarget) {
     reportFalsePositive(confidence, target->getErrors(), target->getId(),
                         getAdviseWhatToIncreaseConfidenceRate(reason));
     target->isReported = true;
+    report.results.push_back(
+        AnalysisResult(target->getId(), Verdict::FalsePositive, confidence));
   }
 }
 
@@ -459,6 +462,7 @@ KFunction *TargetedExecutionManager::tryResolveEntryFunction(
 
 std::unordered_map<KFunction *, ref<TargetForest>>
 TargetedExecutionManager::prepareTargets(KModule *kmodule, SarifReport paths) {
+  sarifReport = paths;
   Locations locations = collectAllLocations(paths);
   LocationToBlocks locToBlocks = prepareAllLocations(kmodule, locations);
 
@@ -499,7 +503,7 @@ bool TargetedExecutionManager::reportTruePositive(ExecutionState &state,
   for (auto kvp : state.targetForest) {
     auto target = kvp.first;
     if (!target->isThatError(error) || broken_traces.count(target->getId()) ||
-        reported_traces.count(target->getId()))
+        reportedTraces.count(target->getId()))
       continue;
 
     /// The following code checks if target is a `call ...` instruction and we
@@ -533,7 +537,16 @@ bool TargetedExecutionManager::reportTruePositive(ExecutionState &state,
                    getErrorString(error), target->getId());
     }
     target->isReported = true;
-    reported_traces.insert(target->getId());
+    reportedTraces.insert(target->getId());
+    analysisReport.results.push_back(
+        AnalysisResult(target->getId(), Verdict::TruePositive, 100));
   }
   return atLeastOneReported;
+}
+
+void TargetedExecutionManager::reportFalsePositive(bool canReachSomeTarget) {
+  for (auto &startBlockAndWhiteList : targets) {
+    startBlockAndWhiteList.second.reportFalsePositives(canReachSomeTarget,
+                                                       analysisReport);
+  }
 }

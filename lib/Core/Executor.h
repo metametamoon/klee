@@ -234,8 +234,6 @@ private:
   /// `nullptr` if merging is disabled
   MergingSearcher *mergingSearcher = nullptr;
 
-  std::unordered_map<KFunction *, TargetedHaltsOnTraces> targets;
-
   /// Typeids used during exception handling
   std::vector<ref<Expr>> eh_typeids;
 
@@ -570,7 +568,9 @@ public:
 
   void setPathWriter(TreeStreamWriter *tsw) override { pathWriter = tsw; }
 
-  bool hasTargetForest() const override { return !targets.empty(); }
+  bool hasTargetForest() const override {
+    return !targetedExecutionManager.targets.empty();
+  }
 
   void setSymbolicPathWriter(TreeStreamWriter *tsw) override {
     symPathWriter = tsw;
@@ -669,6 +669,10 @@ public:
   MergingSearcher *getMergingSearcher() const { return mergingSearcher; };
   void setMergingSearcher(MergingSearcher *ms) { mergingSearcher = ms; };
   void executeStep(ExecutionState &state);
+
+  AnalysisReport getAnalysisReport() override {
+    return targetedExecutionManager.analysisReport;
+  };
 };
 
 } // namespace klee

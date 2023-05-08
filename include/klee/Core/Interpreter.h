@@ -193,6 +193,10 @@ public:
   virtual void
   getCoveredLines(const ExecutionState &state,
                   std::map<const std::string *, std::set<unsigned>> &res) = 0;
+
+  /*** Error-guidance result ***/
+
+  virtual AnalysisReport getAnalysisReport() = 0;
 };
 
 } // namespace klee
