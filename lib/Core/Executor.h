@@ -20,6 +20,7 @@
 #include "UserSearcher.h"
 
 #include "klee/ADT/RNG.h"
+#include "klee/KLEEConfig.h"
 #include "klee/Core/BranchTypes.h"
 #include "klee/Core/Interpreter.h"
 #include "klee/Core/TerminationTypes.h"
@@ -131,6 +132,7 @@ private:
   std::unique_ptr<AddressManager> addressManager;
   MemoryManager *memory;
   TypeManager *typeSystemManager;
+  const Config &cfg;
 
   SetOfStates states;
   SetOfStates pausedStates;
@@ -561,7 +563,7 @@ private:
 
 public:
   Executor(llvm::LLVMContext &ctx, const InterpreterOptions &opts,
-           InterpreterHandler *ie);
+           InterpreterHandler *ie, const Config &cfg);
   virtual ~Executor();
 
   const InterpreterHandler &getHandler() { return *interpreterHandler; }
@@ -593,7 +595,7 @@ public:
             std::vector<std::unique_ptr<llvm::Module>> &libsModules,
             const ModuleOptions &opts,
             const std::vector<std::string> &mainModuleFunctions,
-            std::unique_ptr<InstructionInfoTable> origInfos) override;
+            InstructionInfoTable *origInfos) override;
 
   void useSeeds(const std::vector<struct KTest *> *seeds) override {
     usingSeeds = seeds;

@@ -11,6 +11,7 @@
 
 #include "TerminationTypes.h"
 
+#include "klee/KLEEConfig.h"
 #include "klee/Module/SarifReport.h"
 
 #include <map>
@@ -60,40 +61,31 @@ public:
                                const char *suffix) = 0;
 };
 
+/// ModuleOptions - Module level options which can be set when
+/// registering a module with the interpreter.
+struct ModuleOptions {
+  std::string LibraryDir;
+  std::string EntryPoint;
+  std::string OptSuffix;
+  bool Optimize;
+  bool Simplify;
+  bool CheckDivZero;
+  bool CheckOvershift;
+  bool WithFPRuntime;
+  bool WithPOSIXRuntime;
+
+  ModuleOptions(const std::string &_LibraryDir, const std::string &_EntryPoint,
+                const std::string &_OptSuffix, bool _Optimize, bool _Simplify,
+                bool _CheckDivZero, bool _CheckOvershift, bool _WithFPRuntime,
+                bool _WithPOSIXRuntime)
+      : LibraryDir(_LibraryDir), EntryPoint(_EntryPoint), OptSuffix(_OptSuffix),
+        Optimize(_Optimize), Simplify(_Simplify), CheckDivZero(_CheckDivZero),
+        CheckOvershift(_CheckOvershift), WithFPRuntime(_WithFPRuntime),
+        WithPOSIXRuntime(_WithPOSIXRuntime) {}
+};
+
 class Interpreter {
 public:
-  enum class GuidanceKind {
-    NoGuidance,       // Default symbolic execution
-    CoverageGuidance, // Use GuidedSearcher and guidedRun to maximize full code
-                      // coverage
-    ErrorGuidance     // Use GuidedSearcher and guidedRun to maximize specified
-                      // targets coverage
-  };
-
-  /// ModuleOptions - Module level options which can be set when
-  /// registering a module with the interpreter.
-  struct ModuleOptions {
-    std::string LibraryDir;
-    std::string EntryPoint;
-    std::string OptSuffix;
-    bool Optimize;
-    bool Simplify;
-    bool CheckDivZero;
-    bool CheckOvershift;
-    bool WithFPRuntime;
-    bool WithPOSIXRuntime;
-
-    ModuleOptions(const std::string &_LibraryDir,
-                  const std::string &_EntryPoint, const std::string &_OptSuffix,
-                  bool _Optimize, bool _Simplify, bool _CheckDivZero,
-                  bool _CheckOvershift, bool _WithFPRuntime,
-                  bool _WithPOSIXRuntime)
-        : LibraryDir(_LibraryDir), EntryPoint(_EntryPoint),
-          OptSuffix(_OptSuffix), Optimize(_Optimize), Simplify(_Simplify),
-          CheckDivZero(_CheckDivZero), CheckOvershift(_CheckOvershift),
-          WithFPRuntime(_WithFPRuntime), WithPOSIXRuntime(_WithPOSIXRuntime) {}
-  };
-
   enum LogType {
     STP,    //.CVC (STP's native language)
     KQUERY, //.KQUERY files (kQuery native language)
@@ -126,7 +118,7 @@ public:
 
   static Interpreter *create(llvm::LLVMContext &ctx,
                              const InterpreterOptions &_interpreterOpts,
-                             InterpreterHandler *ih);
+                             InterpreterHandler *ih, const Config &cfg);
 
   /// Register the module to be executed.
   /// \param userModules A list of user modules that should form the final
@@ -140,7 +132,7 @@ public:
             std::vector<std::unique_ptr<llvm::Module>> &libsModules,
             const ModuleOptions &opts,
             const std::vector<std::string> &mainModuleFunctions,
-            std::unique_ptr<InstructionInfoTable> origInfos) = 0;
+            InstructionInfoTable *origInfos) = 0;
 
   // supply a tree stream writer which the interpreter will use
   // to record the concrete path (as a stream of '0' and '1' bytes).

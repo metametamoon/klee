@@ -9,6 +9,7 @@
 
 #include "Executor.h"
 
+#include "klee/Runner/run_klee.h"
 #include "AddressManager.h"
 #include "CXXTypeSystem/CXXTypeManager.h"
 #include "Context.h"
@@ -33,6 +34,7 @@
 
 #include "klee/ADT/KTest.h"
 #include "klee/ADT/RNG.h"
+#include "klee/KLEEConfig.h"
 #include "klee/Config/Version.h"
 #include "klee/Config/config.h"
 #include "klee/Core/Interpreter.h"
@@ -275,14 +277,6 @@ cl::opt<bool> AllExternalWarnings(
              "as opposed to once per function (default=false)"),
     cl::cat(ExtCallsCat));
 
-cl::opt<bool>
-    MockExternalCalls("mock-external-calls", cl::init(false),
-                      cl::desc("If true, failed external calls are mocked, "
-                               "i.e. return values are made symbolic "
-                               "and then added to generated test cases. "
-                               "If false, fails on externall calls."),
-                      cl::cat(ExtCallsCat));
-
 cl::opt<bool> MockAllExternals("mock-all-externals", cl::init(false),
                                cl::desc("If true, all externals are mocked."),
                                cl::cat(ExtCallsCat));
@@ -418,10 +412,10 @@ const std::unordered_set<Intrinsic::ID> Executor::modelledFPIntrinsics = {
     Intrinsic::log,  Intrinsic::round,    Intrinsic::sin};
 
 Executor::Executor(LLVMContext &ctx, const InterpreterOptions &opts,
-                   InterpreterHandler *ih)
+                   InterpreterHandler *ih, const Config &cfg)
     : Interpreter(opts), interpreterHandler(ih), searcher(0),
-      externalDispatcher(new ExternalDispatcher(ctx)), statsTracker(0),
-      pathWriter(0), symPathWriter(0),
+      externalDispatcher(new ExternalDispatcher(ctx)), cfg(cfg),
+      statsTracker(0), pathWriter(0), symPathWriter(0),
       specialFunctionHandler(0), timers{time::Span(TimerInterval)},
       concretizationManager(new ConcretizationManager(EqualitySubstitution)),
       codeGraphDistance(new CodeGraphDistance()),
@@ -494,7 +488,7 @@ Executor::setModule(std::vector<std::unique_ptr<llvm::Module>> &userModules,
                     std::vector<std::unique_ptr<llvm::Module>> &libsModules,
                     const ModuleOptions &opts,
                     const std::vector<std::string> &mainModuleFunctions,
-                    std::unique_ptr<InstructionInfoTable> origInfos) {
+                    InstructionInfoTable *origInfos) {
   assert(!kmodule && !userModules.empty() &&
          "can only register one module"); // XXX gross
 
@@ -2694,7 +2688,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     } else {
       ref<Expr> v = eval(ki, 0, state).value;
 
-      if (!isa<ConstantExpr>(v) && MockExternalCalls) {
+      if (!isa<ConstantExpr>(v) && cfg.mockExternalCalls) {
         if (ki->inst->getType()->isSized()) {
           prepareSymbolicValue(state, ki, "mocked_extern",
                                SourceBuilder::irreproducible());
@@ -4652,7 +4646,7 @@ void Executor::callExternalFunction(ExecutionState &state, KInstruction *target,
                                                  roundingMode);
 
   if (!success) {
-    if (MockExternalCalls) {
+    if (cfg.mockExternalCalls) {
       if (target->inst->getType()->isSized()) {
         prepareSymbolicValue(state, target, "mocked_extern",
                              SourceBuilder::irreproducible());
@@ -5571,7 +5565,7 @@ void Executor::executeMakeSymbolic(ExecutionState &state,
 
 ExecutionState *Executor::formState(Function *f) {
   ExecutionState *state = new ExecutionState(
-      kmodule->functionMap[f], kmodule->functionMap[f]->blockMap[&*f->begin()]);
+      kmodule->functionMap[f], kmodule->functionMap[f]->blockMap[&*f->begin()], cfg);
   initializeGlobals(*state);
   return state;
 }
@@ -5598,7 +5592,7 @@ ExecutionState *Executor::formState(Function *f, int argc, char **argv,
   unsigned NumPtrBytes = Context::get().getPointerWidth() / 8;
   KFunction *kf = kmodule->functionMap[f];
   assert(kf);
-  ExecutionState *state = new ExecutionState(kmodule->functionMap[f]);
+  ExecutionState *state = new ExecutionState(kmodule->functionMap[f], cfg);
   Function::arg_iterator ai = f->arg_begin(), ae = f->arg_end();
   if (ai != ae) {
     arguments.push_back(ConstantExpr::alloc(argc, Expr::Int32));
@@ -5754,7 +5748,9 @@ void Executor::runFunctionAsMain(Function *f, int argc, char **argv,
     return;
   }
 
-  ExecutionState *state = formState(f, argc, argv, envp);
+  ExecutionState *state;
+  state = formState(f, argc, argv, envp);
+
   bindModuleConstants(llvm::APFloat::rmNearestTiesToEven);
   std::vector<ExecutionState *> states;
 
@@ -6340,6 +6336,6 @@ void Executor::dumpStates() {
 
 Interpreter *Interpreter::create(LLVMContext &ctx,
                                  const InterpreterOptions &opts,
-                                 InterpreterHandler *ih) {
-  return new Executor(ctx, opts, ih);
+                                 InterpreterHandler *ih, const Config &cfg) {
+  return new Executor(ctx, opts, ih, cfg);
 }

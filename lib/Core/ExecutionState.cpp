@@ -9,6 +9,7 @@
 
 #include "ExecutionState.h"
 
+#include "AddressSpace.h"
 #include "Memory.h"
 
 #include "klee/Expr/ArrayExprVisitor.h"
@@ -74,25 +75,25 @@ StackFrame::StackFrame(const StackFrame &s)
 StackFrame::~StackFrame() { delete[] locals; }
 
 /***/
-ExecutionState::ExecutionState()
+ExecutionState::ExecutionState(const Config &cfg)
     : initPC(nullptr), pc(nullptr), prevPC(nullptr), incomingBBIndex(-1),
-      depth(0), ptreeNode(nullptr), steppedInstructions(0),
+      depth(0), addressSpace(cfg), ptreeNode(nullptr), steppedInstructions(0),
       steppedMemoryInstructions(0), instsSinceCovNew(0),
       roundingMode(llvm::APFloat::rmNearestTiesToEven), coveredNew(false),
       forkDisabled(false) {
   setID();
 }
 
-ExecutionState::ExecutionState(KFunction *kf)
-    : initPC(kf->instructions), pc(initPC), prevPC(pc),
+ExecutionState::ExecutionState(KFunction *kf, const Config &cfg)
+    : initPC(kf->instructions), pc(initPC), prevPC(pc), addressSpace(cfg),
       roundingMode(llvm::APFloat::rmNearestTiesToEven) {
   pushFrame(nullptr, kf);
   setID();
 }
 
-ExecutionState::ExecutionState(KFunction *kf, KBlock *kb)
+ExecutionState::ExecutionState(KFunction *kf, KBlock *kb, const Config &cfg)
     : initPC(kb->instructions), pc(initPC), prevPC(pc), incomingBBIndex(-1),
-      depth(0), ptreeNode(nullptr), steppedInstructions(0),
+      depth(0), addressSpace(cfg), ptreeNode(nullptr), steppedInstructions(0),
       steppedMemoryInstructions(0), instsSinceCovNew(0),
       roundingMode(llvm::APFloat::rmNearestTiesToEven), coveredNew(false),
       forkDisabled(false) {

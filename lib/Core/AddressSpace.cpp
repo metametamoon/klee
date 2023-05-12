@@ -30,12 +30,6 @@ llvm::cl::opt<bool> SkipNotSymbolicObjects(
                    "use only with timestamps (default=false)"),
     llvm::cl::cat(PointerResolvingCat));
 
-llvm::cl::opt<bool> SkipNotLazyInitialized(
-    "skip-not-lazy-initialized", llvm::cl::init(false),
-    llvm::cl::desc("Set pointers only on lazy initialized objects, "
-                   "use only with timestamps (default=false)"),
-    llvm::cl::cat(PointerResolvingCat));
-
 llvm::cl::opt<bool> UseTimestamps(
     "use-timestamps", llvm::cl::init(true),
     llvm::cl::desc("Set symbolic pointers only to objects created before those "
@@ -242,7 +236,7 @@ bool AddressSpace::resolveOne(ExecutionState &state, TimingSolver *solver,
       return predicate(mo) && state.inSymbolics(mo);
     };
   }
-  if (SkipNotLazyInitialized) {
+  if (cfg.skipNotLI) {
     predicate = [predicate](const MemoryObject *mo) {
       return predicate(mo) && mo->isLazyInitialized();
     };
@@ -371,7 +365,7 @@ bool AddressSpace::resolve(ExecutionState &state, TimingSolver *solver,
       return predicate(mo) && state.inSymbolics(mo);
     };
   }
-  if (SkipNotLazyInitialized) {
+  if (cfg.skipNotLI) {
     predicate = [predicate](const MemoryObject *mo) {
       return predicate(mo) && mo->isLazyInitialized();
     };

@@ -836,12 +836,16 @@ endif()
 ################################################################################
 # Miscellaneous install
 ################################################################################
-install(FILES include/klee/klee.h include/klee/ADT/KTest.h DESTINATION include/klee)
+install(FILES include/klee/klee.h include/klee/KLEEConfig.h include/klee/ADT/KTest.h DESTINATION include/klee)
+install(FILES include/klee/Runner/TraceVerifier.h DESTINATION include/klee/Runner)
 INSTALL(FILES lib/Core/Executor.h DESTINATION include/klee/Core)
+INSTALL(FILES ${CMAKE_BINARY_DIR}/include/klee/Config/config.h DESTINATION include/klee/Config)
 INSTALL(DIRECTORY include/klee/Expr DESTINATION include/klee)
 INSTALL(DIRECTORY include/klee/Module DESTINATION include/klee)
 INSTALL(DIRECTORY include/klee/Statistics DESTINATION include/klee)
+INSTALL(DIRECTORY include/klee/ADT DESTINATION include/klee)
 INSTALL(DIRECTORY include/klee/Support DESTINATION include/klee)
+INSTALL(DIRECTORY include/klee/Config DESTINATION include/klee)
 
 install(EXPORT run_klee
         DESTINATION "${RUN_KLEE_LIB_DEST}"

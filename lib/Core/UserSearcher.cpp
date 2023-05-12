@@ -190,14 +190,14 @@ Searcher *klee::constructUserSearcher(Executor &executor) {
     searcher = ms;
   }
 
-  if (executor.guidanceKind == Interpreter::GuidanceKind::CoverageGuidance) {
+  if (executor.guidanceKind == GuidanceKind::CoverageGuidance) {
     searcher = new GuidedSearcher(
         searcher, *executor.codeGraphDistance.get(), *executor.targetCalculator,
         executor.removedButReachableStates, executor.pausedStates,
         MaxCycles - 1, executor.theRNG);
   }
 
-  if (executor.guidanceKind == Interpreter::GuidanceKind::ErrorGuidance) {
+  if (executor.guidanceKind == GuidanceKind::ErrorGuidance) {
     delete searcher;
     searcher = new GuidedSearcher(
         *executor.codeGraphDistance.get(), executor.removedButReachableStates,

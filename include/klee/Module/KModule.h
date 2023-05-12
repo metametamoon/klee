@@ -221,7 +221,7 @@ public:
 
   /// Optimise and prepare module such that KLEE can execute it
   //
-  void optimiseAndPrepare(const Interpreter::ModuleOptions &opts,
+  void optimiseAndPrepare(const ModuleOptions &opts,
                           llvm::ArrayRef<const char *>);
 
   /// Manifest the generated module (e.g. assembly.ll, output.bc) and
@@ -247,7 +247,7 @@ public:
   bool link(std::vector<std::unique_ptr<llvm::Module>> &modules,
             const unsigned flag);
 
-  void instrument(const Interpreter::ModuleOptions &opts);
+  void instrument(const ModuleOptions &opts);
 
   /// Return an id for the given constant, creating a new one if necessary.
   unsigned getConstantID(llvm::Constant *c, KInstruction *ki);

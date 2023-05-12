@@ -307,9 +307,9 @@ public:
 
 public:
   // only to create the initial state
-  explicit ExecutionState();
-  explicit ExecutionState(KFunction *kf);
-  explicit ExecutionState(KFunction *kf, KBlock *kb);
+  explicit ExecutionState(const Config &cfg);
+  explicit ExecutionState(KFunction *kf, const Config &cfg);
+  explicit ExecutionState(KFunction *kf, KBlock *kb, const Config &cfg);
   // no copy assignment, use copy constructor
   ExecutionState &operator=(const ExecutionState &) = delete;
   // no move ctor

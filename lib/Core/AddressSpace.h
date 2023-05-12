@@ -13,6 +13,7 @@
 #include "Memory.h"
 
 #include "klee/ADT/ImmutableMap.h"
+#include "klee/KLEEConfig.h"
 #include "klee/Expr/Expr.h"
 #include "klee/System/Time.h"
 
@@ -74,9 +75,11 @@ public:
   // if required (e.g. useful for symbolic sizes).
   IDMap idToObjects;
 
-  AddressSpace() : cowKey(1) {}
+  const Config &cfg;
+
+  AddressSpace(const Config &cfg) : cowKey(1), cfg(cfg) {}
   AddressSpace(const AddressSpace &b)
-      : cowKey(++b.cowKey), objects(b.objects), idToObjects(b.idToObjects) {}
+      : cowKey(++b.cowKey), objects(b.objects), idToObjects(b.idToObjects), cfg(b.cfg) {}
   ~AddressSpace() {}
 
   /// Resolve address to an ObjectPair in result.

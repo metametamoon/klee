@@ -29,3 +29,27 @@ install(TARGETS kleeRunner
 
 # The KLEE depends on the runtimes
 add_dependencies(kleeRunner BuildKLEERuntimes)
+
+
+### REMOVE LATER ###
+# add_library(KLEETracer STATIC)
+
+# target_sources(KLEETracer
+#         PRIVATE
+#         run_klee.cpp)
+
+# target_link_libraries(KLEETracer PUBLIC kleeRunner)
+
+# target_include_directories(KLEETracer
+#     PRIVATE
+#         # where the library itself will look for its internal headers
+#         ${KLEE_COMPONENT_EXTRA_INCLUDE_DIRS}
+#     PUBLIC
+#         # where top-level project will look for the library's public headers
+#         $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include/klee/Runner>
+#         # where external projects will look for the library's public headers
+#         $<INSTALL_INTERFACE:${RUN_KLEE_LIB_DEST}>
+# )
+
+
+

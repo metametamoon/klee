@@ -1,5 +1,6 @@
 #include "klee/Runner/run_klee.h"
-
+#include "klee/Module/InstructionInfoTable.h"
+#include "klee/Runner/TraceVerifier.h"
 /* -*- mode: c++; c-basic-offset: 2; -*- */
 
 //===-- main.cpp ------------------------------------------------*- C++ -*-===//
@@ -13,6 +14,7 @@
 
 #include "klee/ADT/KTest.h"
 #include "klee/ADT/TreeStream.h"
+#include "klee/KLEEConfig.h"
 #include "klee/Config/Version.h"
 #include "klee/Core/Interpreter.h"
 #include "klee/Core/TargetedExecutionReporter.h"
@@ -28,7 +30,9 @@
 #include "klee/Support/PrintVersion.h"
 #include "klee/System/Time.h"
 
+#include "llvm/ADT/StringRef.h"
 #include "llvm/Bitcode/BitcodeReader.h"
+#include "llvm/Bitcode/BitcodeWriter.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/InstrTypes.h"
@@ -41,6 +45,7 @@
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Host.h"
 #include "llvm/Support/ManagedStatic.h"
+#include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -48,7 +53,9 @@
 #include "llvm/Support/Signals.h"
 #include "llvm/Support/TargetSelect.h"
 
+#include <cstdio>
 #include <dirent.h>
+#include <memory>
 #include <signal.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
@@ -193,22 +200,21 @@ cl::opt<bool> WarnAllExternals(
         "Issue a warning on startup for all external symbols (default=false)."),
     cl::cat(StartCat));
 
-cl::opt<Interpreter::GuidanceKind> UseGuidedSearch(
+cl::opt<GuidanceKind> UseGuidedSearch(
     "use-guided-search",
-    cl::values(clEnumValN(Interpreter::GuidanceKind::NoGuidance, "none",
+    cl::values(clEnumValN(GuidanceKind::NoGuidance, "none",
                           "Use basic klee symbolic execution"),
-               clEnumValN(Interpreter::GuidanceKind::CoverageGuidance,
-                          "coverage",
+               clEnumValN(GuidanceKind::CoverageGuidance, "coverage",
                           "Takes place in two steps. First, all acyclic "
                           "paths are executed, "
                           "then the execution is guided to sections of the "
                           "program not yet covered. "
                           "These steps are repeated until all blocks of the "
                           "program are covered"),
-               clEnumValN(Interpreter::GuidanceKind::ErrorGuidance, "error",
+               clEnumValN(GuidanceKind::ErrorGuidance, "error",
                           "The execution is guided to sections of the "
                           "program errors not yet covered")),
-    cl::init(Interpreter::GuidanceKind::CoverageGuidance),
+    cl::init(GuidanceKind::CoverageGuidance),
     cl::desc("Kind of execution mode"), cl::cat(StartCat));
 
 /*** Linking options ***/
@@ -216,18 +222,16 @@ cl::opt<Interpreter::GuidanceKind> UseGuidedSearch(
 cl::OptionCategory LinkCat("Linking options",
                            "These options control the libraries being linked.");
 
-enum class LibcType { FreestandingLibc, KleeLibc, UcLibc };
-
-cl::opt<LibcType> Libc(
+cl::opt<Config::LibcType> Libc(
     "libc", cl::desc("Choose libc version (none by default)."),
     cl::values(
         clEnumValN(
-            LibcType::FreestandingLibc, "none",
+            Config::LibcType::FreestandingLibc, "none",
             "Don't link in a libc (only provide freestanding environment)"),
-        clEnumValN(LibcType::KleeLibc, "klee", "Link in KLEE's libc"),
-        clEnumValN(LibcType::UcLibc, "uclibc",
+        clEnumValN(Config::LibcType::KleeLibc, "klee", "Link in KLEE's libc"),
+        clEnumValN(Config::LibcType::UcLibc, "uclibc",
                    "Link in uclibc (adapted for KLEE)")),
-    cl::init(LibcType::FreestandingLibc), cl::cat(LinkCat));
+    cl::init(Config::LibcType::FreestandingLibc), cl::cat(LinkCat));
 
 cl::list<std::string>
     LinkLibraries("link-llvm-lib",
@@ -333,6 +337,23 @@ cl::opt<bool> Libcxx(
     "libcxx",
     cl::desc("Link the llvm libc++ library into the bitcode (default=false)"),
     cl::init(false), cl::cat(LinkCat));
+
+// Refactor options from other places
+
+cl::opt<bool>
+    MockExternalCalls("mock-external-calls", cl::init(false),
+                      cl::desc("If true, failed external calls are mocked, "
+                               "i.e. return values are made symbolic "
+                               "and then added to generated test cases. "
+                               "If false, fails on externall calls."),
+                      cl::cat(ExtCallsCat));
+
+cl::opt<bool> SkipNotLazyInitialized(
+    "skip-not-lazy-initialized", llvm::cl::init(false),
+    cl::desc("Set pointers only on lazy initialized objects, "
+                   "use only with timestamps (default=false)"),
+    cl::cat(PointerResolvingCat));
+
 } // namespace
 
 namespace klee {
@@ -390,10 +411,48 @@ public:
                                  std::vector<std::string> &results);
 
   static std::string getRunTimeLibraryPath(const char *argv0);
+  static std::string getRunTimeLibraryPathEnv();
 
   void setOutputDirectory(const std::string &directory);
 
   SmallString<128> getOutputDirectory() const;
+};
+
+class DummyHandler : public InterpreterHandler {
+private:
+  std::unique_ptr<llvm::raw_ostream> m_infoFile;
+
+public:
+  DummyHandler() {
+    m_infoFile = openOutputFile("info");
+  }
+  llvm::raw_ostream &getInfoStream() const { return *m_infoFile; }
+  std::string getOutputFilename(const std::string &filename) {
+    std::string name1 = std::tmpnam(nullptr);
+    return name1;
+  }
+
+  std::unique_ptr<llvm::raw_fd_ostream>
+  openOutputFile(const std::string &filename) {
+    std::string Error;
+    std::string path = getOutputFilename(filename);
+    auto f = klee_open_output_file(path, Error);
+    if (!f) {
+      klee_warning(
+          "error opening file \"%s\".  KLEE may have run out of file "
+          "descriptors: try to increase the maximum number of open file "
+          "descriptors by using ulimit (%s).",
+          path.c_str(), Error.c_str());
+      return nullptr;
+    }
+    return f;
+  }
+
+  // Noop
+  void incPathsCompleted() {}
+  void incPathsExplored(std::uint32_t num = 1) {}
+  void processTestCase(const ExecutionState &state, const char *err,
+                       const char *suffix) {}
 };
 
 KleeHandler::KleeHandler(int argc, char **argv)
@@ -731,6 +790,15 @@ std::string KleeHandler::getRunTimeLibraryPath(const char *argv0) {
   return libDir.c_str();
 }
 
+std::string KleeHandler::getRunTimeLibraryPathEnv() {
+  const char *env = getenv("KLEE_RUNTIME_LIBRARY_PATH");
+  if (env) {
+    return std::string(env);
+  } else {
+    klee_error("KLEE_RUNTIME_LIBRARY_PATH envvar is not set!");
+  }
+}
+
 void KleeHandler::setOutputDirectory(const std::string &directoryName) {
   // create output directory
   if (directoryName == "") {
@@ -977,13 +1045,13 @@ void externalsAndGlobalsCheck(const llvm::Module *m) {
                                unsafeExternals + NELEMS(unsafeExternals));
 
   switch (Libc) {
-  case LibcType::KleeLibc:
+  case Config::LibcType::KleeLibc:
     dontCare.insert(dontCareKlee, dontCareKlee + NELEMS(dontCareKlee));
     break;
-  case LibcType::UcLibc:
+  case Config::LibcType::UcLibc:
     dontCare.insert(dontCareUclibc, dontCareUclibc + NELEMS(dontCareUclibc));
     break;
-  case LibcType::FreestandingLibc: /* silence compiler warning */
+  case Config::LibcType::FreestandingLibc: /* silence compiler warning */
     break;
   }
 
@@ -1235,9 +1303,10 @@ static int run_klee_on_function(int pArgc, char **pArgv, char **pEnvp,
                                 std::unique_ptr<KleeHandler> &handler,
                                 std::unique_ptr<Interpreter> &interpreter,
                                 llvm::Module *finalModule,
-                                std::vector<bool> &replayPath) {
+                                std::vector<bool> &replayPath,
+                                const Config &cfg) {
   Function *mainFn = finalModule->getFunction(EntryPoint);
-  if ((UseGuidedSearch != Interpreter::GuidanceKind::ErrorGuidance) &&
+  if ((cfg.guidanceKind != GuidanceKind::ErrorGuidance) &&
       !mainFn) { // in error guided mode we do not need main function
     klee_error("Entry function '%s' not found in module.", EntryPoint.c_str());
   }
@@ -1414,6 +1483,13 @@ void wait_until_any_child_dies(
 }
 
 int run_klee(int argc, char **argv, char **envp) {
+  Config cfg;
+  cfg.guidanceKind = UseGuidedSearch;
+  cfg.libcType = Libc;
+  cfg.mockExternalCalls = MockExternalCalls;
+  cfg.skipNotLI = SkipNotLazyInitialized;
+  cfg.usePOSIX = WithPOSIXRuntime;
+
   if (theInterpreter) {
     theInterpreter = nullptr;
   }
@@ -1533,7 +1609,7 @@ int run_klee(int argc, char **argv, char **envp) {
   std::unique_ptr<InstructionInfoTable> origInfos;
   std::unique_ptr<llvm::raw_fd_ostream> assemblyFS;
 
-  if (UseGuidedSearch == Interpreter::GuidanceKind::ErrorGuidance) {
+  if (cfg.guidanceKind == GuidanceKind::ErrorGuidance) {
     std::vector<llvm::Type *> args;
     origInfos = std::make_unique<InstructionInfoTable>(
         *mainModule, std::move(assemblyFS), true);
@@ -1582,12 +1658,12 @@ int run_klee(int argc, char **argv, char **envp) {
   // Add additional user-selected suffix
   opt_suffix += "_" + RuntimeBuild.getValue();
 
-  if (UseGuidedSearch == Interpreter::GuidanceKind::ErrorGuidance) {
+  if (cfg.guidanceKind == GuidanceKind::ErrorGuidance) {
     SimplifyModule = false;
   }
 
   std::string LibraryDir = KleeHandler::getRunTimeLibraryPath(argv[0]);
-  Interpreter::ModuleOptions Opts(LibraryDir.c_str(), EntryPoint, opt_suffix,
+  ModuleOptions Opts(LibraryDir.c_str(), EntryPoint, opt_suffix,
                                   /*Optimize=*/OptimizeModule,
                                   /*Simplify*/ SimplifyModule,
                                   /*CheckDivZero=*/CheckDivZero,
@@ -1604,7 +1680,7 @@ int run_klee(int argc, char **argv, char **envp) {
       klee_error("error loading POSIX support '%s': %s", Path.c_str(),
                  errorMsg.c_str());
 
-    if (Libc != LibcType::UcLibc) {
+    if (Libc != Config::LibcType::UcLibc) {
       SmallString<128> Path_io(Opts.LibraryDir);
       llvm::sys::path::append(Path_io,
                               "libkleeRuntimeIO_C" + opt_suffix + ".bca");
@@ -1661,7 +1737,7 @@ int run_klee(int argc, char **argv, char **envp) {
   }
 
   switch (Libc) {
-  case LibcType::KleeLibc: {
+  case Config::LibcType::KleeLibc: {
     // FIXME: Find a reasonable solution for this.
     SmallString<128> Path(Opts.LibraryDir);
     llvm::sys::path::append(Path,
@@ -1672,7 +1748,7 @@ int run_klee(int argc, char **argv, char **envp) {
                  errorMsg.c_str());
   }
   /* Falls through. */
-  case LibcType::FreestandingLibc: {
+  case Config::LibcType::FreestandingLibc: {
     SmallString<128> Path(Opts.LibraryDir);
     llvm::sys::path::append(Path,
                             "libkleeRuntimeFreestanding" + opt_suffix + ".bca");
@@ -1682,7 +1758,7 @@ int run_klee(int argc, char **argv, char **envp) {
                  errorMsg.c_str());
     break;
   }
-  case LibcType::UcLibc:
+  case Config::LibcType::UcLibc:
     linkWithUclibc(LibraryDir, opt_suffix, loadedUserModules,
                    loadedLibsModules);
     break;
@@ -1743,15 +1819,15 @@ int run_klee(int argc, char **argv, char **envp) {
   std::unique_ptr<KleeHandler> handler =
       std::make_unique<KleeHandler>(pArgc, pArgv);
 
-  if (UseGuidedSearch == Interpreter::GuidanceKind::ErrorGuidance) {
+  if (cfg.guidanceKind == GuidanceKind::ErrorGuidance) {
     paths = parseStaticAnalysisInput();
   }
 
   Interpreter::InterpreterOptions IOpts(paths);
   IOpts.MakeConcreteSymbolic = MakeConcreteSymbolic;
-  IOpts.Guidance = UseGuidedSearch;
+  IOpts.Guidance = cfg.guidanceKind;
   std::unique_ptr<Interpreter> interpreter(
-      Interpreter::create(ctx, IOpts, handler.get()));
+      Interpreter::create(ctx, IOpts, handler.get(), cfg));
   theInterpreter = interpreter.get();
   assert(interpreter);
   handler->setInterpreter(interpreter.get());
@@ -1766,7 +1842,7 @@ int run_klee(int argc, char **argv, char **envp) {
 
   auto finalModule =
       interpreter->setModule(loadedUserModules, loadedLibsModules, Opts,
-                             mainModuleFunctions, std::move(origInfos));
+                             mainModuleFunctions, origInfos.get());
   Function *mainFn = finalModule->getFunction(EntryPoint);
   if (!mainFn) {
     klee_error("Entry function '%s' not found in module.", EntryPoint.c_str());
@@ -1824,7 +1900,7 @@ int run_klee(int argc, char **argv, char **envp) {
         sys::path::append(newOutputDirectory, entrypoint);
         handler->setOutputDirectory(newOutputDirectory.c_str());
         run_klee_on_function(pArgc, pArgv, pEnvp, handler, interpreter,
-                             finalModule, replayPath);
+                             finalModule, replayPath, cfg);
         exit(0);
       } else {
         child_processes.emplace_back(pid, std::chrono::steady_clock::now());
@@ -1847,7 +1923,7 @@ int run_klee(int argc, char **argv, char **envp) {
     }
   } else {
     run_klee_on_function(pArgc, pArgv, pEnvp, handler, interpreter, finalModule,
-                         replayPath);
+                         replayPath, cfg);
   }
 
   paths.reset();
@@ -1910,4 +1986,251 @@ int run_klee(int argc, char **argv, char **envp) {
 
   handler->getInfoStream() << stats.str();
   return 0;
+}
+
+TraceVerifier::TraceVerifier(const llvm::Module *m, Config cfg)
+    : cfg(cfg) {
+  llvm::InitializeNativeTarget();
+
+  // Serialize and deserialize in new context to avoid corrupting the given
+  // module.
+  // http://llvm-cs.pcc.me.uk/lib/CodeGen/ParallelCG.cpp
+  SmallString<0> BC;
+  raw_svector_ostream BCOS(BC);
+  llvm::WriteBitcodeToFile(*m, BCOS);
+  auto M = llvm::parseBitcodeFile(
+      MemoryBufferRef(StringRef(BC.data(), BC.size()), "trace-copy"), ctx);
+
+  if (!M) {
+    klee_error("Failed to copy the module");
+  }
+
+  pArgc = 1;
+  pArgv = new char *[pArgc];
+  std::string progName = mod->getSourceFileName();
+  char *pArg = new char[progName.size() + 1];
+  std::copy(progName.begin(), progName.end(), pArg);
+  pArg[progName.size()] = 0;
+  pArgv[0] = pArg;
+
+  pEnvp = new char *[1];
+  pEnvp[0] = 0;
+
+  // Getting the main module
+  std::string errorMsg;
+  loadedUserModules.push_back(std::move(M.get()));
+
+  ep = EntryPoint;
+  llvm::Module *mainModule = loadedUserModules.front().get();
+  std::unique_ptr<llvm::raw_fd_ostream> assemblyFS;
+
+  // Some modification for ErrorGuidance
+  if (cfg.guidanceKind == GuidanceKind::ErrorGuidance) {
+    std::vector<llvm::Type *> args;
+    origInfos = std::make_unique<InstructionInfoTable>(
+        *mainModule, std::move(assemblyFS), true);
+    args.push_back(llvm::Type::getInt32Ty(ctx)); // argc
+    args.push_back(llvm::PointerType::get(
+        Type::getInt8PtrTy(ctx),
+        mainModule->getDataLayout().getAllocaAddrSpace())); // argv
+    args.push_back(llvm::PointerType::get(
+        Type::getInt8PtrTy(ctx),
+        mainModule->getDataLayout().getAllocaAddrSpace())); // envp
+    std::string stubEntryPoint = "__klee_entry_point_main";
+    Function *stub = Function::Create(
+        llvm::FunctionType::get(llvm::Type::getInt32Ty(ctx), args, false),
+        GlobalVariable::ExternalLinkage, stubEntryPoint, mainModule);
+    BasicBlock *bb = BasicBlock::Create(ctx, "entry", stub);
+
+    llvm::IRBuilder<> Builder(bb);
+    Builder.CreateRet(ConstantInt::get(Type::getInt32Ty(ctx), 0));
+    ep = stubEntryPoint;
+  }
+
+  // Some info collecting
+  for (auto &Function : *mainModule) {
+    if (!Function.isDeclaration()) {
+      mainModuleFunctions.push_back(Function.getName().str());
+    }
+  }
+
+  // Detect architecture
+  const std::string &module_triple = mainModule->getTargetTriple();
+  std::string host_triple = llvm::sys::getDefaultTargetTriple();
+
+  // if (module_triple != host_triple)
+  //   klee_warning("Module and host target triples do not match: '%s' != '%s'\n"
+  //                "This may cause unexpected crashes or assertion violations.",
+  //                module_triple.c_str(), host_triple.c_str());
+
+  // Detect architecture
+  std::string opt_suffix = "64"; // Fall back to 64bit
+  if (module_triple.find("i686") != std::string::npos ||
+      module_triple.find("i586") != std::string::npos ||
+      module_triple.find("i486") != std::string::npos ||
+      module_triple.find("i386") != std::string::npos ||
+      module_triple.find("arm") != std::string::npos)
+    opt_suffix = "32";
+
+  opt_suffix += "_" + RuntimeBuild.getValue();
+
+  bool simplifyModuleV = SimplifyModule;
+
+  if (cfg.guidanceKind == GuidanceKind::ErrorGuidance) {
+    simplifyModuleV = false;
+  }
+
+  std::string LibraryDir = KleeHandler::getRunTimeLibraryPathEnv();
+  Opts = new ModuleOptions(LibraryDir.c_str(), ep, opt_suffix,
+                           /*Optimize=*/OptimizeModule,
+                           /*Simplify*/ simplifyModuleV,
+                           /*CheckDivZero=*/CheckDivZero,
+                           /*CheckOvershift=*/CheckOvershift,
+                           /*WithFPRuntime=*/WithFPRuntime,
+                           /*WithPOSIXRuntime=*/cfg.usePOSIX);
+
+  if (cfg.usePOSIX) {
+    SmallString<128> Path(Opts->LibraryDir);
+    llvm::sys::path::append(Path, "libkleeRuntimePOSIX" + opt_suffix + ".bca");
+    klee_message("NOTE: Using POSIX model: %s", Path.c_str());
+    if (!klee::loadFileAsOneModule(Path.c_str(), mainModule->getContext(),
+                                   loadedUserModules, errorMsg))
+      klee_error("error loading POSIX support '%s': %s", Path.c_str(),
+                 errorMsg.c_str());
+
+    if (Libc != Config::LibcType::UcLibc) {
+      SmallString<128> Path_io(Opts->LibraryDir);
+      llvm::sys::path::append(Path_io,
+                              "libkleeRuntimeIO_C" + opt_suffix + ".bca");
+      klee_message("NOTE: using klee versions of input/output functions: %s",
+                   Path_io.c_str());
+      if (!klee::loadFileAsOneModule(Path_io.c_str(), mainModule->getContext(),
+                                     loadedUserModules, errorMsg))
+        klee_error("error loading POSIX_IO support '%s': %s", Path_io.c_str(),
+                   errorMsg.c_str());
+    }
+
+    if (!UTBotMode) {
+      preparePOSIX(loadedUserModules);
+    }
+  }
+
+  if (WithFPRuntime) {
+#if ENABLE_FP
+    SmallString<128> Path(Opts.LibraryDir);
+    llvm::sys::path::append(Path, "libkleeRuntimeFp" + opt_suffix + ".bca");
+    if (!klee::loadFileAsOneModule(Path.c_str(), mainModule->getContext(),
+                                   loadedUserModules, errorMsg))
+      klee_error("error loading klee FP runtime '%s': %s", Path.c_str(),
+                 errorMsg.c_str());
+#else
+    klee_error("unable to link with klee FP runtime without "
+               "-DENABLE_FLOATING_POINT=ON");
+#endif
+  }
+
+  if (Libcxx) {
+#ifndef SUPPORT_KLEE_LIBCXX
+    klee_error("KLEE was not compiled with libc++ support");
+#else
+    SmallString<128> LibcxxBC(Opts->LibraryDir);
+    llvm::sys::path::append(LibcxxBC, KLEE_LIBCXX_BC_NAME);
+    if (!klee::loadFileAsOneModule(LibcxxBC.c_str(), mainModule->getContext(),
+                                   loadedLibsModules, errorMsg))
+      klee_error("error loading libc++ '%s': %s", LibcxxBC.c_str(),
+                 errorMsg.c_str());
+    klee_message("NOTE: Using libc++ : %s", LibcxxBC.c_str());
+#ifdef SUPPORT_KLEE_EH_CXX
+    SmallString<128> EhCxxPath(Opts->LibraryDir);
+    llvm::sys::path::append(EhCxxPath, "libkleeeh-cxx" + opt_suffix + ".bca");
+    if (!klee::loadFileAsOneModule(EhCxxPath.c_str(), mainModule->getContext(),
+                                   loadedLibsModules, errorMsg))
+      klee_error("error loading libklee-eh-cxx '%s': %s", EhCxxPath.c_str(),
+                 errorMsg.c_str());
+    klee_message("NOTE: Enabled runtime support for C++ exceptions");
+#else
+    klee_message("NOTE: KLEE was not compiled with support for C++ exceptions");
+#endif
+#endif
+  }
+
+  switch (cfg.libcType) {
+  case Config::LibcType::KleeLibc: {
+    // FIXME: Find a reasonable solution for this.
+    SmallString<128> Path(Opts->LibraryDir);
+    llvm::sys::path::append(Path,
+                            "libkleeRuntimeKLEELibc" + opt_suffix + ".bca");
+    if (!klee::loadFileAsOneModule(Path.c_str(), mainModule->getContext(),
+                                   loadedLibsModules, errorMsg))
+      klee_error("error loading klee libc '%s': %s", Path.c_str(),
+                 errorMsg.c_str());
+  }
+  /* Falls through. */
+  case Config::LibcType::FreestandingLibc: {
+    SmallString<128> Path(Opts->LibraryDir);
+    llvm::sys::path::append(Path,
+                            "libkleeRuntimeFreestanding" + opt_suffix + ".bca");
+    if (!klee::loadFileAsOneModule(Path.c_str(), mainModule->getContext(),
+                                   loadedLibsModules, errorMsg))
+      klee_error("error loading freestanding support '%s': %s", Path.c_str(),
+                 errorMsg.c_str());
+    break;
+  }
+  case Config::LibcType::UcLibc:
+    linkWithUclibc(LibraryDir, opt_suffix, loadedUserModules,
+                   loadedLibsModules);
+    break;
+  }
+
+  for (const auto &library : LinkLibraries) {
+    if (!klee::loadFileAsOneModule(library, mainModule->getContext(),
+                                   loadedLibsModules, errorMsg))
+      klee_error("error loading bitcode library '%s': %s", library.c_str(),
+                 errorMsg.c_str());
+  }
+
+  // std::unique_ptr<DummyHandler> handler = std::make_unique<DummyHandler>();
+
+  // if (cfg.guidanceKind == GuidanceKind::ErrorGuidance) {
+  //   paths = parseStaticAnalysisInput();
+  // }
+
+  // Interpreter::InterpreterOptions IOpts(paths);
+  // IOpts.MakeConcreteSymbolic = MakeConcreteSymbolic;
+  // IOpts.Guidance = cfg.guidanceKind;
+
+  // std::unique_ptr<Interpreter> interpreter(
+  //     Interpreter::create(ctx, IOpts, handler.get(), cfg));
+  // theInterpreter = interpreter.get();
+  // assert(interpreter);
+
+  // auto finalModule =
+  //     interpreter->setModule(loadedUserModules, loadedLibsModules, Opts,
+  //                            mainModuleFunctions, std::move(origInfos));
+
+  // Function *mainFn = finalModule->getFunction(ep);
+  // externalsAndGlobalsCheck(finalModule);
+}
+
+AnalysisReport TraceVerifier::verifyTraces(SarifReport report) {
+  std::unique_ptr<DummyHandler> handler = std::make_unique<DummyHandler>();
+  Interpreter::InterpreterOptions IOpts(report);
+  IOpts.MakeConcreteSymbolic = MakeConcreteSymbolic;
+  IOpts.Guidance = cfg.guidanceKind;
+
+  std::unique_ptr<Interpreter> interpreter(
+      Interpreter::create(ctx, IOpts, handler.get(), cfg));
+  theInterpreter = interpreter.get();
+  assert(interpreter);
+
+  auto finalModule =
+      interpreter->setModule(loadedUserModules, loadedLibsModules, *(Opts),
+                             mainModuleFunctions, origInfos.get());
+
+  Function *mainFn = finalModule->getFunction(ep);
+  externalsAndGlobalsCheck(finalModule);
+
+  interpreter->runFunctionAsMain(mainFn, pArgc, pArgv, pEnvp);
+
+  return interpreter->getAnalysisReport();
 }

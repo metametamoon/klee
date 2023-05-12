@@ -248,7 +248,7 @@ void KModule::replaceFunction(const std::unique_ptr<llvm::Module> &m,
   originalFunc->eraseFromParent();
 }
 
-void KModule::instrument(const Interpreter::ModuleOptions &opts) {
+void KModule::instrument(const ModuleOptions &opts) {
   // Inject checks prior to optimization... we also perform the
   // invariant transformations that we will end up doing later so that
   // optimize is seeing what is as close as possible to the final
@@ -277,7 +277,7 @@ void KModule::instrument(const Interpreter::ModuleOptions &opts) {
 }
 
 void KModule::optimiseAndPrepare(
-    const Interpreter::ModuleOptions &opts,
+    const ModuleOptions &opts,
     llvm::ArrayRef<const char *> preservedFunctions) {
   // Preserve all functions containing klee-related function calls from being
   // optimised around
