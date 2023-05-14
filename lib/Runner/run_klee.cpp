@@ -856,18 +856,18 @@ static void parseArguments(int argc, char **argv) {
 }
 
 static void
-preparePOSIX(std::vector<std::unique_ptr<llvm::Module>> &loadedModules) {
+preparePOSIX(std::vector<std::unique_ptr<llvm::Module>> &loadedModules, std::string EP) {
   // Get the main function from the main module and rename it such that it can
   // be called after the POSIX setup
   Function *mainFn = nullptr;
   for (auto &module : loadedModules) {
-    mainFn = module->getFunction(EntryPoint);
+    mainFn = module->getFunction(EP);
     if (mainFn && !mainFn->empty())
       break;
   }
 
   if (!mainFn || mainFn->empty()) {
-    klee_error("Entry function '%s' not found in module.", EntryPoint.c_str());
+    klee_error("Entry function '%s' not found in module.", EP.c_str());
   }
   mainFn->setName("__klee_posix_wrapped_main");
 
@@ -881,7 +881,7 @@ preparePOSIX(std::vector<std::unique_ptr<llvm::Module>> &loadedModules) {
 
   // Rename the POSIX wrapper to prefixed entrypoint, e.g. _user_main as uClibc
   // would expect it or main otherwise
-  wrapper->setName(EntryPoint);
+  wrapper->setName(EP);
   loadedModules.front()->getOrInsertFunction(wrapper->getName(),
                                              wrapper->getFunctionType());
 }
@@ -1264,7 +1264,8 @@ createLibCWrapper(std::vector<std::unique_ptr<llvm::Module>> &userModules,
 static void
 linkWithUclibc(StringRef libDir, std::string opt_suffix,
                std::vector<std::unique_ptr<llvm::Module>> &userModules,
-               std::vector<std::unique_ptr<llvm::Module>> &libsModules) {
+               std::vector<std::unique_ptr<llvm::Module>> &libsModules,
+               std::string EP) {
   LLVMContext &ctx = userModules[0]->getContext();
   std::string errorMsg;
 
@@ -1287,7 +1288,7 @@ linkWithUclibc(StringRef libDir, std::string opt_suffix,
   replaceOrRenameFunction(libsModules.back().get(), "__libc_open", "open");
   replaceOrRenameFunction(libsModules.back().get(), "__libc_fcntl", "fcntl");
 
-  createLibCWrapper(userModules, libsModules, EntryPoint, "__uClibc_main");
+  createLibCWrapper(userModules, libsModules, EP, "__uClibc_main");
 
   klee_message("NOTE: Using klee-uclibc : %s", uclibcBCA.c_str());
 }
@@ -1693,7 +1694,7 @@ int run_klee(int argc, char **argv, char **envp) {
     }
 
     if (!UTBotMode) {
-      preparePOSIX(loadedUserModules);
+      preparePOSIX(loadedUserModules, EntryPoint);
     }
   }
 
@@ -1760,7 +1761,7 @@ int run_klee(int argc, char **argv, char **envp) {
   }
   case Config::LibcType::UcLibc:
     linkWithUclibc(LibraryDir, opt_suffix, loadedUserModules,
-                   loadedLibsModules);
+                   loadedLibsModules, EntryPoint);
     break;
   }
 
@@ -2111,7 +2112,7 @@ TraceVerifier::TraceVerifier(const llvm::Module *m, Config cfg)
     }
 
     if (!UTBotMode) {
-      preparePOSIX(loadedUserModules);
+      preparePOSIX(loadedUserModules, ep);
     }
   }
 
@@ -2178,7 +2179,7 @@ TraceVerifier::TraceVerifier(const llvm::Module *m, Config cfg)
   }
   case Config::LibcType::UcLibc:
     linkWithUclibc(LibraryDir, opt_suffix, loadedUserModules,
-                   loadedLibsModules);
+                   loadedLibsModules, ep);
     break;
   }
 
