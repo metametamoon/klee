@@ -331,14 +331,14 @@ TargetedExecutionManager::prepareAllLocations(KModule *kmodule,
         continue;
       }
 
-      if (!lem.isInside(*loc, fi)) {
+      if (!lem.isInside(loc, fi)) {
         ++it;
         continue;
       }
       Blocks blocks = Blocks();
       for (const auto &kblock : kfunc->blocks) {
         auto b = kblock.get();
-        if (!loc->isInside(b, origInstsInFile)) {
+        if (!loc.isInside(b, origInstsInFile)) {
           continue;
         }
         blocks.insert(b);
@@ -368,8 +368,8 @@ TargetedExecutionManager::collectAllLocations(const SarifReport &paths) const {
   return locations;
 }
 
-bool TargetedExecutionManager::canReach(const ref<Location> &from,
-                                        const ref<Location> &to,
+bool TargetedExecutionManager::canReach(const Location &from,
+                                        const Location &to,
                                         LocationToBlocks &locToBlocks) const {
   for (auto fromBlock : locToBlocks[from]) {
     for (auto toBlock : locToBlocks[to]) {
@@ -404,7 +404,7 @@ bool TargetedExecutionManager::canReach(const ref<Location> &from,
 
 bool TargetedExecutionManager::tryResolveLocations(
     Result &result, LocationToBlocks &locToBlocks) const {
-  std::vector<ref<Location>> resolvedLocations;
+  std::vector<Location> resolvedLocations;
   size_t index = 0;
   for (const auto &location : result.locations) {
     auto it = locToBlocks.find(location);
@@ -413,8 +413,8 @@ bool TargetedExecutionManager::tryResolveLocations(
         if (!canReach(resolvedLocations.back(), location, locToBlocks)) {
           klee_warning("Trace %u is untraversable! Can't reach location %s "
                        "from location %s, so skipping this trace.",
-                       result.id, location->toString().c_str(),
-                       resolvedLocations.back()->toString().c_str());
+                       result.id, location.toString().c_str(),
+                       resolvedLocations.back().toString().c_str());
           return false;
         }
       }
@@ -423,7 +423,7 @@ bool TargetedExecutionManager::tryResolveLocations(
       klee_warning(
           "Trace %u is malformed! %s at location %s, so skipping this trace.",
           result.id, getErrorsString(result.errors).c_str(),
-          location->toString().c_str());
+          location.toString().c_str());
       return false;
     }
     ++index;

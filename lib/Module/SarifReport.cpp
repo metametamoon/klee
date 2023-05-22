@@ -22,7 +22,7 @@ using namespace klee;
 
 bool isOSSeparator(char c) { return c == '/' || c == '\\'; }
 
-optional<ref<Location>>
+optional<Location>
 tryConvertLocationJson(const LocationJson &locationJson) {
   const auto &physicalLocation = locationJson.physicalLocation;
   if (!physicalLocation.has_value()) {
@@ -41,7 +41,7 @@ tryConvertLocationJson(const LocationJson &locationJson) {
     return nonstd::nullopt;
   }
 
-  return Location::create(std::move(filename), *(region->startLine),
+  return Location(std::move(filename), *(region->startLine),
                           region->endLine, region->startColumn,
                           region->endColumn);
 }
@@ -117,7 +117,7 @@ optional<Result> tryConvertResultJson(const ResultJson &resultJson,
     }
   }
 
-  std::vector<ref<Location>> locations;
+  std::vector<Location> locations;
   std::vector<optional<json>> metadatas;
 
   if (resultJson.codeFlows.size() > 0) {
@@ -201,34 +201,34 @@ SarifReport convertAndFilterSarifJson(const SarifReportJson &reportJson) {
   return report;
 }
 
-Location::EquivLocationHashSet Location::cachedLocations;
-Location::LocationHashSet Location::locations;
+// Location::EquivLocationHashSet Location::cachedLocations;
+// Location::LocationHashSet Location::locations;
 
-ref<Location> Location::create(std::string filename_, unsigned int startLine_,
-                               optional<unsigned int> endLine_,
-                               optional<unsigned int> startColumn_,
-                               optional<unsigned int> endColumn_) {
-  Location *loc =
-      new Location(filename_, startLine_, endLine_, startColumn_, endColumn_);
-  std::pair<EquivLocationHashSet::const_iterator, bool> success =
-      cachedLocations.insert(loc);
-  if (success.second) {
-    // Cache miss
-    locations.insert(loc);
-    return loc;
-  }
-  // Cache hit
-  delete loc;
-  loc = *(success.first);
-  return loc;
-}
+// ref<Location> Location::create(std::string filename_, unsigned int startLine_,
+//                                optional<unsigned int> endLine_,
+//                                optional<unsigned int> startColumn_,
+//                                optional<unsigned int> endColumn_) {
+//   Location *loc =
+//       new Location(filename_, startLine_, endLine_, startColumn_, endColumn_);
+//   std::pair<EquivLocationHashSet::const_iterator, bool> success =
+//       cachedLocations.insert(loc);
+//   if (success.second) {
+//     // Cache miss
+//     locations.insert(loc);
+//     return loc;
+//   }
+//   // Cache hit
+//   delete loc;
+//   loc = *(success.first);
+//   return loc;
+// }
 
-Location::~Location() {
-  if (locations.find(this) != locations.end()) {
-    locations.erase(this);
-    cachedLocations.erase(this);
-  }
-}
+// Location::~Location() {
+//   if (locations.find(this) != locations.end()) {
+//     locations.erase(this);
+//     cachedLocations.erase(this);
+//   }
+// }
 
 bool Location::isInside(const FunctionInfo &info) const {
   size_t suffixSize = 0;

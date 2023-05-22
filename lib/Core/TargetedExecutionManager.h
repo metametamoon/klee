@@ -99,10 +99,10 @@ public:
 class TargetedExecutionManager {
 private:
   using Blocks = std::unordered_set<KBlock *>;
-  using LocationToBlocks = std::unordered_map<ref<Location>, Blocks,
-                                              RefLocationHash, RefLocationCmp>;
+  using LocationToBlocks = std::unordered_map<Location, Blocks,
+                                              LocationHash, LocationCmp>;
   using Locations =
-      std::unordered_set<ref<Location>, RefLocationHash, RefLocationCmp>;
+      std::unordered_set<Location, LocationHash, LocationCmp>;
 
   using Instructions = std::unordered_map<
       std::string,
@@ -117,7 +117,7 @@ private:
                                        Locations &locations) const;
   Locations collectAllLocations(const SarifReport &paths) const;
 
-  bool canReach(const ref<Location> &from, const ref<Location> &to,
+  bool canReach(const Location &from, const Location &to,
                 LocationToBlocks &locToBlocks) const;
 
   KFunction *tryResolveEntryFunction(const Result &result,

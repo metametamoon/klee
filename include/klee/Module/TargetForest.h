@@ -198,8 +198,8 @@ private:
 
     void addTrace(
         const Result &result,
-        const std::unordered_map<ref<Location>, std::unordered_set<KBlock *>,
-                                 RefLocationHash, RefLocationCmp> &locToBlocks);
+        const std::unordered_map<Location, std::unordered_set<KBlock *>,
+                                 LocationHash, LocationCmp> &locToBlocks);
   };
 
   ref<Layer> forest;
@@ -273,8 +273,8 @@ public:
 
   void addTrace(
       const Result &result,
-      const std::unordered_map<ref<Location>, std::unordered_set<KBlock *>,
-                               RefLocationHash, RefLocationCmp> &locToBlocks) {
+      const std::unordered_map<Location, std::unordered_set<KBlock *>,
+                               LocationHash, LocationCmp> &locToBlocks) {
     forest->addTrace(result, locToBlocks);
   }
 

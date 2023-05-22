@@ -83,8 +83,8 @@ TargetForest::UnorderedTargetsSet::~UnorderedTargetsSet() {
 
 void TargetForest::Layer::addTrace(
     const Result &result,
-    const std::unordered_map<ref<Location>, std::unordered_set<KBlock *>,
-                             RefLocationHash, RefLocationCmp> &locToBlocks) {
+    const std::unordered_map<Location, std::unordered_set<KBlock *>,
+                             LocationHash, LocationCmp> &locToBlocks) {
   auto forest = this;
   for (size_t i = 0; i < result.locations.size(); ++i) {
     const auto &loc = result.locations[i];
@@ -95,8 +95,8 @@ void TargetForest::Layer::addTrace(
       ref<Target> target = nullptr;
       if (i == result.locations.size() - 1) {
         target = Target::create(result.errors, result.id,
-                                ErrorLocation{loc->startLine, loc->endLine,
-                                              loc->startColumn, loc->endColumn},
+                                ErrorLocation{loc.startLine, loc.endLine,
+                                              loc.startColumn, loc.endColumn},
                                 block);
       } else {
         target = Target::create(block);

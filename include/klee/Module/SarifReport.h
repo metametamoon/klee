@@ -14,7 +14,6 @@
 #include <unordered_set>
 #include <vector>
 
-#include "klee/ADT/Ref.h"
 #include <nlohmann/json.hpp>
 #include <nonstd/optional.hpp>
 
@@ -158,39 +157,48 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(RunJson, results, tool)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(SarifReportJson, runs)
 
 struct Location {
-  struct LocationHash {
-    std::size_t operator()(const Location *l) const { return l->hash(); }
-  };
+  // struct LocationHash {
+  //   std::size_t operator()(const Location *l) const { return l->hash(); }
+  // };
 
-  struct LocationCmp {
-    bool operator()(const Location *a, const Location *b) const {
-      return a == b;
-    }
-  };
+  // struct LocationCmp {
+  //   bool operator()(const Location *a, const Location *b) const {
+  //     return a == b;
+  //   }
+  // };
 
-  struct EquivLocationCmp {
-    bool operator()(const Location *a, const Location *b) const {
-      if (a == NULL || b == NULL)
-        return false;
-      return *a == *b;
-    }
-  };
+  // struct EquivLocationCmp {
+  //   bool operator()(const Location *a, const Location *b) const {
+  //     if (a == NULL || b == NULL)
+  //       return false;
+  //     return *a == *b;
+  //   }
+  // };
   std::string filename;
   unsigned int startLine;
   unsigned int endLine;
   optional<unsigned int> startColumn;
   optional<unsigned int> endColumn;
 
-  static ref<Location> create(std::string filename_, unsigned int startLine_,
-                              optional<unsigned int> endLine_,
-                              optional<unsigned int> startColumn_,
-                              optional<unsigned int> endColumn_);
+  Location(std::string filename_, unsigned int startLine_,
+           optional<unsigned int> endLine_, optional<unsigned int> startColumn_,
+           optional<unsigned int> endColumn_)
+      : filename(filename_), startLine(startLine_),
+        endLine(endLine_.has_value() ? *endLine_ : startLine_),
+        startColumn(startColumn_),
+        endColumn(endColumn_.has_value() ? endColumn_ : startColumn_) {
+    computeHash();
+  }
 
-  ~Location();
+  // static ref<Location> create(std::string filename_, unsigned int startLine_,
+  //                             optional<unsigned int> endLine_,
+  //                             optional<unsigned int> startColumn_,
+  //                             optional<unsigned int> endColumn_);
+
   std::size_t hash() const { return hashValue; }
 
-  /// @brief Required by klee::ref-managed objects
-  class ReferenceCounter _refCount;
+  // /// @brief Required by klee::ref-managed objects
+  // class ReferenceCounter _refCount;
 
   bool operator==(const Location &other) const {
     return filename == other.filename && startLine == other.startLine &&
@@ -209,13 +217,13 @@ struct Location {
   std::string toString() const;
 
 private:
-  typedef std::unordered_set<Location *, LocationHash, EquivLocationCmp>
-      EquivLocationHashSet;
-  typedef std::unordered_set<Location *, LocationHash, LocationCmp>
-      LocationHashSet;
+  // typedef std::unordered_set<Location *, LocationHash, EquivLocationCmp>
+  //     EquivLocationHashSet;
+  // typedef std::unordered_set<Location *, LocationHash, LocationCmp>
+  //     LocationHashSet;
 
-  static EquivLocationHashSet cachedLocations;
-  static LocationHashSet locations;
+  // static EquivLocationHashSet cachedLocations;
+  // static LocationHashSet locations;
 
   size_t hashValue = 0;
   void computeHash() {
@@ -230,30 +238,20 @@ private:
     std::hash<T> h;
     s ^= h(v) + 0x9e3779b9 + (s << 6) + (s >> 2);
   }
-
-  Location(std::string filename_, unsigned int startLine_,
-           optional<unsigned int> endLine_, optional<unsigned int> startColumn_,
-           optional<unsigned int> endColumn_)
-      : filename(filename_), startLine(startLine_),
-        endLine(endLine_.has_value() ? *endLine_ : startLine_),
-        startColumn(startColumn_),
-        endColumn(endColumn_.has_value() ? endColumn_ : startColumn_) {
-    computeHash();
-  }
 };
 
-struct RefLocationHash {
-  unsigned operator()(const ref<Location> &t) const { return t->hash(); }
+struct LocationHash {
+  unsigned operator()(const Location &t) const { return t.hash(); }
 };
 
-struct RefLocationCmp {
-  bool operator()(const ref<Location> &a, const ref<Location> &b) const {
-    return a.get() == b.get();
+struct LocationCmp {
+  bool operator()(const Location &a, const Location &b) const {
+    return a == b;
   }
 };
 
 struct Result {
-  std::vector<ref<Location>> locations;
+  std::vector<Location> locations;
   std::vector<optional<json>> metadatas;
   unsigned id;
   std::unordered_set<ReachWithError> errors;
