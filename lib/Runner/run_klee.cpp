@@ -1484,13 +1484,6 @@ void wait_until_any_child_dies(
 }
 
 int run_klee(int argc, char **argv, char **envp) {
-  Config cfg;
-  cfg.guidanceKind = UseGuidedSearch;
-  cfg.libcType = Libc;
-  cfg.mockExternalCalls = MockExternalCalls;
-  cfg.skipNotLI = SkipNotLazyInitialized;
-  cfg.usePOSIX = WithPOSIXRuntime;
-
   if (theInterpreter) {
     theInterpreter = nullptr;
   }
@@ -1511,6 +1504,13 @@ int run_klee(int argc, char **argv, char **envp) {
   llvm::InitializeNativeTarget();
 
   parseArguments(argc, argv);
+
+  Config cfg;
+  cfg.guidanceKind = UseGuidedSearch;
+  cfg.libcType = Libc;
+  cfg.mockExternalCalls = MockExternalCalls;
+  cfg.skipNotLI = SkipNotLazyInitialized;
+  cfg.usePOSIX = WithPOSIXRuntime;
 
   static bool registeredOnErrorHandler = false;
   if (!registeredOnErrorHandler) {
