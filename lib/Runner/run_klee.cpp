@@ -2213,9 +2213,29 @@ TraceVerifier::TraceVerifier(const llvm::Module *m, Config cfg)
   // externalsAndGlobalsCheck(finalModule);
 }
 
-AnalysisReport TraceVerifier::verifyTraces(SarifReport report) {
+static SarifReport SarifReportAPIToInternal(SarifReportAPI report) {
+  SarifReport ret;
+  for (auto &resultAPI : report.results) {
+    Result resultInternal;
+    resultInternal.errors = resultAPI.errors;
+    resultInternal.id = resultAPI.id;
+    resultInternal.locations = resultAPI.locations;
+    for (auto metadata : resultAPI.metadatas) {
+      if (metadata.hasValue()) {
+        resultInternal.metadatas.push_back(json::parse(*metadata));
+      } else {
+        resultInternal.metadatas.push_back({});
+      }
+    }
+    ret.results.push_back(resultInternal);
+  }
+  return ret;
+}
+
+AnalysisReport TraceVerifier::verifyTraces(SarifReportAPI report) {
+  auto reportInternal = SarifReportAPIToInternal(report);
   std::unique_ptr<DummyHandler> handler = std::make_unique<DummyHandler>();
-  Interpreter::InterpreterOptions IOpts(report);
+  Interpreter::InterpreterOptions IOpts(reportInternal);
   IOpts.MakeConcreteSymbolic = MakeConcreteSymbolic;
   IOpts.Guidance = cfg.guidanceKind;
 

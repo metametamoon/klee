@@ -2,21 +2,21 @@
 #define KLEE_TRACEVERIFIER_H
 
 #include "klee/KLEEConfig.h"
-#include "klee/Module/InstructionInfoTable.h"
-#include "klee/Module/SarifReport.h"
+#include "klee/Module/SarifReportAPI.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
 #include <memory>
 
 namespace klee {
 
+class InstructionInfoTable;
 struct ModuleOptions;
 
 class TraceVerifier {
 public:
   TraceVerifier(const llvm::Module *m, Config cfg);
 
-  AnalysisReport verifyTraces(SarifReport report);
+  AnalysisReport verifyTraces(SarifReportAPI report);
 
 private:
   llvm::Module *mod;
