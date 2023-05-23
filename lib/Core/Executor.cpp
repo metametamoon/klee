@@ -5743,7 +5743,7 @@ ref<Expr> Executor::makeSymbolicValue(Value *value, ExecutionState &state,
 void Executor::runFunctionAsMain(Function *f, int argc, char **argv,
                                  char **envp) {
   if (guidanceKind == GuidanceKind::ErrorGuidance &&
-      (!interpreterOpts.Paths.has_value() || interpreterOpts.Paths->empty())) {
+      (!interpreterOpts.Paths.hasValue() || interpreterOpts.Paths->empty())) {
     klee_warning("No targets found in error-guided mode");
     return;
   }
@@ -5762,7 +5762,7 @@ void Executor::runFunctionAsMain(Function *f, int argc, char **argv,
       state->popFrame();
     }
 
-    auto &paths = interpreterOpts.Paths.value();
+    auto &paths = interpreterOpts.Paths.getValue();
     auto prepTargets = targetedExecutionManager.prepareTargets(
         kmodule.get(), std::move(paths));
     if (prepTargets.empty()) {

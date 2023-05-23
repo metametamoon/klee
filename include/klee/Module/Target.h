@@ -32,13 +32,11 @@ struct EquivTargetCmp;
 struct TargetHash;
 struct TargetCmp;
 
-using nonstd::optional;
-
 struct ErrorLocation {
   unsigned int startLine;
   unsigned int endLine;
-  optional<unsigned int> startColumn;
-  optional<unsigned int> endColumn;
+  Optional<unsigned int> startColumn;
+  Optional<unsigned int> endColumn;
 };
 
 struct Target {
@@ -52,10 +50,10 @@ private:
   std::unordered_set<ReachWithError>
       errors;                  // None - if it is not terminated in error trace
   unsigned id;                 // 0 - if it is not terminated in error trace
-  optional<ErrorLocation> loc; // TODO(): only for check in reportTruePositive
+  Optional<ErrorLocation> loc; // TODO(): only for check in reportTruePositive
 
   explicit Target(const std::unordered_set<ReachWithError> &_errors,
-                  unsigned _id, optional<ErrorLocation> _loc, KBlock *_block)
+                  unsigned _id, Optional<ErrorLocation> _loc, KBlock *_block)
       : block(_block), errors(_errors), id(_id), loc(_loc) {}
 
   static ref<Target> getFromCacheOrReturn(Target *target);
@@ -66,7 +64,7 @@ public:
   class ReferenceCounter _refCount;
 
   static ref<Target> create(const std::unordered_set<ReachWithError> &_errors,
-                            unsigned _id, optional<ErrorLocation> _loc,
+                            unsigned _id, Optional<ErrorLocation> _loc,
                             KBlock *_block);
   static ref<Target> create(KBlock *_block);
 

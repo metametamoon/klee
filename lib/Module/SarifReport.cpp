@@ -22,23 +22,23 @@ using namespace klee;
 
 bool isOSSeparator(char c) { return c == '/' || c == '\\'; }
 
-optional<Location>
+Optional<Location>
 tryConvertLocationJson(const LocationJson &locationJson) {
   const auto &physicalLocation = locationJson.physicalLocation;
-  if (!physicalLocation.has_value()) {
-    return nonstd::nullopt;
+  if (!physicalLocation.hasValue()) {
+    return {};
   }
 
   const auto &artifactLocation = physicalLocation->artifactLocation;
-  if (!artifactLocation.has_value() || !artifactLocation->uri.has_value()) {
-    return nonstd::nullopt;
+  if (!artifactLocation.hasValue() || !artifactLocation->uri.hasValue()) {
+    return {};
   }
 
   const auto filename = std::move(*(artifactLocation->uri));
 
   const auto &region = physicalLocation->region;
-  if (!region.has_value() || !region->startLine.has_value()) {
-    return nonstd::nullopt;
+  if (!region.hasValue() || !region->startLine.hasValue()) {
+    return {};
   }
 
   return Location(std::move(filename), *(region->startLine),
@@ -48,7 +48,7 @@ tryConvertLocationJson(const LocationJson &locationJson) {
 
 std::unordered_set<ReachWithError>
 tryConvertRuleJson(const std::string &ruleId, const std::string &toolName,
-                   const optional<Message> &errorMessage) {
+                   const Optional<Message> &errorMessage) {
   if (toolName == "huawei") {
     if ("NullDereference" == ruleId) {
       return {ReachWithError::NullPointerException};
@@ -67,7 +67,7 @@ tryConvertRuleJson(const std::string &ruleId, const std::string &toolName,
     if ("core.NullDereference" == ruleId) {
       return {ReachWithError::NullPointerException};
     } else if ("unix.Malloc" == ruleId) {
-      if (errorMessage.has_value()) {
+      if (errorMessage.hasValue()) {
         if (errorMessage->text == "Attempt to free released memory") {
           return {ReachWithError::DoubleFree};
         } else if (errorMessage->text == "Use of memory after it is freed") {
@@ -102,23 +102,23 @@ tryConvertRuleJson(const std::string &ruleId, const std::string &toolName,
   }
 }
 
-optional<Result> tryConvertResultJson(const ResultJson &resultJson,
+Optional<Result> tryConvertResultJson(const ResultJson &resultJson,
                                       const std::string &toolName,
                                       unsigned id) {
   std::unordered_set<ReachWithError> errors = {ReachWithError::None};
-  if (!resultJson.ruleId.has_value()) {
+  if (!resultJson.ruleId.hasValue()) {
     errors = {ReachWithError::Reachable};
   } else {
     errors =
         tryConvertRuleJson(*resultJson.ruleId, toolName, resultJson.message);
     if (errors.size() == 0) {
       klee_warning("undefined error in %u result", id);
-      return nonstd::nullopt;
+      return {};
     }
   }
 
   std::vector<Location> locations;
-  std::vector<optional<json>> metadatas;
+  std::vector<Optional<json>> metadatas;
 
   if (resultJson.codeFlows.size() > 0) {
     assert(resultJson.codeFlows.size() == 1);
@@ -126,12 +126,12 @@ optional<Result> tryConvertResultJson(const ResultJson &resultJson,
 
     const auto &threadFlow = resultJson.codeFlows[0].threadFlows[0];
     for (auto &threadFlowLocation : threadFlow.locations) {
-      if (!threadFlowLocation.location.has_value()) {
-        return nonstd::nullopt;
+      if (!threadFlowLocation.location.hasValue()) {
+        return {};
       }
 
       auto maybeLocation = tryConvertLocationJson(*threadFlowLocation.location);
-      if (maybeLocation.has_value()) {
+      if (maybeLocation.hasValue()) {
         locations.push_back(*maybeLocation);
         metadatas.push_back(std::move(threadFlowLocation.metadata));
       }
@@ -139,13 +139,13 @@ optional<Result> tryConvertResultJson(const ResultJson &resultJson,
   } else {
     assert(resultJson.locations.size() == 1);
     auto maybeLocation = tryConvertLocationJson(resultJson.locations[0]);
-    if (maybeLocation.has_value()) {
+    if (maybeLocation.hasValue()) {
       locations.push_back(*maybeLocation);
     }
   }
 
   if (locations.empty()) {
-    return nonstd::nullopt;
+    return {};
   }
 
   return Result{std::move(locations), std::move(metadatas), id,
@@ -193,7 +193,7 @@ SarifReport convertAndFilterSarifJson(const SarifReportJson &reportJson) {
     auto maybeResult =
         tryConvertResultJson(resultJson, run.tool.driver.name, ++id);
 
-    if (maybeResult.has_value()) {
+    if (maybeResult.hasValue()) {
       report.results.push_back(*maybeResult);
     }
   }
@@ -245,7 +245,7 @@ bool Location::isInside(const FunctionInfo &info) const {
 bool Location::isInside(KBlock *block, const Instructions &origInsts) const {
   auto first = block->getFirstInstruction()->info;
   auto last = block->getLastInstruction()->info;
-  if (!startColumn.has_value()) {
+  if (!startColumn.hasValue()) {
     if (first->line > endLine)
       return false;
     return startLine <= last->line; // and `first <= line` from above

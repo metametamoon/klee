@@ -1106,7 +1106,7 @@ void externalsAndGlobalsCheck(const llvm::Module *m) {
 }
 
 static Interpreter *theInterpreter = 0;
-static nonstd::optional<SarifReport> paths = nonstd::nullopt;
+static Optional<SarifReport> paths = {};
 
 static std::atomic_bool interrupted{false};
 
@@ -1294,10 +1294,10 @@ linkWithUclibc(StringRef libDir, std::string opt_suffix,
 }
 #endif
 
-static nonstd::optional<SarifReport> parseStaticAnalysisInput() {
+static Optional<SarifReport> parseStaticAnalysisInput() {
   if (AnalysisReproduce != "")
     return parseInputPathTree(AnalysisReproduce);
-  return nonstd::nullopt;
+  return {};
 }
 
 static int run_klee_on_function(int pArgc, char **pArgv, char **pEnvp,

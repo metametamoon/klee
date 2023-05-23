@@ -21,10 +21,6 @@
 #include <unordered_map>
 #include <vector>
 
-#include <nonstd/optional.hpp>
-
-using nonstd::optional;
-
 struct KTest;
 
 namespace llvm {
@@ -100,9 +96,9 @@ public:
     /// symbolic execution on concrete programs.
     unsigned MakeConcreteSymbolic;
     GuidanceKind Guidance;
-    nonstd::optional<SarifReport> Paths;
+    Optional<SarifReport> Paths;
 
-    InterpreterOptions(nonstd::optional<SarifReport> Paths)
+    InterpreterOptions(Optional<SarifReport> Paths)
         : MakeConcreteSymbolic(false), Guidance(GuidanceKind::NoGuidance),
           Paths(std::move(Paths)) {}
   };

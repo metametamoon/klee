@@ -10,29 +10,30 @@
 #ifndef KLEE_SARIF_REPORT_H
 #define KLEE_SARIF_REPORT_H
 
+#include "llvm/ADT/Optional.h"
+
 #include <string>
 #include <unordered_set>
 #include <vector>
 
 #include <nlohmann/json.hpp>
-#include <nonstd/optional.hpp>
 
 using json = nlohmann::json;
-using nonstd::optional;
+using llvm::Optional;
 
 namespace nlohmann {
-template <typename T> struct adl_serializer<nonstd::optional<T>> {
-  static void to_json(json &j, const nonstd::optional<T> &opt) {
-    if (opt == nonstd::nullopt) {
+template <typename T> struct adl_serializer<Optional<T>> {
+  static void to_json(json &j, const Optional<T> &opt) {
+    if (opt.hasValue()) {
       j = nullptr;
     } else {
       j = *opt;
     }
   }
 
-  static void from_json(const json &j, nonstd::optional<T> &opt) {
+  static void from_json(const json &j, Optional<T> &opt) {
     if (j.is_null()) {
-      opt = nonstd::nullopt;
+      opt = Optional<T>();
     } else {
       opt = j.get<T>();
     }
@@ -66,28 +67,28 @@ struct FunctionInfo;
 struct KBlock;
 
 struct ArtifactLocationJson {
-  optional<std::string> uri;
+  Optional<std::string> uri;
 };
 
 struct RegionJson {
-  optional<unsigned int> startLine;
-  optional<unsigned int> endLine;
-  optional<unsigned int> startColumn;
-  optional<unsigned int> endColumn;
+  Optional<unsigned int> startLine;
+  Optional<unsigned int> endLine;
+  Optional<unsigned int> startColumn;
+  Optional<unsigned int> endColumn;
 };
 
 struct PhysicalLocationJson {
-  optional<ArtifactLocationJson> artifactLocation;
-  optional<RegionJson> region;
+  Optional<ArtifactLocationJson> artifactLocation;
+  Optional<RegionJson> region;
 };
 
 struct LocationJson {
-  optional<PhysicalLocationJson> physicalLocation;
+  Optional<PhysicalLocationJson> physicalLocation;
 };
 
 struct ThreadFlowLocationJson {
-  optional<LocationJson> location;
-  optional<json> metadata;
+  Optional<LocationJson> location;
+  Optional<json> metadata;
 };
 
 struct ThreadFlowJson {
@@ -103,8 +104,8 @@ struct Message {
 };
 
 struct ResultJson {
-  optional<std::string> ruleId;
-  optional<Message> message;
+  Optional<std::string> ruleId;
+  Optional<Message> message;
   std::vector<LocationJson> locations;
   std::vector<CodeFlowJson> codeFlows;
 };
@@ -177,16 +178,16 @@ struct Location {
   std::string filename;
   unsigned int startLine;
   unsigned int endLine;
-  optional<unsigned int> startColumn;
-  optional<unsigned int> endColumn;
+  Optional<unsigned int> startColumn;
+  Optional<unsigned int> endColumn;
 
   Location(std::string filename_, unsigned int startLine_,
-           optional<unsigned int> endLine_, optional<unsigned int> startColumn_,
-           optional<unsigned int> endColumn_)
+           Optional<unsigned int> endLine_, Optional<unsigned int> startColumn_,
+           Optional<unsigned int> endColumn_)
       : filename(filename_), startLine(startLine_),
-        endLine(endLine_.has_value() ? *endLine_ : startLine_),
+        endLine(endLine_.hasValue() ? *endLine_ : startLine_),
         startColumn(startColumn_),
-        endColumn(endColumn_.has_value() ? endColumn_ : startColumn_) {
+        endColumn(endColumn_.hasValue() ? endColumn_ : startColumn_) {
     computeHash();
   }
 
@@ -230,8 +231,13 @@ private:
     hash_combine(hashValue, filename);
     hash_combine(hashValue, startLine);
     hash_combine(hashValue, endLine);
-    hash_combine(hashValue, startColumn);
-    hash_combine(hashValue, endColumn);
+    // TODO HASH
+    if (startColumn.hasValue()) {
+      hash_combine(hashValue, *startColumn);
+    }
+    if (endColumn.hasValue()) {
+      hash_combine(hashValue, *endColumn);
+    }
   }
 
   template <class T> inline void hash_combine(std::size_t &s, const T &v) {
@@ -252,7 +258,7 @@ struct LocationCmp {
 
 struct Result {
   std::vector<Location> locations;
-  std::vector<optional<json>> metadatas;
+  std::vector<Optional<json>> metadatas;
   unsigned id;
   std::unordered_set<ReachWithError> errors;
 };

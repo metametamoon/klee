@@ -57,24 +57,24 @@ ref<Target> Target::getFromCacheOrReturn(Target *target) {
 }
 
 ref<Target> Target::create(const std::unordered_set<ReachWithError> &_errors,
-                           unsigned _id, optional<ErrorLocation> _loc,
+                           unsigned _id, Optional<ErrorLocation> _loc,
                            KBlock *_block) {
   Target *target = new Target(_errors, _id, _loc, _block);
   return getFromCacheOrReturn(target);
 }
 
 ref<Target> Target::create(KBlock *_block) {
-  return create({ReachWithError::None}, 0, nonstd::nullopt, _block);
+  return create({ReachWithError::None}, 0, {}, _block);
 }
 
 bool Target::isTheSameAsIn(KInstruction *instr) const {
-  if (!loc.has_value()) {
+  if (!loc.hasValue()) {
     return false;
   }
   const auto &errLoc = *loc;
   return instr->info->line >= errLoc.startLine &&
          instr->info->line <= errLoc.endLine &&
-         (!LocationAccuracy || !errLoc.startColumn.has_value() ||
+         (!LocationAccuracy || !errLoc.startColumn.hasValue() ||
           (instr->info->column >= *errLoc.startColumn &&
            instr->info->column <= *errLoc.endColumn));
 }
