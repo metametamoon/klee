@@ -158,23 +158,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(RunJson, results, tool)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(SarifReportJson, runs)
 
 struct Location {
-  // struct LocationHash {
-  //   std::size_t operator()(const Location *l) const { return l->hash(); }
-  // };
-
-  // struct LocationCmp {
-  //   bool operator()(const Location *a, const Location *b) const {
-  //     return a == b;
-  //   }
-  // };
-
-  // struct EquivLocationCmp {
-  //   bool operator()(const Location *a, const Location *b) const {
-  //     if (a == NULL || b == NULL)
-  //       return false;
-  //     return *a == *b;
-  //   }
-  // };
   std::string filename;
   unsigned int startLine;
   unsigned int endLine;
@@ -190,11 +173,6 @@ struct Location {
         endColumn(endColumn_.hasValue() ? endColumn_ : startColumn_) {
     computeHash();
   }
-
-  // static ref<Location> create(std::string filename_, unsigned int startLine_,
-  //                             optional<unsigned int> endLine_,
-  //                             optional<unsigned int> startColumn_,
-  //                             optional<unsigned int> endColumn_);
 
   std::size_t hash() const { return hashValue; }
 
@@ -218,14 +196,6 @@ struct Location {
   std::string toString() const;
 
 private:
-  // typedef std::unordered_set<Location *, LocationHash, EquivLocationCmp>
-  //     EquivLocationHashSet;
-  // typedef std::unordered_set<Location *, LocationHash, LocationCmp>
-  //     LocationHashSet;
-
-  // static EquivLocationHashSet cachedLocations;
-  // static LocationHashSet locations;
-
   size_t hashValue = 0;
   void computeHash() {
     hash_combine(hashValue, filename);
