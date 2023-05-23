@@ -176,9 +176,6 @@ struct Location {
 
   std::size_t hash() const { return hashValue; }
 
-  // /// @brief Required by klee::ref-managed objects
-  // class ReferenceCounter _refCount;
-
   bool operator==(const Location &other) const {
     return filename == other.filename && startLine == other.startLine &&
            endLine == other.endLine && startColumn == other.startColumn &&
