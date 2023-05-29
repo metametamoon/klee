@@ -28,12 +28,6 @@ cl::OptionCategory
 
 /*** Termination criteria options ***/
 
-cl::opt<std::string>
-    MaxTime("max-time",
-            cl::desc("Halt execution after the specified duration.  "
-                     "Set to 0s to disable (default=0s)"),
-            cl::init("0s"), cl::cat(TerminationCat));
-
 cl::list<StateTerminationType> ExitOnErrorType(
     "exit-on-error-type",
     cl::desc(
@@ -65,27 +59,11 @@ cl::list<StateTerminationType> ExitOnErrorType(
                           "Wrong klee_* functions invocation")),
     cl::ZeroOrMore, cl::cat(TerminationCat));
 
-cl::opt<unsigned long long>
-    MaxInstructions("max-instructions",
-                    cl::desc("Stop execution after this many instructions.  "
-                             "Set to 0 to disable (default=0)"),
-                    cl::init(0), cl::cat(TerminationCat));
-
 cl::opt<unsigned long long> MaxSteppedInstructions(
     "max-stepped-instructions",
     cl::desc("Stop state execution after this many instructions.  Set to 0 to "
              "disable (default=0)"),
     cl::init(0), cl::cat(TerminationCat));
-
-cl::opt<unsigned> MaxForks(
-    "max-forks",
-    cl::desc("Only fork this many times.  Set to -1 to disable (default=-1)"),
-    cl::init(~0u), cl::cat(TerminationCat));
-
-cl::opt<unsigned> MaxDepth("max-depth",
-                           cl::desc("Only allow this many symbolic branches.  "
-                                    "Set to 0 to disable (default=0)"),
-                           cl::init(0), cl::cat(TerminationCat));
 
 cl::opt<unsigned>
     MaxMemory("max-memory",
@@ -98,12 +76,6 @@ cl::opt<bool> MaxMemoryInhibit("max-memory-inhibit",
                                cl::desc("Inhibit forking when above memory cap "
                                         "(see -max-memory) (default=true)"),
                                cl::init(true), cl::cat(TerminationCat));
-
-cl::opt<unsigned> RuntimeMaxStackFrames(
-    "max-stack-frames",
-    cl::desc("Terminate a state after this many stack frames.  Set to 0 to "
-             "disable (default=8192)"),
-    cl::init(8192), cl::cat(TerminationCat));
 
 cl::opt<double> MaxStaticForkPct(
     "max-static-fork-pct", cl::init(1.),
@@ -234,16 +206,16 @@ getAdviseWhatToIncreaseConfidenceRate(HaltExecution::Reason reason) {
   std::string what = "";
   switch (reason) {
   case HaltExecution::MaxSolverTime:
-    what = MaxCoreSolverTime.ArgStr.str();
+    what = "max-solver-time";
     break;
   case HaltExecution::MaxStackFrames:
-    what = RuntimeMaxStackFrames.ArgStr.str();
+    what = "max-stack-frames";
     break;
   case HaltExecution::MaxTests:
     what = "max-tests"; // TODO: taken from run_klee.cpp
     break;
   case HaltExecution::MaxInstructions:
-    what = MaxInstructions.ArgStr.str();
+    what = "max-instructions";
     break;
   case HaltExecution::MaxSteppedInstructions:
     what = MaxSteppedInstructions.ArgStr.str();
@@ -252,7 +224,7 @@ getAdviseWhatToIncreaseConfidenceRate(HaltExecution::Reason reason) {
     what = "cov-check"; // TODO: taken from StatsTracker.cpp
     break;
   case HaltExecution::MaxDepth:
-    what = MaxDepth.ArgStr.str();
+    what = "max-depth";
     break;
   case HaltExecution::ErrorOnWhichShouldExit: // this should never be the case
   case HaltExecution::ReachedTarget:          // this should never be the case
@@ -263,7 +235,7 @@ getAdviseWhatToIncreaseConfidenceRate(HaltExecution::Reason reason) {
 #ifndef ENABLE_KLEE_DEBUG
   default:
 #endif
-    what = MaxTime.ArgStr.str();
+    what = "max-time";
     break;
 #ifdef ENABLE_KLEE_DEBUG
   default:

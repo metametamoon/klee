@@ -65,12 +65,6 @@ llvm::cl::opt<uint64_t> MaxConstantAllocationSize(
         "Maximum available size for single allocation (default 10Mb)"),
     llvm::cl::init(10ll << 20), llvm::cl::cat(MemoryCat));
 
-llvm::cl::opt<uint64_t> MaxSymbolicAllocationSize(
-    "max-sym-alloc",
-    llvm::cl::desc(
-        "Maximum available size for single allocation (default 10Mb)"),
-    llvm::cl::init(10ll << 20), llvm::cl::cat(MemoryCat));
-
 /***/
 MemoryManager::MemoryManager(ArrayCache *_arrayCache)
     : arrayCache(_arrayCache), deterministicSpace(0), nextFreeSlot(0),

@@ -354,10 +354,56 @@ cl::opt<bool> SkipNotLazyInitialized(
                    "use only with timestamps (default=false)"),
     cl::cat(PointerResolvingCat));
 
+cl::opt<unsigned> MaxDepth("max-depth",
+                           cl::desc("Only allow this many symbolic branches.  "
+                                    "Set to 0 to disable (default=0)"),
+                           cl::init(0), cl::cat(TerminationCat));
+
+cl::opt<std::string>
+    MaxTime("max-time",
+            cl::desc("Halt execution after the specified duration.  "
+                     "Set to 0s to disable (default=0s)"),
+            cl::init("0s"), cl::cat(TerminationCat));
+
+cl::opt<unsigned long long>
+    MaxInstructions("max-instructions",
+                    cl::desc("Stop execution after this many instructions.  "
+                             "Set to 0 to disable (default=0)"),
+                    cl::init(0), cl::cat(TerminationCat));
+
+cl::opt<unsigned> MaxForks(
+    "max-forks",
+    cl::desc("Only fork this many times.  Set to -1 to disable (default=-1)"),
+    cl::init(~0u), cl::cat(TerminationCat));
+
+cl::opt<unsigned> MaxStackFrames(
+    "max-stack-frames",
+    cl::desc("Terminate a state after this many stack frames.  Set to 0 to "
+             "disable (default=8192)"),
+    cl::init(8192), cl::cat(TerminationCat));
+
+llvm::cl::opt<uint64_t> MaxSymbolicAllocationSize(
+    "max-sym-alloc",
+    llvm::cl::desc(
+        "Maximum available size for single allocation (default 10Mb)"),
+    llvm::cl::init(10ll << 20), llvm::cl::cat(ExecCat));
+
+cl::opt<MockMutableGlobalsPolicy> MockMutableGlobals(
+    "mock-mutable-globals",
+    cl::values(clEnumValN(MockMutableGlobalsPolicy::None, "none",
+                          "No mutable global object are allowed o mock except "
+                          "external (default)"),
+               clEnumValN(MockMutableGlobalsPolicy::PrimitiveFields,
+                          "primitive-fields",
+                          "Only primitive fileds of mutable global objects are "
+                          "allowed to mock."),
+               clEnumValN(MockMutableGlobalsPolicy::All, "all",
+                          "All mutable global object are allowed o mock.")),
+    cl::init(MockMutableGlobalsPolicy::None), cl::cat(ExecCat));
+
 } // namespace
 
 namespace klee {
-extern cl::opt<std::string> MaxTime;
 class ExecutionState;
 } // namespace klee
 
@@ -1511,6 +1557,14 @@ int run_klee(int argc, char **argv, char **envp) {
   cfg.mockExternalCalls = MockExternalCalls;
   cfg.skipNotLI = SkipNotLazyInitialized;
   cfg.usePOSIX = WithPOSIXRuntime;
+  cfg.maxDepth = MaxDepth;
+  cfg.maxTime = MaxTime;
+  cfg.maxCoreSolverTime = MaxCoreSolverTime;
+  cfg.maxInstructions = MaxInstructions;
+  cfg.maxForks = MaxForks;
+  cfg.maxStackFrames = MaxStackFrames;
+  cfg.maxSymbolicAllocationSize = MaxSymbolicAllocationSize;
+  cfg.mockMutableGlobals = MockMutableGlobals;
 
   static bool registeredOnErrorHandler = false;
   if (!registeredOnErrorHandler) {

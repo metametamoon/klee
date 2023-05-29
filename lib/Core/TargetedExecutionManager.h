@@ -26,23 +26,13 @@ extern llvm::cl::OptionCategory TerminationCat;
 
 /*** Termination criteria options ***/
 
-extern llvm::cl::opt<std::string> MaxTime;
-
 extern llvm::cl::list<StateTerminationType> ExitOnErrorType;
 
-extern llvm::cl::opt<unsigned long long> MaxInstructions;
-
 extern llvm::cl::opt<unsigned long long> MaxSteppedInstructions;
-
-extern llvm::cl::opt<unsigned> MaxForks;
-
-extern llvm::cl::opt<unsigned> MaxDepth;
 
 extern llvm::cl::opt<unsigned> MaxMemory;
 
 extern llvm::cl::opt<bool> MaxMemoryInhibit;
-
-extern llvm::cl::opt<unsigned> RuntimeMaxStackFrames;
 
 extern llvm::cl::opt<double> MaxStaticForkPct;
 

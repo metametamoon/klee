@@ -1,6 +1,9 @@
 #ifndef KLEE_KLEECONFIG_H
 #define KLEE_KLEECONFIG_H
 
+#include <cstdint>
+#include <string>
+
 namespace klee {
 
 enum class GuidanceKind {
@@ -11,13 +14,28 @@ enum class GuidanceKind {
                     // targets coverage
 };
 
+enum class MockMutableGlobalsPolicy {
+  None,
+  PrimitiveFields,
+  All,
+};
+
 class Config {
 public:
-  GuidanceKind guidanceKind;
-  bool mockExternalCalls;
+  GuidanceKind guidanceKind; // This should be fixed
+  bool mockExternalCalls; // This should be fixed
   bool usePOSIX;
   enum class LibcType { FreestandingLibc, KleeLibc, UcLibc } libcType;
-  bool skipNotLI;
+  bool skipNotLI; // This should be fixed
+
+  unsigned maxDepth;
+  std::string maxTime;
+  std::string maxCoreSolverTime;
+  unsigned long long maxInstructions;
+  unsigned maxForks;
+  unsigned maxStackFrames;
+  uint64_t maxSymbolicAllocationSize;
+  MockMutableGlobalsPolicy mockMutableGlobals;
 };
 
 }

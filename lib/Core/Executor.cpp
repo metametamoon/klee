@@ -180,25 +180,6 @@ cl::opt<bool>
                              cl::desc("Enable case when extern call can crash "
                                       "and return null (default=false)"),
                              cl::cat(ExecCat));
-
-enum class MockMutableGlobalsPolicy {
-  None,
-  PrimitiveFields,
-  All,
-};
-
-cl::opt<MockMutableGlobalsPolicy> MockMutableGlobals(
-    "mock-mutable-globals",
-    cl::values(clEnumValN(MockMutableGlobalsPolicy::None, "none",
-                          "No mutable global object are allowed o mock except "
-                          "external (default)"),
-               clEnumValN(MockMutableGlobalsPolicy::PrimitiveFields,
-                          "primitive-fields",
-                          "Only primitive fileds of mutable global objects are "
-                          "allowed to mock."),
-               clEnumValN(MockMutableGlobalsPolicy::All, "all",
-                          "All mutable global object are allowed o mock.")),
-    cl::init(MockMutableGlobalsPolicy::None), cl::cat(ExecCat));
 } // namespace klee
 
 namespace {
@@ -392,7 +373,6 @@ bool allLeafsConstant(const ref<Expr> &expr) {
 } // namespace
 
 extern llvm::cl::opt<uint64_t> MaxConstantAllocationSize;
-extern llvm::cl::opt<uint64_t> MaxSymbolicAllocationSize;
 
 // XXX hack
 extern "C" unsigned dumpStates, dumpPForest;
@@ -426,14 +406,14 @@ Executor::Executor(LLVMContext &ctx, const InterpreterOptions &opts,
 
   guidanceKind = opts.Guidance;
 
-  const time::Span maxTime{MaxTime};
+  const time::Span maxTime{cfg.maxTime};
   if (maxTime)
     timers.add(std::make_unique<Timer>(maxTime, [&] {
       klee_message("HaltTimer invoked");
       setHaltExecution(HaltExecution::MaxTime);
     }));
 
-  coreSolverTimeout = time::Span{MaxCoreSolverTime};
+  coreSolverTimeout = time::Span{cfg.maxCoreSolverTime};
   if (coreSolverTimeout)
     UseForkedCoreSolver = true;
   Solver *coreSolver = klee::createCoreSolver(CoreSolverToUse);
@@ -879,7 +859,7 @@ void Executor::initializeGlobalObjects(ExecutionState &state) {
 
 bool Executor::branchingPermitted(const ExecutionState &state) const {
   if ((MaxMemoryInhibit && atMemoryLimit) || state.forkDisabled ||
-      inhibitForking || (MaxForks != ~0u && stats::forks >= MaxForks)) {
+      inhibitForking || (cfg.maxForks != ~0u && stats::forks >= cfg.maxForks)) {
 
     if (MaxMemoryInhibit && atMemoryLimit)
       klee_warning_once(0, "skipping fork (memory cap exceeded)");
@@ -1253,7 +1233,7 @@ Executor::StatePair Executor::fork(ExecutionState &current, ref<Expr> condition,
     addConstraint(*falseState, Expr::createIsZero(condition));
 
     // Kinda gross, do we even really still want this option?
-    if (MaxDepth && MaxDepth <= trueState->depth) {
+    if (cfg.maxDepth && cfg.maxDepth <= trueState->depth) {
       terminateStateEarly(*trueState, "max-depth exceeded.",
                           StateTerminationType::MaxDepth);
       terminateStateEarly(*falseState, "max-depth exceeded.",
@@ -1488,7 +1468,7 @@ void Executor::stepInstruction(ExecutionState &state) {
   state.prevPC = state.pc;
   ++state.pc;
 
-  if (stats::instructions == MaxInstructions)
+  if (stats::instructions == cfg.maxInstructions)
     haltExecution = HaltExecution::MaxInstructions;
 
   if (MaxSteppedInstructions &&
@@ -2014,7 +1994,7 @@ void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f,
   } else {
     // Check if maximum stack size was reached.
     // We currently only count the number of stack frames
-    if (RuntimeMaxStackFrames && state.stack.size() > RuntimeMaxStackFrames) {
+    if (cfg.maxStackFrames && state.stack.size() > cfg.maxStackFrames) {
       terminateStateEarly(state, "Maximum stack size reached.",
                           StateTerminationType::OutOfStackMemory);
       klee_warning("Maximum stack size reached.");
@@ -4760,7 +4740,7 @@ void Executor::executeAlloc(ExecutionState &state, ref<Expr> size, bool isLocal,
   ref<Expr> upperBoundSizeConstraint = UleExpr::create(
       ZExtExpr::create(size, Context::get().getPointerWidth()),
       Expr::createPointer(isa<ConstantExpr>(size) ? MaxConstantAllocationSize
-                                                  : MaxSymbolicAllocationSize));
+                                                  : cfg.maxSymbolicAllocationSize));
 
   /* If size greater then upper bound for size, then we will follow
   the malloc semantic and return NULL. Otherwise continue execution. */
@@ -5133,9 +5113,10 @@ void Executor::executeMemoryOperation(
         if (interpreterOpts.MakeConcreteSymbolic)
           result = replaceReadWithSymbolic(state, result);
 
-        if (MockMutableGlobals != MockMutableGlobalsPolicy::None &&
+        if (cfg.mockMutableGlobals != MockMutableGlobalsPolicy::None &&
             mo->isGlobal && !wos->readOnly && !isa<ConstantExpr>(result) &&
-            (MockMutableGlobals != MockMutableGlobalsPolicy::PrimitiveFields ||
+            (cfg.mockMutableGlobals !=
+                 MockMutableGlobalsPolicy::PrimitiveFields ||
              !targetType->getRawType()->isPointerTy())) {
           result = mockValue(state, result);
           wos->write(offset, result);
@@ -5255,9 +5236,10 @@ void Executor::executeMemoryOperation(
             ConstantExpr::alloc(size, Context::get().getPointerWidth()), false);
         ref<Expr> result = wos->read(mo->getOffsetExpr(address), type);
 
-        if (MockMutableGlobals != MockMutableGlobalsPolicy::None &&
+        if (cfg.mockMutableGlobals != MockMutableGlobalsPolicy::None &&
             mo->isGlobal && !wos->readOnly && !isa<ConstantExpr>(result) &&
-            (MockMutableGlobals != MockMutableGlobalsPolicy::PrimitiveFields ||
+            (cfg.mockMutableGlobals !=
+                 MockMutableGlobalsPolicy::PrimitiveFields ||
              !targetType->getRawType()->isPointerTy())) {
           result = mockValue(state, result);
           wos->write(mo->getOffsetExpr(address), result);
@@ -5367,7 +5349,7 @@ IDType Executor::lazyInitializeObject(ExecutionState &state, ref<Expr> address,
   }
 
   ref<Expr> sizeExpr;
-  if (size <= MaxSymbolicAllocationSize) {
+  if (size <= cfg.maxSymbolicAllocationSize) {
     const Array *lazyInstantiationSize = makeArray(
         state, Expr::createPointer(Context::get().getPointerWidth() / CHAR_BIT),
         "lazy_instantiation_size", SourceBuilder::lazyInitializationSymbolic());
@@ -5376,7 +5358,7 @@ IDType Executor::lazyInitializeObject(ExecutionState &state, ref<Expr> address,
     addConstraint(state, UgeExpr::create(sizeExpr, Expr::createPointer(size)));
     addConstraint(
         state, UleExpr::create(sizeExpr,
-                               Expr::createPointer(MaxSymbolicAllocationSize)));
+                               Expr::createPointer(cfg.maxSymbolicAllocationSize)));
   } else {
     sizeExpr = Expr::createPointer(size);
   }
