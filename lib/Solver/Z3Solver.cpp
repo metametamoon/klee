@@ -577,11 +577,14 @@ SolverImpl::SolverRunStatus Z3SolverImpl::handleSolverResponse(
       Z3_model_eval(builder->ctx, theModel, builder->construct(array->size),
                     Z3_TRUE, &arraySizeExpr);
       Z3_inc_ref(builder->ctx, arraySizeExpr);
-      assert(Z3_get_ast_kind(builder->ctx, arraySizeExpr) == Z3_NUMERAL_AST &&
+      ::Z3_ast_kind arraySizeExprKind =
+          Z3_get_ast_kind(builder->ctx, arraySizeExpr);
+      assert(arraySizeExprKind == Z3_NUMERAL_AST &&
              "Evaluated size expression has wrong sort");
       uint64_t arraySize = 0;
-      assert(Z3_get_numeral_uint64(builder->ctx, arraySizeExpr, &arraySize) &&
-             "Failed to get size");
+      bool success =
+          Z3_get_numeral_uint64(builder->ctx, arraySizeExpr, &arraySize);
+      assert(success && "Failed to get size");
 
       data.resize(arraySize);
       if (usedArrayBytes.count(array)) {
@@ -591,13 +594,14 @@ SolverImpl::SolverRunStatus Z3SolverImpl::handleSolverResponse(
           Z3_model_eval(builder->ctx, theModel, builder->construct(offsetExpr),
                         Z3_TRUE, &arrayElementOffsetExpr);
           Z3_inc_ref(builder->ctx, arrayElementOffsetExpr);
-          assert(Z3_get_ast_kind(builder->ctx, arrayElementOffsetExpr) ==
-                     Z3_NUMERAL_AST &&
+          ::Z3_ast_kind arrayElementOffsetExprKind =
+              Z3_get_ast_kind(builder->ctx, arrayElementOffsetExpr);
+          assert(arrayElementOffsetExprKind == Z3_NUMERAL_AST &&
                  "Evaluated size expression has wrong sort");
           uint64_t concretizedOffsetValue = 0;
-          assert(Z3_get_numeral_uint64(builder->ctx, arrayElementOffsetExpr,
-                                       &concretizedOffsetValue) &&
-                 "Failed to get size");
+          bool success = Z3_get_numeral_uint64(
+              builder->ctx, arrayElementOffsetExpr, &concretizedOffsetValue);
+          assert(success && "Failed to get size");
           offsetValues.insert(concretizedOffsetValue);
           Z3_dec_ref(builder->ctx, arrayElementOffsetExpr);
         }

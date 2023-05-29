@@ -258,8 +258,9 @@ bool IndependentSolver::check(const Query &query, ref<SolverResponse> &result) {
       result = tempResult;
       return true;
     } else {
-      assert(tempResult->tryGetInitialValuesFor(arraysInFactor, tempValues) &&
-             "Can not get initial values (Independent solver)!");
+      bool success =
+          tempResult->tryGetInitialValuesFor(arraysInFactor, tempValues);
+      assert(success && "Can not get initial values (Independent solver)!");
       assert(tempValues.size() == arraysInFactor.size() &&
              "Should be equal number arrays and answers");
       for (unsigned i = 0; i < tempValues.size(); i++) {
@@ -285,7 +286,8 @@ bool IndependentSolver::check(const Query &query, ref<SolverResponse> &result) {
   }
   result = new InvalidResponse(retMap);
   std::map<const Array *, SparseStorage<unsigned char>> bindings;
-  assert(result->tryGetInitialValues(bindings));
+  bool success = result->tryGetInitialValues(bindings);
+  assert(success);
   assert(assertCreatedPointEvaluatesToTrue(query, bindings, retMap) &&
          "should satisfy the equation");
   delete factors;

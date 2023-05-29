@@ -98,7 +98,8 @@ bool ConcretizingSolver::relaxSymcreteConstraints(const Query &query,
     }
 
     ValidityCore validityCore;
-    assert(result->tryGetValidityCore(validityCore));
+    bool success = result->tryGetValidityCore(validityCore);
+    assert(success);
     std::vector<const Array *> currentlyBrokenSymcreteArrays =
         Query(ConstraintSet(validityCore.constraints), validityCore.expr)
             .gatherSymcreteArrays();
@@ -393,7 +394,8 @@ bool ConcretizingSolver::computeValidityCore(const Query &query,
       assign = resultInvalidResponse->initialValuesFor(assign.keys());
       isValid = false;
     } else {
-      assert(result->tryGetValidityCore(validityCore));
+      bool success = result->tryGetValidityCore(validityCore);
+      assert(success);
     }
   }
 
