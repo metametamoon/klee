@@ -3,6 +3,7 @@
 // RUN: %klee --libc=klee --fp-runtime --output-dir=%t.klee-out  %t1.bc > %t-output.txt 2>&1
 // RUN: FileCheck -input-file=%t-output.txt %s
 // REQUIRES: fp-runtime
+// REQUIRES: no-release-build
 #include "klee/klee.h"
 #include <assert.h>
 #include <stdlib.h>

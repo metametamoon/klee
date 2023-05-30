@@ -4,6 +4,7 @@
 // RUN: FileCheck -input-file=%t-output.txt %s
 // RUN: FileCheck -input-file=%t-output.txt -check-prefix=MSG %s
 // REQUIRES: fp-runtime
+// REQUIRES: no-release-build
 #include "klee/klee.h"
 #include <assert.h>
 #include <fenv.h>

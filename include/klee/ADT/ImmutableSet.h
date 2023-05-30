@@ -14,6 +14,8 @@
 
 #include "ImmutableTree.h"
 
+#include <stddef.h>
+
 namespace klee {
 template <class T> struct _Identity {
   T &operator()(T &a) const { return a; }

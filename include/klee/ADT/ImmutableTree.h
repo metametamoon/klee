@@ -13,6 +13,8 @@
 #include <cassert>
 #include <vector>
 
+#include <stddef.h>
+
 namespace klee {
 template <class K, class V, class KOV, class CMP> class ImmutableTree {
 public:
