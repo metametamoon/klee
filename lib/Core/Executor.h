@@ -411,6 +411,9 @@ private:
                            KType *type, const ref<SymbolicSource> source,
                            bool isLocal);
 
+  void executeMakeMock(ExecutionState &state, KInstruction *target,
+                       std::vector<ref<Expr>> &arguments);
+
   void updateStateWithSymcretes(ExecutionState &state,
                                 const Assignment &assignment);
 
@@ -681,7 +684,8 @@ public:
             std::vector<std::unique_ptr<llvm::Module>> &libsModules,
             const ModuleOptions &opts,
             const std::vector<std::string> &mainModuleFunctions,
-            std::unique_ptr<InstructionInfoTable> origInfos) override;
+            std::unique_ptr<InstructionInfoTable> origInfos,
+            const std::set<std::string> &ignoredExternals) override;
 
   void useSeeds(const std::vector<struct KTest *> *seeds) override {
     usingSeeds = seeds;

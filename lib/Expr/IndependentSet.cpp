@@ -35,6 +35,11 @@ IndependentElementSet::IndependentElementSet(ref<Expr> e) {
     if (re->updates.root->isConstantArray() && !re->updates.head)
       continue;
 
+    if (ref<MockDeterministicSource> mockSource =
+            dyn_cast_or_null<MockDeterministicSource>(array->source)) {
+      uninterpretedFunctions.insert(mockSource->name);
+    }
+
     if (!wholeObjects.count(array)) {
       if (ConstantExpr *CE = dyn_cast<ConstantExpr>(re->index)) {
         // if index constant, then add to set of constraints operating
@@ -106,14 +111,15 @@ IndependentElementSet::IndependentElementSet(ref<Symcrete> s) {
 }
 
 IndependentElementSet::IndependentElementSet(const IndependentElementSet &ies)
-    : elements(ies.elements), wholeObjects(ies.wholeObjects), exprs(ies.exprs) {
-}
+    : elements(ies.elements), wholeObjects(ies.wholeObjects), exprs(ies.exprs),
+      uninterpretedFunctions(ies.uninterpretedFunctions) {}
 
 IndependentElementSet &
 IndependentElementSet::operator=(const IndependentElementSet &ies) {
   elements = ies.elements;
   wholeObjects = ies.wholeObjects;
   exprs = ies.exprs;
+  uninterpretedFunctions = ies.uninterpretedFunctions;
   return *this;
 }
 
@@ -171,6 +177,13 @@ bool IndependentElementSet::intersects(const IndependentElementSet &b) {
     if (it2 != b.elements.end()) {
       if (it->second.intersects(it2->second))
         return true;
+    }
+  }
+  for (std::set<std::string>::iterator it = uninterpretedFunctions.begin(),
+                                       ie = uninterpretedFunctions.end();
+       it != ie; ++it) {
+    if (b.uninterpretedFunctions.count(*it)) {
+      return true;
     }
   }
   // No need to check symcretes here, arrays must be sufficient.
