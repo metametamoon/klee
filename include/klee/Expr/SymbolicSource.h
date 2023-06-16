@@ -17,6 +17,7 @@ DISABLE_WARNING_POP
 
 namespace klee {
 
+class Expr;
 class Array;
 class Expr;
 class ConstantExpr;
@@ -41,7 +42,9 @@ public:
     LazyInitializationSize,
     Instruction,
     Argument,
-    Irreproducible
+    Irreproducible,
+    MockNaive,
+    MockDeterministic
   };
 
 public:
@@ -359,6 +362,33 @@ public:
     }
     return 0;
   }
+};
+
+class MockNaiveSource : public SymbolicSource {
+public:
+  Kind getKind() const override { return Kind::MockNaive; }
+  std::string getName() const override { return "mock"; }
+
+  static bool classof(const SymbolicSource *S) {
+    return S->getKind() == Kind::MockNaive;
+  }
+};
+
+class MockDeterministicSource : public SymbolicSource {
+public:
+  std::string name;
+  std::vector<ref<Expr>> args;
+  unsigned returnTypeWidth;
+
+  Kind getKind() const override { return Kind::MockDeterministic; }
+  std::string getName() const override { return "mock"; }
+
+  static bool classof(const SymbolicSource *S) {
+    return S->getKind() == Kind::MockDeterministic;
+  }
+
+  MockDeterministicSource(std::string _name, std::vector<ref<Expr>> _args,
+                          unsigned _returnTypeWidth);
 };
 
 } // namespace klee

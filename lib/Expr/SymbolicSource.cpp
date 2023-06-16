@@ -1,4 +1,5 @@
 #include "klee/Expr/SymbolicSource.h"
+#include "klee/Expr/Expr.h"
 
 #include "klee/Expr/Expr.h"
 #include "klee/Expr/ExprPPrinter.h"
@@ -162,5 +163,11 @@ unsigned InstructionSource::computeHash() {
   hashValue = res;
   return hashValue;
 }
+
+MockDeterministicSource::MockDeterministicSource(std::string _name,
+                                                 std::vector<ref<Expr>> _args,
+                                                 unsigned _returnTypeWidth)
+    : name(std::move(_name)), args(std::move(_args)),
+      returnTypeWidth(_returnTypeWidth) {}
 
 } // namespace klee

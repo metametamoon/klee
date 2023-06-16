@@ -61,6 +61,13 @@ public:
                                const char *suffix) = 0;
 };
 
+enum class MockStrategy {
+  None,          // No mocks are generated
+  Naive,         // For each function call new symbolic value is generated
+  Deterministic, // Each function is treated as uninterpreted function in SMT.
+                 // Compatible with Z3 solver only
+};
+
 class Interpreter {
 public:
   enum class GuidanceKind {
@@ -77,6 +84,8 @@ public:
     std::string LibraryDir;
     std::string EntryPoint;
     std::string OptSuffix;
+    std::string MainCurrentName;
+    std::string MainNameAfterMock;
     bool Optimize;
     bool Simplify;
     bool CheckDivZero;
@@ -86,11 +95,13 @@ public:
 
     ModuleOptions(const std::string &_LibraryDir,
                   const std::string &_EntryPoint, const std::string &_OptSuffix,
-                  bool _Optimize, bool _Simplify, bool _CheckDivZero,
-                  bool _CheckOvershift, bool _WithFPRuntime,
+                  const std::string &_MainCurrentName,
+                  const std::string &_MainNameAfterMock, bool _Optimize,
+                  bool _Simplify, bool _CheckDivZero, bool _CheckOvershift,bool _WithFPRuntime,
                   bool _WithPOSIXRuntime)
         : LibraryDir(_LibraryDir), EntryPoint(_EntryPoint),
-          OptSuffix(_OptSuffix), Optimize(_Optimize), Simplify(_Simplify),
+          OptSuffix(_OptSuffix), MainCurrentName(_MainCurrentName),
+          MainNameAfterMock(_MainNameAfterMock), Optimize(_Optimize), Simplify(_Simplify),
           CheckDivZero(_CheckDivZero), CheckOvershift(_CheckOvershift),
           WithFPRuntime(_WithFPRuntime), WithPOSIXRuntime(_WithPOSIXRuntime) {}
   };
@@ -108,12 +119,13 @@ public:
     /// symbolic values. This is used to test the correctness of the
     /// symbolic execution on concrete programs.
     unsigned MakeConcreteSymbolic;
+    enum MockStrategy MockStrategy;
     GuidanceKind Guidance;
     nonstd::optional<SarifReport> Paths;
 
     InterpreterOptions(nonstd::optional<SarifReport> Paths)
         : MakeConcreteSymbolic(false), Guidance(GuidanceKind::NoGuidance),
-          Paths(std::move(Paths)) {}
+          Paths(std::move(Paths)), MockStrategy(MockStrategy::None) {}
   };
 
 protected:
@@ -142,7 +154,8 @@ public:
             const ModuleOptions &opts,
             const std::unordered_set<std::string> &mainModuleFunctions,
             const std::unordered_set<std::string> &mainModuleGlobals,
-            std::unique_ptr<InstructionInfoTable> origInfos) = 0;
+            std::unique_ptr<InstructionInfoTable> origInfos,
+            const std::set<std::string> &ignoredExternals) = 0;
 
   // supply a tree stream writer which the interpreter will use
   // to record the concrete path (as a stream of '0' and '1' bytes).

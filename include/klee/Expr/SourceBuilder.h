@@ -5,6 +5,8 @@
 #include "klee/Expr/SymbolicSource.h"
 #include "klee/Module/KModule.h"
 
+#include "llvm/IR/Function.h"
+
 namespace klee {
 
 class SourceBuilder {
@@ -28,6 +30,10 @@ public:
   static ref<SymbolicSource> value(const llvm::Value &_allocSite, int _index,
                                    KModule *km);
   static ref<SymbolicSource> irreproducible(const std::string &name);
+  static ref<SymbolicSource> mockNaive();
+  static ref<SymbolicSource> mockDeterministic(std::string _name,
+                                               std::vector<ref<Expr>> _args,
+                                               unsigned _returnTypeWidth);
 };
 
 }; // namespace klee
