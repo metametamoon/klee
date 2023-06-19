@@ -13,6 +13,7 @@
 #include "klee/ADT/Bits.h"
 #include "klee/Expr/Expr.h"
 #include "klee/Expr/SymbolicSource.h"
+#include "klee/Module/KModule.h"
 #include "klee/Solver/Solver.h"
 #include "klee/Solver/SolverStats.h"
 #include "klee/Support/ErrorHandling.h"
@@ -281,7 +282,7 @@ Z3ASTHandle Z3Builder::getInitialArray(const Array *root) {
       func = Z3FuncDeclHandle(
           Z3_mk_func_decl(
               ctx,
-              Z3_mk_string_symbol(ctx, mockDeterministicSource->name.c_str()),
+              Z3_mk_string_symbol(ctx, mockDeterministicSource->kFunction->function->getName().str().c_str()),
               num_args, argsSort.data(), retValSort),
           ctx);
       array_expr =

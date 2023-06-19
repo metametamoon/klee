@@ -6541,17 +6541,17 @@ void Executor::executeMakeMock(ExecutionState &state, KInstruction *target,
     klee_error("klee_make_mock is not allowed when mock strategy is none");
     break;
   case MockStrategy::Naive:
-    source = SourceBuilder::mockNaive();
+    source = SourceBuilder::makeSymbolic(name, updateNameVersion(state, name));
     break;
   case MockStrategy::Deterministic:
     std::vector<ref<Expr>> args(kf->numArgs);
     for (size_t i = 0; i < kf->numArgs; i++) {
       args[i] = getArgumentCell(state, kf, i).value;
     }
-    source = SourceBuilder::mockDeterministic(name, args, width);
+    source = SourceBuilder::mockDeterministic(kmodule.get(), kf, args);
     break;
   }
-  executeMakeSymbolic(state, mo, type, name, source, true);
+  executeMakeSymbolic(state, mo, type, source, true);
   const ObjectState *os = state.addressSpace.findObject(mo->id).second;
   auto result = os->read(0, width);
   bindLocal(target, state, result);
