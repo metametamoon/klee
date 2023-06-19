@@ -161,10 +161,40 @@ unsigned InstructionSource::computeHash() {
   return hashValue;
 }
 
-MockDeterministicSource::MockDeterministicSource(std::string _name,
-                                                 std::vector<ref<Expr>> _args,
-                                                 unsigned _returnTypeWidth)
-    : name(std::move(_name)), args(std::move(_args)),
-      returnTypeWidth(_returnTypeWidth) {}
+unsigned MockDeterministicSource::computeHash() {
+  unsigned res = getKind() * SymbolicSource::MAGIC_HASH_CONSTANT;
+  res = (res * SymbolicSource::MAGIC_HASH_CONSTANT) +
+        kModule->functionIDMap.at(kFunction->function);
+  for (const auto &arg : args) {
+    res = (res * SymbolicSource::MAGIC_HASH_CONSTANT) + arg->hash();
+  }
+  return res;
+}
+
+int MockDeterministicSource::internalCompare(const SymbolicSource &b) const {
+  if (getKind() != b.getKind()) {
+    return getKind() < b.getKind() ? -1 : 1;
+  }
+  const auto &mdb = static_cast<const MockDeterministicSource &>(b);
+  unsigned funcID = kModule->functionIDMap.at(kFunction->function);
+  unsigned bFuncID = mdb.kModule->functionIDMap.at(mdb.kFunction->function);
+  if (funcID != bFuncID) {
+    return funcID < bFuncID ? -1 : 1;
+  }
+  assert(args.size() == mdb.args.size() &&
+         "the same functions should have the same arguments number");
+  for (unsigned i = 0; i < args.size(); i++) {
+    if (!args[i]->equals(*mdb.args[i])) {
+      return args[i]->compare(*mdb.args[i]);
+    }
+  }
+  return 0;
+}
+
+MockDeterministicSource::MockDeterministicSource(KModule *_kModule,
+                                                 KFunction *_kFunction,
+                                                 std::vector<ref<Expr>> _args)
+    : MockSource(_kFunction), kModule(_kModule), args(std::move(_args)) {
+}
 
 } // namespace klee

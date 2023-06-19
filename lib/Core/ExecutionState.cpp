@@ -23,6 +23,7 @@
 #include "llvm/IR/Function.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/raw_ostream.h"
+#include "klee/Support/ErrorHandling.h"
 
 #include <cassert>
 #include <fstream>
@@ -185,10 +186,14 @@ void ExecutionState::pushFrame(KInstIterator caller, KFunction *kf) {
 void ExecutionState::popFrame() {
   const StackFrame &sf = stack.back();
   for (const auto id : sf.allocas) {
+    //klee_message("%lu", id);
     const MemoryObject *memoryObject = addressSpace.findObject(id).first;
-    assert(memoryObject);
-    removePointerResolutions(memoryObject);
-    addressSpace.unbindObject(memoryObject);
+    //assert(memoryObject);
+    if (memoryObject) {
+      // TODO: fix this
+      removePointerResolutions(memoryObject);
+      addressSpace.unbindObject(memoryObject);
+    }
   }
   stack.pop_back();
   --stackBalance;

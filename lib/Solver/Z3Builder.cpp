@@ -13,6 +13,7 @@
 #include "klee/ADT/Bits.h"
 #include "klee/Expr/Expr.h"
 #include "klee/Expr/SymbolicSource.h"
+#include "klee/Module/KModule.h"
 #include "klee/Solver/Solver.h"
 #include "klee/Solver/SolverStats.h"
 #include "klee/Support/ErrorHandling.h"
@@ -276,7 +277,7 @@ Z3ASTHandle Z3Builder::getInitialArray(const Array *root) {
       func = Z3FuncDeclHandle(
           Z3_mk_func_decl(
               ctx,
-              Z3_mk_string_symbol(ctx, mockDeterministicSource->name.c_str()),
+              Z3_mk_string_symbol(ctx, mockDeterministicSource->kFunction->function->getName().str().c_str()),
               num_args, argsSort.data(), retValSort),
           ctx);
       array_expr =
@@ -322,10 +323,6 @@ Z3ASTHandle Z3Builder::getArrayForUpdate(const Array *root,
   if (!un) {
     return (getInitialArray(root));
   } else {
-    if (root->source->isMock()) {
-      klee_error("Updates applied to mock array %s are not allowed",
-                 root->getName().c_str());
-    }
     // FIXME: This really needs to be non-recursive.
     Z3ASTHandle un_expr;
     bool hashed = _arr_hash.lookupUpdateNodeExpr(un, un_expr);

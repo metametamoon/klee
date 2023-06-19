@@ -1827,6 +1827,7 @@ int run_klee(int argc, char **argv, char **envp) {
   Interpreter::InterpreterOptions IOpts(paths);
   IOpts.MakeConcreteSymbolic = MakeConcreteSymbolic;
   IOpts.Guidance = UseGuidedSearch;
+  IOpts.MockStrategy = MockUnlinkedStrategy;
   std::unique_ptr<Interpreter> interpreter(
       Interpreter::create(ctx, IOpts, handler.get()));
   theInterpreter = interpreter.get();

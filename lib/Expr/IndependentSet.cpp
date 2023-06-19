@@ -6,6 +6,7 @@
 #include "klee/Expr/ExprUtil.h"
 #include "klee/Expr/SymbolicSource.h"
 #include "klee/Expr/Symcrete.h"
+#include "klee/Module/KModule.h"
 #include "klee/Solver/Solver.h"
 
 #include <list>
@@ -37,7 +38,7 @@ IndependentElementSet::IndependentElementSet(ref<Expr> e) {
 
     if (ref<MockDeterministicSource> mockSource =
             dyn_cast_or_null<MockDeterministicSource>(array->source)) {
-      uninterpretedFunctions.insert(mockSource->name);
+      uninterpretedFunctions.insert(mockSource->kFunction->function->getName());
     }
 
     if (!wholeObjects.count(array)) {
