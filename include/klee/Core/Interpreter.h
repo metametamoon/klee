@@ -119,9 +119,9 @@ public:
     /// symbolic values. This is used to test the correctness of the
     /// symbolic execution on concrete programs.
     unsigned MakeConcreteSymbolic;
-    enum MockStrategy MockStrategy;
     GuidanceKind Guidance;
     nonstd::optional<SarifReport> Paths;
+    enum MockStrategy MockStrategy;
 
     InterpreterOptions(nonstd::optional<SarifReport> Paths)
         : MakeConcreteSymbolic(false), Guidance(GuidanceKind::NoGuidance),
