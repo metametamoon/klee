@@ -6226,7 +6226,7 @@ void Executor::executeMakeMock(ExecutionState &state, KInstruction *target,
     source = SourceBuilder::mockDeterministic(kmodule.get(), kf, args);
     break;
   }
-  executeMakeSymbolic(state, mo, type, source, true);
+  executeMakeSymbolic(state, mo, type, source, false);
   const ObjectState *os = state.addressSpace.findObject(mo->id).second;
   auto result = os->read(0, width);
   bindLocal(target, state, result);

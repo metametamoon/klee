@@ -38,7 +38,8 @@ IndependentElementSet::IndependentElementSet(ref<Expr> e) {
 
     if (ref<MockDeterministicSource> mockSource =
             dyn_cast_or_null<MockDeterministicSource>(array->source)) {
-      uninterpretedFunctions.insert(mockSource->kFunction->function->getName());
+      uninterpretedFunctions.insert(
+          mockSource->kFunction->function->getName().str());
     }
 
     if (!wholeObjects.count(array)) {

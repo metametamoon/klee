@@ -18,7 +18,7 @@ class Array;
 class Expr;
 class ConstantExpr;
 class KModule;
-class KFunction;
+struct KFunction;
 
 class SymbolicSource {
 protected:
