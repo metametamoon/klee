@@ -197,7 +197,6 @@ int MockDeterministicSource::internalCompare(const SymbolicSource &b) const {
 MockDeterministicSource::MockDeterministicSource(KModule *_kModule,
                                                  KFunction *_kFunction,
                                                  std::vector<ref<Expr>> _args)
-    : MockSource(_kFunction), kModule(_kModule), args(std::move(_args)) {
-}
+    : MockSource(_kFunction), kModule(_kModule), args(std::move(_args)) {}
 
 } // namespace klee
