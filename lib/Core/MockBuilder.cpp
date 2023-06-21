@@ -83,8 +83,8 @@ void MockBuilder::buildGlobalsDefinition() {
       userEntrypoint, userMainFn->getFunctionType());
   std::vector<llvm::Value *> args;
   args.reserve(userMainFn->arg_size());
-  for (size_t i = 0; i < mainFn->arg_size(); i++) {
-    args.push_back(mainFn->getArg(i));
+  for (auto it = mainFn->arg_begin(); it != mainFn->arg_end(); it++) {
+    args.push_back(it);
   }
   auto callUserMain = builder->CreateCall(userMainCallee, args);
   builder->CreateRet(callUserMain);
