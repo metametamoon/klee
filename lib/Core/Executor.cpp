@@ -525,7 +525,8 @@ Executor::setModule(std::vector<std::unique_ptr<llvm::Module>> &userModules,
 
   if (ExternalCalls == ExternalCallPolicy::All &&
       interpreterOpts.MockStrategy != MockStrategy::None) {
-    llvm::Function *mainFn = userModules.front()->getFunction(opts.MainCurrentName);
+    llvm::Function *mainFn =
+        userModules.front()->getFunction(opts.MainCurrentName);
     if (!mainFn) {
       klee_error("Entry function '%s' not found in module.",
                  opts.MainCurrentName.c_str());

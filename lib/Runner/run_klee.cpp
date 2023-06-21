@@ -1651,15 +1651,16 @@ int run_klee(int argc, char **argv, char **envp) {
   }
 
   std::string LibraryDir = KleeHandler::getRunTimeLibraryPath(argv[0]);
-  Interpreter::ModuleOptions Opts(LibraryDir.c_str(), EntryPoint, opt_suffix,
-                                  /*MainCurrentName=*/EntryPoint,
-                                  /*MainNameAfterMock=*/"__klee_mock_wrapped_main",
-                                  /*Optimize=*/OptimizeModule,
-                                  /*Simplify*/ SimplifyModule,
-                                  /*CheckDivZero=*/CheckDivZero,
-                                  /*CheckOvershift=*/CheckOvershift,
-                                  /*WithFPRuntime=*/WithFPRuntime,
-                                  /*WithPOSIXRuntime=*/WithPOSIXRuntime);
+  Interpreter::ModuleOptions Opts(
+      LibraryDir.c_str(), EntryPoint, opt_suffix,
+      /*MainCurrentName=*/EntryPoint,
+      /*MainNameAfterMock=*/"__klee_mock_wrapped_main",
+      /*Optimize=*/OptimizeModule,
+      /*Simplify*/ SimplifyModule,
+      /*CheckDivZero=*/CheckDivZero,
+      /*CheckOvershift=*/CheckOvershift,
+      /*WithFPRuntime=*/WithFPRuntime,
+      /*WithPOSIXRuntime=*/WithPOSIXRuntime);
 
   std::string redefinitions;
   llvm::raw_string_ostream o_redefinitions(redefinitions);
@@ -1873,9 +1874,9 @@ int run_klee(int argc, char **argv, char **envp) {
   }
 
   Opts.MainCurrentName = initialMainFn->getName().str();
-  auto finalModule =
-      interpreter->setModule(loadedUserModules, loadedLibsModules, Opts,
-                             mainModuleFunctions, std::move(origInfos), ignoredExternals);
+  auto finalModule = interpreter->setModule(
+      loadedUserModules, loadedLibsModules, Opts, mainModuleFunctions,
+      std::move(origInfos), ignoredExternals);
   Function *mainFn = finalModule->getFunction(EntryPoint);
   if (!mainFn) {
     klee_error("Entry function '%s' not found in module.", EntryPoint.c_str());
