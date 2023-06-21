@@ -1611,7 +1611,7 @@ int main(int argc, char **argv, char **envp) {
   llvm::Module *mainModule = loadedUserModules.front().get();
   llvm::Function *initialMainFn = mainModule->getFunction(EntryPoint);
   if (!initialMainFn) {
-    klee_error("Unable to find entrypoint function %s", EntryPoint.c_str());
+    klee_error("Entry function '%s' not found in module.", EntryPoint.c_str());
   }
   std::unique_ptr<InstructionInfoTable> origInfos;
   std::unique_ptr<llvm::raw_fd_ostream> assemblyFS;
