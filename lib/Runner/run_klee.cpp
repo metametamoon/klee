@@ -1872,7 +1872,7 @@ int run_klee(int argc, char **argv, char **envp) {
     ignoredExternals.insert("syscall");
   }
 
-  Opts.MainCurrentName = initialMainFn->getName();
+  Opts.MainCurrentName = initialMainFn->getName().str();
   auto finalModule =
       interpreter->setModule(loadedUserModules, loadedLibsModules, Opts,
                              mainModuleFunctions, std::move(origInfos), ignoredExternals);
