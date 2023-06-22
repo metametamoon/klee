@@ -1590,10 +1590,6 @@ int run_klee(int argc, char **argv, char **envp) {
   }
 
   llvm::Module *mainModule = loadedUserModules.front().get();
-  llvm::Function *initialMainFn = mainModule->getFunction(EntryPoint);
-  if (!initialMainFn) {
-    klee_error("Entry function '%s' not found in module.", EntryPoint.c_str());
-  }
   std::unique_ptr<InstructionInfoTable> origInfos;
   std::unique_ptr<llvm::raw_fd_ostream> assemblyFS;
 
@@ -1633,6 +1629,11 @@ int run_klee(int argc, char **argv, char **envp) {
     klee_warning("Module and host target triples do not match: '%s' != '%s'\n"
                  "This may cause unexpected crashes or assertion violations.",
                  module_triple.c_str(), host_triple.c_str());
+
+  llvm::Function *initialMainFn = mainModule->getFunction(EntryPoint);
+  if (!initialMainFn) {
+    klee_error("Entry function '%s' not found in module.", EntryPoint.c_str());
+  }
 
   // Detect architecture
   std::string opt_suffix = "64"; // Fall back to 64bit
