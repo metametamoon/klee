@@ -30,6 +30,9 @@ public:
   static ref<SymbolicSource> value(const llvm::Value &_allocSite, int _index,
                                    KModule *km);
   static ref<SymbolicSource> irreproducible(const std::string &name);
+  static ref<SymbolicSource> mockNaive(KModule *kModule,
+                                       KFunction *kFunction,
+                                       unsigned version);
   static ref<SymbolicSource> mockDeterministic(KModule *kModule,
                                                KFunction *kFunction,
                                                std::vector<ref<Expr>> args);

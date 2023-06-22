@@ -1,14 +1,10 @@
 #include "klee/Expr/SymbolicSource.h"
 #include "klee/Expr/Expr.h"
 
-#include "klee/Expr/Expr.h"
 #include "klee/Expr/ExprPPrinter.h"
 #include "klee/Expr/ExprUtil.h"
 #include "klee/Module/KInstruction.h"
 #include "klee/Module/KModule.h"
-
-#include "llvm/IR/BasicBlock.h"
-#include "llvm/IR/Function.h"
 
 #include <vector>
 
@@ -161,8 +157,36 @@ unsigned InstructionSource::computeHash() {
   return hashValue;
 }
 
+unsigned MockNaiveSource::computeHash() {
+  unsigned res = (getKind() * SymbolicSource::MAGIC_HASH_CONSTANT) + version;
+  unsigned funcID = kModule->functionIDMap.at(kFunction->function);
+  res = (res * SymbolicSource::MAGIC_HASH_CONSTANT) + funcID;
+  return res;
+}
+
+int MockNaiveSource::internalCompare(const SymbolicSource &b) const {
+  if (getKind() != b.getKind()) {
+    return getKind() < b.getKind() ? -1 : 1;
+  }
+  const MockNaiveSource &mnb = static_cast<const MockNaiveSource &>(b);
+  if (version != mnb.version) {
+    return version < mnb.version ? -1 : 1;
+  }
+  unsigned funcID = kModule->functionIDMap.at(kFunction->function);
+  unsigned bFuncID = mnb.kModule->functionIDMap.at(mnb.kFunction->function);
+  if (funcID != bFuncID) {
+    return funcID < bFuncID ? -1 : 1;
+  }
+  return 0;
+}
+
+MockDeterministicSource::MockDeterministicSource(KModule *_kModule,
+                                                 KFunction *_kFunction,
+                                                 std::vector<ref<Expr>> _args)
+    : MockSource(_kModule, _kFunction), args(std::move(_args)) {}
+
 unsigned MockDeterministicSource::computeHash() {
-  unsigned res = getKind() * SymbolicSource::MAGIC_HASH_CONSTANT;
+  unsigned res = getKind();
   res = (res * SymbolicSource::MAGIC_HASH_CONSTANT) +
         kModule->functionIDMap.at(kFunction->function);
   for (const auto &arg : args) {
@@ -175,7 +199,8 @@ int MockDeterministicSource::internalCompare(const SymbolicSource &b) const {
   if (getKind() != b.getKind()) {
     return getKind() < b.getKind() ? -1 : 1;
   }
-  const auto &mdb = static_cast<const MockDeterministicSource &>(b);
+  const MockDeterministicSource &mdb =
+      static_cast<const MockDeterministicSource &>(b);
   unsigned funcID = kModule->functionIDMap.at(kFunction->function);
   unsigned bFuncID = mdb.kModule->functionIDMap.at(mdb.kFunction->function);
   if (funcID != bFuncID) {
@@ -190,10 +215,5 @@ int MockDeterministicSource::internalCompare(const SymbolicSource &b) const {
   }
   return 0;
 }
-
-MockDeterministicSource::MockDeterministicSource(KModule *_kModule,
-                                                 KFunction *_kFunction,
-                                                 std::vector<ref<Expr>> _args)
-    : MockSource(_kFunction), kModule(_kModule), args(std::move(_args)) {}
 
 } // namespace klee

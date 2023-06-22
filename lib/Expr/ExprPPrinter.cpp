@@ -408,6 +408,16 @@ public:
          << " " << s->index;
     } else if (auto s = dyn_cast<IrreproducibleSource>(source)) {
       PC << s->name;
+    } else if (auto s = dyn_cast<MockNaiveSource>(source)) {
+      PC << s->kFunction->getName() << ' ' << s->version;
+    } else if (auto s = dyn_cast<MockDeterministicSource>(source)) {
+      PC << s->kFunction->getName() << ' ';
+      PC << " ( ";
+      for (const auto &it : s->args) {
+        print(it, PC);
+        PC << ' ';
+      }
+      PC << ')';
     } else {
       assert(0 && "Not implemented");
     }
