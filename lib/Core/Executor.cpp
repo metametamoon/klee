@@ -6544,7 +6544,8 @@ void Executor::executeMakeMock(ExecutionState &state, KInstruction *target,
     klee_error("klee_make_mock is not allowed when mock strategy is none");
     break;
   case MockStrategy::Naive:
-    source = SourceBuilder::makeSymbolic(name, updateNameVersion(state, name));
+    source = SourceBuilder::mockNaive(kmodule.get(), kf,
+                                      updateNameVersion(state, name));
     break;
   case MockStrategy::Deterministic:
     std::vector<ref<Expr>> args(kf->numArgs);

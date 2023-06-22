@@ -44,6 +44,7 @@ public:
     Instruction,
     Argument,
     Irreproducible,
+    MockNaive,
     MockDeterministic
   };
 
@@ -366,14 +367,37 @@ public:
 
 class MockSource : public SymbolicSource {
 public:
+  KModule *kModule;
   KFunction *kFunction;
-  explicit MockSource(KFunction *_kFunction) : kFunction(_kFunction) {}
+  MockSource(KModule *_kModule, KFunction *_kFunction)
+      : kModule(_kModule), kFunction(_kFunction) {}
+};
+
+class MockNaiveSource : public MockSource {
+public:
+  const unsigned version;
+
+  MockNaiveSource(KModule *_kModule, KFunction *_kFunction, unsigned _version)
+      : MockSource(_kModule, _kFunction), version(_version) {}
+
+  Kind getKind() const override { return Kind::MockNaive; }
+  std::string getName() const override { return "mockNaive"; }
+
+  static bool classof(const SymbolicSource *S) {
+    return S->getKind() == Kind::MockNaive;
+  }
+
+  unsigned computeHash() override;
+
+  int internalCompare(const SymbolicSource &b) const override;
 };
 
 class MockDeterministicSource : public MockSource {
 public:
-  KModule *kModule;
   std::vector<ref<Expr>> args;
+
+  MockDeterministicSource(KModule *_kModule, KFunction *_kFunction,
+                          std::vector<ref<Expr>> _args);
 
   Kind getKind() const override { return Kind::MockDeterministic; }
   std::string getName() const override { return "mockDeterministic"; }
@@ -382,12 +406,9 @@ public:
     return S->getKind() == Kind::MockDeterministic;
   }
 
-  virtual unsigned computeHash() override;
+  unsigned computeHash() override;
 
-  virtual int internalCompare(const SymbolicSource &b) const override;
-
-  MockDeterministicSource(KModule *_kModule, KFunction *_kFunction,
-                          std::vector<ref<Expr>> _args);
+  int internalCompare(const SymbolicSource &b) const override;
 };
 
 } // namespace klee

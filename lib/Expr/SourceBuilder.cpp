@@ -88,6 +88,14 @@ ref<SymbolicSource> SourceBuilder::irreproducible(const std::string &name) {
   return r;
 }
 
+ref<SymbolicSource> SourceBuilder::mockNaive(KModule *kModule,
+                                             KFunction *kFunction,
+                                             unsigned int version) {
+  ref<SymbolicSource> r(new MockNaiveSource(kModule, kFunction, version));
+  r->computeHash();
+  return r;
+}
+
 ref<SymbolicSource>
 SourceBuilder::mockDeterministic(KModule *kModule, KFunction *kFunction,
                                  std::vector<ref<Expr>> args) {
