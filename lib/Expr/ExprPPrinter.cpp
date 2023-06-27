@@ -414,13 +414,15 @@ public:
     } else if (auto s = dyn_cast<IrreproducibleSource>(source)) {
       PC << s->name;
     } else if (auto s = dyn_cast<MockNaiveSource>(source)) {
-      PC << s->kFunction->getName() << ' ' << s->version;
+      PC << s->km->functionMap.at(&s->function)->getName() << ' ' << s->version;
     } else if (auto s = dyn_cast<MockDeterministicSource>(source)) {
-      PC << s->kFunction->getName() << ' ';
-      PC << " ( ";
-      for (const auto &it : s->args) {
-        print(it, PC);
-        PC << ' ';
+      PC << s->km->functionMap.at(&s->function)->getName() << ' ';
+      PC << "(";
+      for (unsigned i = 0; i < s->args.size(); i++) {
+        print(s->args[i], PC);
+        if (i != s->args.size() - 1) {
+          PC << " ";
+        }
       }
       PC << ')';
     } else {

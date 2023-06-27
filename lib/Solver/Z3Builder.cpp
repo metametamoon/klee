@@ -283,7 +283,7 @@ Z3ASTHandle Z3Builder::getInitialArray(const Array *root) {
           Z3_mk_func_decl(
               ctx,
               Z3_mk_string_symbol(
-                  ctx, mockDeterministicSource->kFunction->function->getName()
+                  ctx, mockDeterministicSource->function.getName()
                            .str()
                            .c_str()),
               num_args, argsSort.data(), retValSort),

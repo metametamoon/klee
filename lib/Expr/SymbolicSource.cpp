@@ -165,8 +165,9 @@ unsigned InstructionSource::computeHash() {
 
 unsigned MockNaiveSource::computeHash() {
   unsigned res = (getKind() * SymbolicSource::MAGIC_HASH_CONSTANT) + version;
-  unsigned funcID = kModule->functionIDMap.at(kFunction->function);
+  unsigned funcID = km->functionIDMap.at(&function);
   res = (res * SymbolicSource::MAGIC_HASH_CONSTANT) + funcID;
+  hashValue = res;
   return res;
 }
 
@@ -178,26 +179,27 @@ int MockNaiveSource::internalCompare(const SymbolicSource &b) const {
   if (version != mnb.version) {
     return version < mnb.version ? -1 : 1;
   }
-  unsigned funcID = kModule->functionIDMap.at(kFunction->function);
-  unsigned bFuncID = mnb.kModule->functionIDMap.at(mnb.kFunction->function);
+  unsigned funcID = km->functionIDMap.at(&function);
+  unsigned bFuncID = mnb.km->functionIDMap.at(&mnb.function);
   if (funcID != bFuncID) {
     return funcID < bFuncID ? -1 : 1;
   }
   return 0;
 }
 
-MockDeterministicSource::MockDeterministicSource(KModule *_kModule,
-                                                 KFunction *_kFunction,
-                                                 std::vector<ref<Expr>> _args)
-    : MockSource(_kModule, _kFunction), args(std::move(_args)) {}
+MockDeterministicSource::MockDeterministicSource(const KModule *km,
+                                                 const llvm::Function &function,
+                                                 const std::vector<ref<Expr>> &_args)
+    : MockSource(km, function), args(_args) {}
 
 unsigned MockDeterministicSource::computeHash() {
   unsigned res = getKind();
   res = (res * SymbolicSource::MAGIC_HASH_CONSTANT) +
-        kModule->functionIDMap.at(kFunction->function);
+        km->functionIDMap.at(&function);
   for (const auto &arg : args) {
     res = (res * SymbolicSource::MAGIC_HASH_CONSTANT) + arg->hash();
   }
+  hashValue = res;
   return res;
 }
 
@@ -207,16 +209,16 @@ int MockDeterministicSource::internalCompare(const SymbolicSource &b) const {
   }
   const MockDeterministicSource &mdb =
       static_cast<const MockDeterministicSource &>(b);
-  unsigned funcID = kModule->functionIDMap.at(kFunction->function);
-  unsigned bFuncID = mdb.kModule->functionIDMap.at(mdb.kFunction->function);
+  unsigned funcID = km->functionIDMap.at(&function);
+  unsigned bFuncID = mdb.km->functionIDMap.at(&mdb.function);
   if (funcID != bFuncID) {
     return funcID < bFuncID ? -1 : 1;
   }
   assert(args.size() == mdb.args.size() &&
          "the same functions should have the same arguments number");
   for (unsigned i = 0; i < args.size(); i++) {
-    if (!args[i]->equals(*mdb.args[i])) {
-      return args[i]->compare(*mdb.args[i]);
+    if (args[i] != mdb.args[i]) {
+      return args[i] < mdb.args[i] ? -1 : 1;
     }
   }
   return 0;
