@@ -730,6 +730,9 @@ public:
             std::unique_ptr<InstructionInfoTable> origInfos,
             const std::set<std::string> &ignoredExternals) override;
 
+  std::map<std::string, llvm::Type *>
+  getAllExternals(const std::set<std::string> &ignoredExternals) override;
+
   void useSeeds(const std::vector<struct KTest *> *seeds) override {
     usingSeeds = seeds;
   }

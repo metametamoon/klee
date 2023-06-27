@@ -373,7 +373,8 @@ public:
       : km(_km), function(_function) {}
 
   static bool classof(const SymbolicSource *S) {
-    return S->getKind() == Kind::MockNaive || S->getKind() == Kind::MockDeterministic;
+    return S->getKind() == Kind::MockNaive ||
+           S->getKind() == Kind::MockDeterministic;
   }
 };
 

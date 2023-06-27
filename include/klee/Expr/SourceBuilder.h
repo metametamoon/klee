@@ -31,10 +31,11 @@ public:
                                    KModule *km);
   static ref<SymbolicSource> irreproducible(const std::string &name);
   static ref<SymbolicSource> mockNaive(const KModule *kModule,
-                                               const llvm::Function &kFunction, unsigned version);
-  static ref<SymbolicSource> mockDeterministic(const KModule *kModule,
-                                               const llvm::Function &kFunction,
-                                               const std::vector<ref<Expr>> &args);
+                                       const llvm::Function &kFunction,
+                                       unsigned version);
+  static ref<SymbolicSource>
+  mockDeterministic(const KModule *kModule, const llvm::Function &kFunction,
+                    const std::vector<ref<Expr>> &args);
 };
 
 }; // namespace klee

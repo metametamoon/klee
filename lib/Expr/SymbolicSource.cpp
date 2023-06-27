@@ -187,9 +187,9 @@ int MockNaiveSource::internalCompare(const SymbolicSource &b) const {
   return 0;
 }
 
-MockDeterministicSource::MockDeterministicSource(const KModule *km,
-                                                 const llvm::Function &function,
-                                                 const std::vector<ref<Expr>> &_args)
+MockDeterministicSource::MockDeterministicSource(
+    const KModule *km, const llvm::Function &function,
+    const std::vector<ref<Expr>> &_args)
     : MockSource(km, function), args(_args) {}
 
 unsigned MockDeterministicSource::computeHash() {
