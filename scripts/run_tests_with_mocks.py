@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 # This script builds executable file using initial bitcode file and artifacts produced by KLEE.
 # To run the script provide all the arguments you want to pass to clang for building executable.
