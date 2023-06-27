@@ -609,7 +609,7 @@ SourceResult ParserImpl::ParseMockNaiveSource() {
   auto versionExpr = ParseNumber(64).get();
   auto version = dyn_cast<ConstantExpr>(versionExpr);
   assert(version);
-  return SourceBuilder::mockNaive(km, kf, version->getZExtValue());
+  return SourceBuilder::mockNaive(km, *kf->function, version->getZExtValue());
 }
 
 SourceResult ParserImpl::ParseMockDeterministicSource() {
@@ -626,7 +626,8 @@ SourceResult ParserImpl::ParseMockDeterministicSource() {
     }
     args.push_back(expr.get());
   }
-  return SourceBuilder::mockDeterministic(km, kf, args);
+  ConsumeRParen();
+  return SourceBuilder::mockDeterministic(km, *kf->function, args);
 }
 
 /// ParseCommandDecl - Parse a command declaration. The lexer should

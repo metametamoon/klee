@@ -363,18 +363,23 @@ public:
 
 class MockSource : public SymbolicSource {
 public:
-  KModule *kModule;
-  KFunction *kFunction;
-  MockSource(KModule *_kModule, KFunction *_kFunction)
-      : kModule(_kModule), kFunction(_kFunction) {}
+  const KModule *km;
+  const llvm::Function &function;
+  MockSource(const KModule *_km, const llvm::Function &_function)
+      : km(_km), function(_function) {}
+
+  static bool classof(const SymbolicSource *S) {
+    return S->getKind() == Kind::MockNaive || S->getKind() == Kind::MockDeterministic;
+  }
 };
 
 class MockNaiveSource : public MockSource {
 public:
   const unsigned version;
 
-  MockNaiveSource(KModule *_kModule, KFunction *_kFunction, unsigned _version)
-      : MockSource(_kModule, _kFunction), version(_version) {}
+  MockNaiveSource(const KModule *km, const llvm::Function &function,
+                  unsigned _version)
+      : MockSource(km, function), version(_version) {}
 
   Kind getKind() const override { return Kind::MockNaive; }
   std::string getName() const override { return "mockNaive"; }
@@ -390,10 +395,10 @@ public:
 
 class MockDeterministicSource : public MockSource {
 public:
-  std::vector<ref<Expr>> args;
+  const std::vector<ref<Expr>> args;
 
-  MockDeterministicSource(KModule *_kModule, KFunction *_kFunction,
-                          std::vector<ref<Expr>> _args);
+  MockDeterministicSource(const KModule *_km, const llvm::Function &_function,
+                          const std::vector<ref<Expr>> &_args);
 
   Kind getKind() const override { return Kind::MockDeterministic; }
   std::string getName() const override { return "mockDeterministic"; }

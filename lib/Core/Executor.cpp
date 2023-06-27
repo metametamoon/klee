@@ -6219,7 +6219,7 @@ void Executor::executeMakeMock(ExecutionState &state, KInstruction *target,
     klee_error("klee_make_mock is not allowed when mock strategy is none");
     break;
   case MockStrategy::Naive:
-    source = SourceBuilder::mockNaive(kmodule.get(), kf,
+    source = SourceBuilder::mockNaive(kmodule.get(), *kf->function,
                                       updateNameVersion(state, name));
     break;
   case MockStrategy::Deterministic:
@@ -6227,7 +6227,7 @@ void Executor::executeMakeMock(ExecutionState &state, KInstruction *target,
     for (size_t i = 0; i < kf->numArgs; i++) {
       args[i] = getArgumentCell(state, kf, i).value;
     }
-    source = SourceBuilder::mockDeterministic(kmodule.get(), kf, args);
+    source = SourceBuilder::mockDeterministic(kmodule.get(), *kf->function, args);
     break;
   }
   executeMakeSymbolic(state, mo, type, source, false);
