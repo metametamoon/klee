@@ -561,41 +561,14 @@ Executor::setModule(std::vector<std::unique_ptr<llvm::Module>> &userModules,
   if (ExternalCalls == ExternalCallPolicy::All &&
       interpreterOpts.MockStrategy != MockStrategy::None) {
     // TODO: move this to function
-    std::map<std::string, llvm::Type *> externals;
-    for (const auto &f : kmodule->module->functions()) {
-      if (f.isDeclaration() && !f.use_empty() &&
-          !ignoredExternals.count(f.getName().str()))
-        externals.insert(std::make_pair(f.getName(), f.getFunctionType()));
-    }
-
-    for (const auto &global : kmodule->module->globals()) {
-      if (global.isDeclaration() &&
-          !ignoredExternals.count(global.getName().str()))
-        externals.insert(
-            std::make_pair(global.getName(), global.getValueType()));
-    }
-
-    for (const auto &alias : kmodule->module->aliases()) {
-      auto it = externals.find(alias.getName().str());
-      if (it != externals.end()) {
-        externals.erase(it);
-      }
-    }
-
-    for (const auto &e : externals) {
-      klee_message("Mocking external %s %s",
-                   e.second->isFunctionTy() ? "function" : "variable",
-                   e.first.c_str());
-    }
-
+    std::map<std::string, llvm::Type *> externals =
+        getAllExternals(ignoredExternals);
     MockBuilder builder(kmodule->module.get(), opts.MainCurrentName,
                         opts.MainNameAfterMock, externals);
     std::unique_ptr<llvm::Module> mockModule = builder.build();
-
     if (!mockModule) {
       klee_error("Unable to generate mocks");
     }
-
     // TODO: change this to bc file
     std::unique_ptr<llvm::raw_fd_ostream> f(
         interpreterHandler->openOutputFile("externals.ll"));
@@ -668,6 +641,37 @@ Executor::setModule(std::vector<std::unique_ptr<llvm::Module>> &userModules,
       new TargetCalculator(*kmodule.get(), *codeGraphDistance.get()));
 
   return kmodule->module.get();
+}
+
+std::map<std::string, llvm::Type *>
+Executor::getAllExternals(const std::set<std::string> &ignoredExternals) {
+  std::map<std::string, llvm::Type *> externals;
+  for (const auto &f : kmodule->module->functions()) {
+    if (f.isDeclaration() && !f.use_empty() &&
+        !ignoredExternals.count(f.getName().str()))
+      // NOTE: here we detect all the externals, even linked.
+      externals.insert(std::make_pair(f.getName(), f.getFunctionType()));
+  }
+
+  for (const auto &global : kmodule->module->globals()) {
+    if (global.isDeclaration() &&
+        !ignoredExternals.count(global.getName().str()))
+      externals.insert(std::make_pair(global.getName(), global.getValueType()));
+  }
+
+  for (const auto &alias : kmodule->module->aliases()) {
+    auto it = externals.find(alias.getName().str());
+    if (it != externals.end()) {
+      externals.erase(it);
+    }
+  }
+
+  for (const auto &e : externals) {
+    klee_message("Mocking external %s %s",
+                 e.second->isFunctionTy() ? "function" : "variable",
+                 e.first.c_str());
+  }
+  return externals;
 }
 
 Executor::~Executor() {
@@ -6227,7 +6231,8 @@ void Executor::executeMakeMock(ExecutionState &state, KInstruction *target,
     for (size_t i = 0; i < kf->numArgs; i++) {
       args[i] = getArgumentCell(state, kf, i).value;
     }
-    source = SourceBuilder::mockDeterministic(kmodule.get(), *kf->function, args);
+    source =
+        SourceBuilder::mockDeterministic(kmodule.get(), *kf->function, args);
     break;
   }
   executeMakeSymbolic(state, mo, type, source, false);

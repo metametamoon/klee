@@ -32,6 +32,7 @@ class BasicBlock;
 class Function;
 class LLVMContext;
 class Module;
+class Type;
 class raw_ostream;
 class raw_fd_ostream;
 } // namespace llvm
@@ -156,6 +157,9 @@ public:
             const std::vector<std::string> &mainModuleFunctions,
             std::unique_ptr<InstructionInfoTable> origInfos,
             const std::set<std::string> &ignoredExternals) = 0;
+
+  virtual std::map<std::string, llvm::Type *>
+  getAllExternals(const std::set<std::string> &ignoredExternals) = 0;
 
   // supply a tree stream writer which the interpreter will use
   // to record the concrete path (as a stream of '0' and '1' bytes).

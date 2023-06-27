@@ -16,38 +16,54 @@ MockBuilder::MockBuilder(const llvm::Module *initModule,
       userEntrypoint(std::move(userEntrypoint)) {}
 
 std::unique_ptr<llvm::Module> MockBuilder::build() {
+  initMockModule();
+  buildMockMain();
+  buildExternalFunctionsDefinitions();
+  return std::move(mockModule);
+}
+
+void MockBuilder::initMockModule() {
   mockModule = std::make_unique<llvm::Module>(userModule->getName().str() +
                                                   "__klee_externals",
                                               userModule->getContext());
   mockModule->setTargetTriple(userModule->getTargetTriple());
   mockModule->setDataLayout(userModule->getDataLayout());
   builder = std::make_unique<llvm::IRBuilder<>>(mockModule->getContext());
+}
 
-  // Set up entrypoint in new module. Here we'll define globals and then call
-  // user's entrypoint.
-  llvm::Function *mainFn = userModule->getFunction(userEntrypoint);
-  if (!mainFn) {
+// Set up entrypoint in new module. Here we'll define external globals and then
+// call user's entrypoint.
+void MockBuilder::buildMockMain() {
+  llvm::Function *userMainFn = userModule->getFunction(userEntrypoint);
+  if (!userMainFn) {
     klee_error("Entry function '%s' not found in module.",
                userEntrypoint.c_str());
   }
-  mockModule->getOrInsertFunction(mockEntrypoint, mainFn->getFunctionType(),
-                                  mainFn->getAttributes());
-
-  buildGlobalsDefinition();
-  buildFunctionsDefinition();
-  return std::move(mockModule);
-}
-
-void MockBuilder::buildGlobalsDefinition() {
-  llvm::Function *mainFn = mockModule->getFunction(mockEntrypoint);
-  if (!mainFn) {
+  mockModule->getOrInsertFunction(mockEntrypoint, userMainFn->getFunctionType(),
+                                  userMainFn->getAttributes());
+  llvm::Function *mockMainFn = mockModule->getFunction(mockEntrypoint);
+  if (!mockMainFn) {
     klee_error("Entry function '%s' not found in module.",
                mockEntrypoint.c_str());
   }
   auto globalsInitBlock =
-      llvm::BasicBlock::Create(mockModule->getContext(), "entry", mainFn);
+      llvm::BasicBlock::Create(mockModule->getContext(), "entry", mockMainFn);
   builder->SetInsertPoint(globalsInitBlock);
+  // Define all the external globals
+  buildExternalGlobalsDefinitions();
 
+  auto userMainCallee = mockModule->getOrInsertFunction(
+      userEntrypoint, userMainFn->getFunctionType());
+  std::vector<llvm::Value *> args;
+  args.reserve(userMainFn->arg_size());
+  for (auto it = mockMainFn->arg_begin(); it != mockMainFn->arg_end(); it++) {
+    args.push_back(it);
+  }
+  auto callUserMain = builder->CreateCall(userMainCallee, args);
+  builder->CreateRet(callUserMain);
+}
+
+void MockBuilder::buildExternalGlobalsDefinitions() {
   for (const auto &it : externals) {
     if (it.second->isFunctionTy()) {
       continue;
@@ -73,24 +89,9 @@ void MockBuilder::buildGlobalsDefinition() {
     buildCallKleeMakeSymbol("klee_make_symbolic", global, type,
                             "@obj_" + extName);
   }
-
-  auto *userMainFn = userModule->getFunction(userEntrypoint);
-  if (!userMainFn) {
-    klee_error("Entry function '%s' not found in module.",
-               userEntrypoint.c_str());
-  }
-  auto userMainCallee = mockModule->getOrInsertFunction(
-      userEntrypoint, userMainFn->getFunctionType());
-  std::vector<llvm::Value *> args;
-  args.reserve(userMainFn->arg_size());
-  for (auto it = mainFn->arg_begin(); it != mainFn->arg_end(); it++) {
-    args.push_back(it);
-  }
-  auto callUserMain = builder->CreateCall(userMainCallee, args);
-  builder->CreateRet(callUserMain);
 }
 
-void MockBuilder::buildFunctionsDefinition() {
+void MockBuilder::buildExternalFunctionsDefinitions() {
   for (const auto &it : externals) {
     if (!it.second->isFunctionTy()) {
       continue;

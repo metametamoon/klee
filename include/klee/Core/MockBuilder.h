@@ -18,8 +18,10 @@ private:
 
   const std::string mockEntrypoint, userEntrypoint;
 
-  void buildGlobalsDefinition();
-  void buildFunctionsDefinition();
+  void initMockModule();
+  void buildMockMain();
+  void buildExternalGlobalsDefinitions();
+  void buildExternalFunctionsDefinitions();
   void buildCallKleeMakeSymbol(const std::string &klee_function_name,
                                llvm::Value *source, llvm::Type *type,
                                const std::string &symbol_name);

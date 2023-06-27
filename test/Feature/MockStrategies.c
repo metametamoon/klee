@@ -18,7 +18,7 @@
 // CHECK-3: KLEE: ERROR: Deterministic mocks can be generated with Z3 solver only.
 
 // RUN: rm -rf %t.klee-out-4
-// RUN: %klee --output-dir=%t.klee-out-4 --use-independent-solver=false --solver-backend=z3 --external-calls=all --mock-strategy=deterministic %t.bc 2>&1 | FileCheck %s -check-prefix=CHECK-4
+// RUN: %klee --output-dir=%t.klee-out-4 --solver-backend=z3 --external-calls=all --mock-strategy=deterministic %t.bc 2>&1 | FileCheck %s -check-prefix=CHECK-4
 // CHECK-4: KLEE: done: completed paths = 2
 // CHECK-4: KLEE: done: generated tests = 2
 
