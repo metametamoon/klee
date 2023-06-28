@@ -1,3 +1,4 @@
+// REQUIRES: geq-llvm-11.0
 // RUN: %clang %s -emit-llvm -g %O0opt -c -o %t.bc
 // RUN: rm -rf %t.klee-out
 // RUN: %klee --output-dir=%t.klee-out --external-calls=all --mock-strategy=naive %t.bc
