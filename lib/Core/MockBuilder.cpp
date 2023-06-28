@@ -1,8 +1,13 @@
-#include "klee/Core/MockBuilder.h"
+#include "MockBuilder.h"
 
 #include "klee/Support/ErrorHandling.h"
+
+#include "klee/Support/CompilerWarning.h"
+DISABLE_WARNING_PUSH
+DISABLE_WARNING_DEPRECATED_DECLARATIONS
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Module.h"
+DISABLE_WARNING_POP
 
 #include <memory>
 

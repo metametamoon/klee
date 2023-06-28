@@ -1,8 +1,12 @@
 #ifndef KLEE_MOCKBUILDER_H
 #define KLEE_MOCKBUILDER_H
 
+#include "klee/Support/CompilerWarning.h"
+DISABLE_WARNING_PUSH
+DISABLE_WARNING_DEPRECATED_DECLARATIONS
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Module.h"
+DISABLE_WARNING_POP
 
 #include <set>
 #include <string>

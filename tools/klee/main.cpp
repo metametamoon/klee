@@ -888,10 +888,10 @@ static const char *modelledExternals[] = {
     "klee_get_valuef", "klee_get_valued", "klee_get_valuel", "klee_get_valuell",
     "klee_get_value_i32", "klee_get_value_i64", "klee_get_obj_size",
     "klee_is_symbolic", "klee_make_symbolic", "klee_make_mock",
-    "klee_mark_global", "klee_open_merge", "klee_close_merge",
-    "klee_prefer_cex", "klee_posix_prefer_cex", "klee_print_expr",
-    "klee_print_range", "klee_report_error", "klee_set_forking",
-    "klee_silent_exit", "klee_warning", "klee_warning_once", "klee_stack_trace",
+    "klee_mark_global", "klee_prefer_cex", "klee_posix_prefer_cex",
+    "klee_print_expr", "klee_print_range", "klee_report_error",
+    "klee_set_forking", "klee_silent_exit", "klee_warning", "klee_warning_once",
+    "klee_stack_trace",
 #ifdef SUPPORT_KLEE_EH_CXX
     "_klee_eh_Unwind_RaiseException_impl", "klee_eh_typeid_for",
 #endif
@@ -1219,7 +1219,7 @@ createLibCWrapper(std::vector<std::unique_ptr<llvm::Module>> &userModules,
   args.push_back(llvm::ConstantExpr::getBitCast(
       cast<llvm::Constant>(inModuleReference.getCallee()),
       ft->getParamType(0)));
-  args.push_back(&*(stub->arg_begin()));                       // argc
+  args.push_back(&*(stub->arg_begin())); // argc
   auto arg_it = stub->arg_begin();
   args.push_back(&*(++arg_it));                                // argv
   args.push_back(Constant::getNullValue(ft->getParamType(3))); // app_init
@@ -1589,10 +1589,9 @@ int main(int argc, char **argv, char **envp) {
 
   sys::SetInterruptFunction(interrupt_handle);
 
+  // Load the bytecode...
   std::string errorMsg;
   LLVMContext ctx;
-
-  // Load the bytecode...
   std::vector<std::unique_ptr<llvm::Module>> loadedUserModules;
   std::vector<std::unique_ptr<llvm::Module>> loadedLibsModules;
   if (!klee::loadFileAsOneModule(InputFile, ctx, loadedUserModules, errorMsg)) {
@@ -1652,11 +1651,6 @@ int main(int argc, char **argv, char **envp) {
                  "This may cause unexpected crashes or assertion violations.",
                  module_triple.c_str(), host_triple.c_str());
 
-  llvm::Function *initialMainFn = mainModule->getFunction(EntryPoint);
-  if (!initialMainFn) {
-    klee_error("Entry function '%s' not found in module.", EntryPoint.c_str());
-  }
-
   // Detect architecture
   std::string opt_suffix = "64"; // Fall back to 64bit
   if (module_triple.find("i686") != std::string::npos ||
@@ -1695,6 +1689,11 @@ int main(int argc, char **argv, char **envp) {
   // Get the entry point function
   if (EntryPoint.empty())
     klee_error("entry-point cannot be empty");
+
+  llvm::Function *initialMainFn = mainModule->getFunction(EntryPoint);
+  if (!initialMainFn) {
+    klee_error("Entry function '%s' not found in module.", EntryPoint.c_str());
+  }
 
   for (auto &module : loadedUserModules) {
     entryFn = module->getFunction(EntryPoint);
