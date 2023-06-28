@@ -12,6 +12,7 @@
 #include "TerminationTypes.h"
 
 #include "klee/Module/SarifReport.h"
+#include "FunctionAnnotation.h"
 
 #include <cstdint>
 #include <map>
@@ -156,7 +157,8 @@ public:
             const ModuleOptions &opts,
             const std::vector<std::string> &mainModuleFunctions,
             std::unique_ptr<InstructionInfoTable> origInfos,
-            const std::set<std::string> &ignoredExternals) = 0;
+            const std::set<std::string> &ignoredExternals,
+            optional<FunctionAnnotations> &annotations) = 0;
 
   virtual std::map<std::string, llvm::Type *>
   getAllExternals(const std::set<std::string> &ignoredExternals) = 0;

@@ -16,6 +16,7 @@
 #include "klee/Config/Version.h"
 #include "klee/Core/Interpreter.h"
 #include "klee/Core/TargetedExecutionReporter.h"
+#include "klee/Core/FunctionAnnotation.h"
 #include "klee/Module/SarifReport.h"
 #include "klee/Module/TargetForest.h"
 #include "klee/Solver/SolverCmdLine.h"
@@ -364,6 +365,17 @@ cl::opt<MockStrategy> MockUnlinkedStrategy(
             "function. Therefore, when function is called many times "
             "with equal arguments, every time equal values will be returned.")),
     cl::init(MockStrategy::None), cl::cat(MockCat));
+
+/*** Annotations options ***/
+
+cl::OptionCategory AnnotCat("Annotations category");
+
+cl::opt<std::string>
+    AnnotationsFile(
+    "annotations",
+    cl::desc("Path to the annotation JSON file"),
+    cl::value_desc("path file"),
+    cl::cat(AnnotCat));
 
 } // namespace
 
@@ -1826,6 +1838,10 @@ int run_klee(int argc, char **argv, char **envp) {
     paths = parseStaticAnalysisInput();
   }
 
+  optional<FunctionAnnotations> annotations = (AnnotationsFile.empty())
+      ? nonstd::nullopt
+      : optional<FunctionAnnotations>(parseAnnotationsFile(AnnotationsFile));
+
   Interpreter::InterpreterOptions IOpts(paths);
   IOpts.MakeConcreteSymbolic = MakeConcreteSymbolic;
   IOpts.Guidance = UseGuidedSearch;
@@ -1877,7 +1893,7 @@ int run_klee(int argc, char **argv, char **envp) {
   Opts.MainCurrentName = initialMainFn->getName().str();
   auto finalModule = interpreter->setModule(
       loadedUserModules, loadedLibsModules, Opts, mainModuleFunctions,
-      std::move(origInfos), ignoredExternals);
+      std::move(origInfos), ignoredExternals, annotations);
   Function *mainFn = finalModule->getFunction(EntryPoint);
   if (!mainFn) {
     klee_error("Entry function '%s' not found in module.", EntryPoint.c_str());
