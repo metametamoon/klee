@@ -3,11 +3,14 @@
 // RUN: %klee --output-dir=%t.klee-out --external-calls=all --mock-strategy=naive %t.bc
 // RUN: %runmocks %libkleeruntest -o %t.klee-out/a.out %t.klee-out %t.bc
 // RUN: test -f %t.klee-out/test000001.ktest
+// RUN: env KTEST_FILE=%t.klee-out/test000001.ktest %t.klee-out/a.out
+
+extern int variable;
 
 extern int foo(int);
 
 int main() {
   int a;
   klee_make_symbolic(&a, sizeof(a), "a");
-  return foo(a);
+  return variable + foo(a);
 }
