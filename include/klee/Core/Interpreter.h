@@ -9,7 +9,7 @@
 #ifndef KLEE_INTERPRETER_H
 #define KLEE_INTERPRETER_H
 
-#include "FunctionAnnotation.h"
+#include "Annotation.h"
 #include "TerminationTypes.h"
 
 #include "klee/Module/SarifReport.h"
@@ -158,7 +158,7 @@ public:
             const std::vector<std::string> &mainModuleFunctions,
             std::unique_ptr<InstructionInfoTable> origInfos,
             const std::set<std::string> &ignoredExternals,
-            FunctionAnnotations &annotations) = 0;
+            Annotations &annotations) = 0;
 
   virtual std::map<std::string, llvm::Type *>
   getAllExternals(const std::set<std::string> &ignoredExternals) = 0;

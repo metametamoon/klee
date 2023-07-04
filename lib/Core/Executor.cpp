@@ -520,7 +520,7 @@ Executor::setModule(std::vector<std::unique_ptr<llvm::Module>> &userModules,
                     const std::vector<std::string> &mainModuleFunctions,
                     std::unique_ptr<InstructionInfoTable> origInfos,
                     const std::set<std::string> &ignoredExternals,
-                    FunctionAnnotations &annotations) {
+                    Annotations &annotations) {
   assert(!kmodule && !userModules.empty() &&
          "can only register one module"); // XXX gross
 

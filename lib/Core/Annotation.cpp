@@ -1,4 +1,4 @@
-#include "klee/Core/FunctionAnnotation.h"
+#include "klee/Core/Annotation.h"
 
 #include "klee/Support/ErrorHandling.h"
 
@@ -6,19 +6,16 @@
 
 namespace klee {
 
-// TODO: maybe for errors it's better to pass the function name.
-
-FunctionAnnotation::StatementName parseStatementName(const std::string &name) {
-  const auto statementNamePtr = statementsAsStr.find(name);
-  if (statementNamePtr != statementsAsStr.end()) {
-    return statementNamePtr->second;
+Annotation::StatementName parseStatementName(const std::string &name) {
+  const auto statementName = statementsAsStr.find(name);
+  if (statementName != statementsAsStr.end()) {
+    return statementName->second;
   }
-  klee_error("Non-existent annotation type.");
+  return Annotation::StatementName::Unknown;
 }
 
 std::vector<std::string> parseStatementOffset(const std::string &offsetStr) {
   std::vector<std::string> offset;
-
   size_t pos = 0;
   while (pos < offsetStr.size()) {
     if (offsetStr[pos] == '*') {
@@ -38,11 +35,10 @@ std::vector<std::string> parseStatementOffset(const std::string &offsetStr) {
       klee_error("Incorrect annotation offset format.");
     }
   }
-
   return offset;
 }
 
-void from_json(const json &j, FunctionAnnotation::Statement &statement) {
+void from_json(const json &j, Annotation::Statement &statement) {
   if (!j.is_string()) {
     klee_error("Incorrect annotation format.");
   }
@@ -68,33 +64,32 @@ void from_json(const json &j, FunctionAnnotation::Statement &statement) {
   statement.data = jStr.substr(delimiterPosNext + 1);
 }
 
-void from_json(const json &j, FunctionAnnotation::Property &property) {
+void from_json(const json &j, Annotation::Property &property) {
   if (!j.is_string()) {
     klee_error("Incorrect properties format in annotations file.");
   }
-
   std::string jStr = j.get<std::string>();
+
+  property = Annotation::Property::Unknown;
   const auto propertyPtr = propertiesAsStr.find(jStr);
   if (propertyPtr != propertiesAsStr.end()) {
     property = propertyPtr->second;
-    return;
   }
-  klee_error("Non-existent property type in annotations file.");
 }
 
-void from_json(const json &j, FunctionAnnotation &annotation) {
-  if (!j.is_object() || j.size() != 2 || !j.contains("annotation") ||
+void from_json(const json &j, Annotation &annotation) {
+  if (!j.is_object() || !j.contains("annotation") ||
       !j.contains("properties")) {
     klee_error("Incorrect annotations file format.");
   }
 
-  annotation.properties =
-      j.at("properties").get<std::vector<FunctionAnnotation::Property>>();
   annotation.statements =
-      j.at("annotation").get<std::vector<FunctionAnnotation::Statements>>();
+      j.at("annotation").get<std::vector<Annotation::Statements>>();
+  annotation.properties =
+      j.at("properties").get<std::vector<Annotation::Property>>();
 }
 
-FunctionAnnotations parseAnnotationsFile(std::string &path) {
+Annotations parseAnnotationsFile(std::string &path) {
   std::ifstream annotationsFile(path);
   if (!annotationsFile.good()) {
     klee_error("Opening %s failed.", path.c_str());
@@ -105,9 +100,9 @@ FunctionAnnotations parseAnnotationsFile(std::string &path) {
     klee_error("Parsing JSON %s failed.", path.c_str());
   }
 
-  FunctionAnnotations annotations;
+  Annotations annotations;
   for (auto &item : annotationsJson.items()) {
-    FunctionAnnotation annotation;
+    Annotation annotation;
     annotation.functionName = item.key();
     from_json(item.value(), annotation);
     annotations[item.key()] = annotation;

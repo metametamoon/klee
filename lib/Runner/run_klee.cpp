@@ -14,7 +14,7 @@
 #include "klee/ADT/KTest.h"
 #include "klee/ADT/TreeStream.h"
 #include "klee/Config/Version.h"
-#include "klee/Core/FunctionAnnotation.h"
+#include "klee/Core/Annotation.h"
 #include "klee/Core/Interpreter.h"
 #include "klee/Core/TargetedExecutionReporter.h"
 #include "klee/Module/SarifReport.h"
@@ -1835,7 +1835,7 @@ int run_klee(int argc, char **argv, char **envp) {
     paths = parseStaticAnalysisInput();
   }
 
-  FunctionAnnotations annotations = parseAnnotationsFile(AnnotationsFile);
+  Annotations annotations = parseAnnotationsFile(AnnotationsFile);
 
   Interpreter::InterpreterOptions IOpts(paths);
   IOpts.MakeConcreteSymbolic = MakeConcreteSymbolic;
