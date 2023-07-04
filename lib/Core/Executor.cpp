@@ -438,8 +438,8 @@ Executor::Executor(LLVMContext &ctx, const InterpreterOptions &opts,
                    InterpreterHandler *ih)
     : Interpreter(opts), interpreterHandler(ih), searcher(nullptr),
       externalDispatcher(new ExternalDispatcher(ctx)), statsTracker(0),
-      pathWriter(0), symPathWriter(0),
-      specialFunctionHandler(0), timers{time::Span(TimerInterval)},
+      pathWriter(0), symPathWriter(0), specialFunctionHandler(0),
+      timers{time::Span(TimerInterval)},
       concretizationManager(new ConcretizationManager(EqualitySubstitution)),
       codeGraphDistance(new CodeGraphDistance()),
       distanceCalculator(new DistanceCalculator(*codeGraphDistance)),
@@ -520,7 +520,7 @@ Executor::setModule(std::vector<std::unique_ptr<llvm::Module>> &userModules,
                     const std::vector<std::string> &mainModuleFunctions,
                     std::unique_ptr<InstructionInfoTable> origInfos,
                     const std::set<std::string> &ignoredExternals,
-                    optional<FunctionAnnotations> &annotations) {
+                    FunctionAnnotations &annotations) {
   assert(!kmodule && !userModules.empty() &&
          "can only register one module"); // XXX gross
 

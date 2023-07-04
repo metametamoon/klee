@@ -686,8 +686,7 @@ public:
             const std::vector<std::string> &mainModuleFunctions,
             std::unique_ptr<InstructionInfoTable> origInfos,
             const std::set<std::string> &ignoredExternals,
-            optional<FunctionAnnotations> &annotations)
-      override;
+            FunctionAnnotations &annotations) override;
 
   std::map<std::string, llvm::Type *>
   getAllExternals(const std::set<std::string> &ignoredExternals) override;

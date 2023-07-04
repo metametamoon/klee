@@ -8,14 +8,12 @@ namespace klee {
 
 // TODO: maybe for errors it's better to pass the function name.
 
-FunctionAnnotation::StatementType parseStatementType(const std::string &type) {
-  if (type == "Deref") {
-    return FunctionAnnotation::StatementType::Deref;
+FunctionAnnotation::StatementName parseStatementName(const std::string &name) {
+  const auto statementNamePtr = statementsAsStr.find(name);
+  if (statementNamePtr != statementsAsStr.end()) {
+    return statementNamePtr->second;
   }
-  if (type == "InitNull") {
-    return FunctionAnnotation::StatementType::InitNull;
-  }
-  klee_error("Non-existent annotation type in annotations file.");
+  klee_error("Non-existent annotation type.");
 }
 
 std::vector<std::string> parseStatementOffset(const std::string &offsetStr) {
@@ -26,21 +24,18 @@ std::vector<std::string> parseStatementOffset(const std::string &offsetStr) {
     if (offsetStr[pos] == '*') {
       offset.emplace_back("*");
       pos++;
-    }
-    else if (offsetStr[pos] == '&') {
+    } else if (offsetStr[pos] == '&') {
       offset.emplace_back("&");
       pos++;
-    }
-    else if (offsetStr[pos] == '[') {
+    } else if (offsetStr[pos] == '[') {
       size_t posEndExpr = offsetStr.find(']', pos);
       if (posEndExpr == std::string::npos) {
-        klee_error("Incorrect annotation offset format in annotations file.");
+        klee_error("Incorrect annotation offset format.");
       }
       offset.push_back(offsetStr.substr(pos + 1, posEndExpr - 1 - pos));
       pos = posEndExpr + 1;
-    }
-    else {
-      klee_error("Incorrect annotation offset format in annotations file.");
+    } else {
+      klee_error("Incorrect annotation offset format.");
     }
   }
 
@@ -49,57 +44,53 @@ std::vector<std::string> parseStatementOffset(const std::string &offsetStr) {
 
 void from_json(const json &j, FunctionAnnotation::Statement &statement) {
   if (!j.is_string()) {
-    klee_error("Incorrect annotation format in annotations file.");
+    klee_error("Incorrect annotation format.");
   }
   std::string jStr = j.get<std::string>();
 
-  size_t delPos = jStr.find(':');
-  if (delPos == std::string::npos) {
-    statement.type = parseStatementType(jStr);
+  size_t delimiterPos = jStr.find(':');
+  if (delimiterPos == std::string::npos) {
+    statement.name = parseStatementName(jStr);
     return;
   }
 
-  statement.type = parseStatementType(jStr.substr(0, delPos));
-  size_t delPosNext = jStr.find(':', delPos + 1);
-  if (delPosNext == std::string::npos) {
-    statement.offset = parseStatementOffset(jStr.substr(delPos + 1));
+  statement.name = parseStatementName(jStr.substr(0, delimiterPos));
+  size_t delimiterPosNext = jStr.find(':', delimiterPos + 1);
+  if (delimiterPosNext == std::string::npos) {
+    statement.offset = parseStatementOffset(jStr.substr(delimiterPos + 1));
     return;
   }
 
-  if (delPos + 1 != delPosNext) {
-    statement.offset =
-        parseStatementOffset(jStr.substr(delPos + 1, delPosNext - delPos - 1));
+  if (delimiterPos + 1 != delimiterPosNext) {
+    statement.offset = parseStatementOffset(
+        jStr.substr(delimiterPos + 1, delimiterPosNext - delimiterPos - 1));
   }
-  statement.data = jStr.substr(delPosNext + 1);
+  statement.data = jStr.substr(delimiterPosNext + 1);
 }
 
-void from_json(const json &j, FunctionAnnotation::PropertyType &type) {
+void from_json(const json &j, FunctionAnnotation::Property &property) {
   if (!j.is_string()) {
     klee_error("Incorrect properties format in annotations file.");
   }
 
   std::string jStr = j.get<std::string>();
-  if (jStr == "determ") {
-    type = FunctionAnnotation::PropertyType::Determ;
-    return;
-  }
-  if (jStr == "noreturn") {
-    type = FunctionAnnotation::PropertyType::Noreturn;
+  const auto propertyPtr = propertiesAsStr.find(jStr);
+  if (propertyPtr != propertiesAsStr.end()) {
+    property = propertyPtr->second;
     return;
   }
   klee_error("Non-existent property type in annotations file.");
 }
 
-void from_json(const json &j, FunctionAnnotation &annotation)
-{
-  if (!j.is_object() || j.size() != 2 ||
-      !j.contains("annotation") || !j.contains("properties")) {
+void from_json(const json &j, FunctionAnnotation &annotation) {
+  if (!j.is_object() || j.size() != 2 || !j.contains("annotation") ||
+      !j.contains("properties")) {
     klee_error("Incorrect annotations file format.");
   }
 
   annotation.properties =
-      j.at("properties").get<std::vector<FunctionAnnotation::PropertyType>>();
-  annotation.statementsOfParams =
+      j.at("properties").get<std::vector<FunctionAnnotation::Property>>();
+  annotation.statements =
       j.at("annotation").get<std::vector<FunctionAnnotation::Statements>>();
 }
 
@@ -115,9 +106,9 @@ FunctionAnnotations parseAnnotationsFile(std::string &path) {
   }
 
   FunctionAnnotations annotations;
-  for (auto& item : annotationsJson.items()) {
+  for (auto &item : annotationsJson.items()) {
     FunctionAnnotation annotation;
-    annotation.name = item.key();
+    annotation.functionName = item.key();
     from_json(item.value(), annotation);
     annotations[item.key()] = annotation;
   }

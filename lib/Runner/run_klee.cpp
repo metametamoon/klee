@@ -14,9 +14,9 @@
 #include "klee/ADT/KTest.h"
 #include "klee/ADT/TreeStream.h"
 #include "klee/Config/Version.h"
+#include "klee/Core/FunctionAnnotation.h"
 #include "klee/Core/Interpreter.h"
 #include "klee/Core/TargetedExecutionReporter.h"
-#include "klee/Core/FunctionAnnotation.h"
 #include "klee/Module/SarifReport.h"
 #include "klee/Module/TargetForest.h"
 #include "klee/Solver/SolverCmdLine.h"
@@ -371,11 +371,8 @@ cl::opt<MockStrategy> MockUnlinkedStrategy(
 cl::OptionCategory AnnotCat("Annotations category");
 
 cl::opt<std::string>
-    AnnotationsFile(
-    "annotations",
-    cl::desc("Path to the annotation JSON file"),
-    cl::value_desc("path file"),
-    cl::cat(AnnotCat));
+    AnnotationsFile("annotations", cl::desc("Path to the annotation JSON file"),
+                    cl::value_desc("path file"), cl::cat(AnnotCat));
 
 } // namespace
 
@@ -1215,7 +1212,7 @@ createLibCWrapper(std::vector<std::unique_ptr<llvm::Module>> &userModules,
       inModuleReference,
 #endif
       ft->getParamType(0)));
-  args.push_back(&*(stub->arg_begin())); // argc
+  args.push_back(&*(stub->arg_begin()));                       // argc
   auto arg_it = stub->arg_begin();
   args.push_back(&*(++arg_it));                                // argv
   args.push_back(Constant::getNullValue(ft->getParamType(3))); // app_init
@@ -1838,9 +1835,7 @@ int run_klee(int argc, char **argv, char **envp) {
     paths = parseStaticAnalysisInput();
   }
 
-  optional<FunctionAnnotations> annotations = (AnnotationsFile.empty())
-      ? nonstd::nullopt
-      : optional<FunctionAnnotations>(parseAnnotationsFile(AnnotationsFile));
+  FunctionAnnotations annotations = parseAnnotationsFile(AnnotationsFile);
 
   Interpreter::InterpreterOptions IOpts(paths);
   IOpts.MakeConcreteSymbolic = MakeConcreteSymbolic;
