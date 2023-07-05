@@ -9,8 +9,8 @@
 #ifndef KLEE_INTERPRETER_H
 #define KLEE_INTERPRETER_H
 
-#include "Annotation.h"
 #include "TerminationTypes.h"
+#include "klee/Module/Annotation.h"
 
 #include "klee/Module/SarifReport.h"
 
