@@ -16,7 +16,7 @@ namespace klee {
 
 // Annotation format: https://github.com/UnitTestBot/klee/discussions/92
 struct Annotation {
-  enum class StatementName {
+  enum class StatementKind {
     Unknown,
 
     Deref,
@@ -34,7 +34,7 @@ struct Annotation {
     explicit StatementUnknown(const std::string &str);
     virtual ~StatementUnknown();
 
-    virtual Annotation::StatementName getStatementName() const;
+    virtual Annotation::StatementKind getStatementName() const;
 
     std::string statementStr;
     std::vector<std::string> offset;
@@ -47,13 +47,13 @@ struct Annotation {
   struct StatementDeref final : public StatementUnknown {
     explicit StatementDeref(const std::string &str);
 
-    Annotation::StatementName getStatementName() const override;
+    Annotation::StatementKind getStatementName() const override;
   };
 
   struct StatementInitNull final : public StatementUnknown {
     explicit StatementInitNull(const std::string &str);
 
-    Annotation::StatementName getStatementName() const override;
+    Annotation::StatementKind getStatementName() const override;
   };
 
   using StatementPtr = std::shared_ptr<StatementUnknown>;
@@ -71,7 +71,8 @@ const std::map<std::string, Annotation::Property> toProperties{
     {"noreturn", Annotation::Property::Noreturn},
 };
 
-Annotations parseAnnotationsFile(std::string &path);
+Annotations parseAnnotationsFile(const json &annotationsJson);
+Annotations parseAnnotationsFile(const std::string &path);
 
 } // namespace klee
 
