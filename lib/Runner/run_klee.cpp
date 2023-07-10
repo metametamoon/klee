@@ -372,7 +372,8 @@ cl::OptionCategory AnnotCat("Annotations category");
 
 cl::opt<std::string>
     AnnotationsFile("annotations", cl::desc("Path to the annotation JSON file"),
-                    cl::value_desc("path file"), cl::cat(AnnotCat));
+                    cl::value_desc("path file"),
+                    cl::cat(AnnotCat));
 
 } // namespace
 
@@ -1835,7 +1836,9 @@ int run_klee(int argc, char **argv, char **envp) {
     paths = parseStaticAnalysisInput();
   }
 
-  Annotations annotations = parseAnnotationsFile(AnnotationsFile);
+  Annotations annotations = (AnnotationsFile.empty())
+    ? Annotations()
+    : parseAnnotationsFile(AnnotationsFile);
 
   Interpreter::InterpreterOptions IOpts(paths);
   IOpts.MakeConcreteSymbolic = MakeConcreteSymbolic;
