@@ -2,6 +2,7 @@
 #define KLEE_ANNOTATION_H
 
 #include "map"
+#include "set"
 #include "string"
 #include "vector"
 
@@ -35,6 +36,7 @@ struct Annotation {
     virtual ~StatementUnknown();
 
     virtual Annotation::StatementKind getStatementName() const;
+    virtual bool operator==(const StatementUnknown &other) const;
 
     std::string statementStr;
     std::vector<std::string> offset;
@@ -59,9 +61,11 @@ struct Annotation {
   using StatementPtr = std::shared_ptr<StatementUnknown>;
   using StatementPtrs = std::vector<StatementPtr>;
 
+  bool operator==(const Annotation &other) const;
+
   std::string functionName;
   std::vector<StatementPtrs> statements;
-  std::vector<Property> properties;
+  std::set<Property> properties;
 };
 
 using Annotations = std::map<std::string, Annotation>;
@@ -73,6 +77,9 @@ const std::map<std::string, Annotation::Property> toProperties{
 
 Annotations parseAnnotationsFile(const json &annotationsJson);
 Annotations parseAnnotationsFile(const std::string &path);
+
+bool operator==(const Annotation::StatementPtr &first,
+                const Annotation::StatementPtr &second);
 
 } // namespace klee
 

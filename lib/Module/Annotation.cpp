@@ -35,6 +35,11 @@ Annotation::StatementUnknown::getStatementName() const {
   return Annotation::StatementKind::Unknown;
 }
 
+bool Annotation::StatementUnknown::operator==(
+    const Annotation::StatementUnknown &other) const {
+  return (statementStr == other.statementStr) && (offset == other.offset);
+}
+
 void Annotation::StatementUnknown::parseOffset(const std::string &offsetStr) {
   size_t pos = 0;
   while (pos < offsetStr.size()) {
@@ -85,6 +90,11 @@ Annotation::StatementInitNull::getStatementName() const {
   return Annotation::StatementKind::InitNull;
 }
 
+bool Annotation::operator==(const Annotation &other) const {
+  return (functionName == other.functionName) &&
+         (statements == other.statements) && (properties == other.properties);
+}
+
 void from_json(const json &j, Annotation::StatementPtr &statement) {
   if (!j.is_string()) {
     klee_error("Incorrect annotation format.");
@@ -121,7 +131,7 @@ Annotations parseAnnotationsFile(const json &annotationsJson) {
     annotation.statements =
         j.at("annotation").get<std::vector<Annotation::StatementPtrs>>();
     annotation.properties =
-        j.at("properties").get<std::vector<Annotation::Property>>();
+        j.at("properties").get<std::set<Annotation::Property>>();
     annotations[item.key()] = annotation;
   }
   return annotations;
@@ -139,6 +149,27 @@ Annotations parseAnnotationsFile(const std::string &path) {
   }
 
   return parseAnnotationsFile(annotationsJson);
+}
+
+bool operator==(const Annotation::StatementPtr &first,
+                const Annotation::StatementPtr &second) {
+  if (first->getStatementName() != second->getStatementName()) {
+    return false;
+  }
+
+  switch (first->getStatementName()) {
+  case Annotation::StatementKind::Unknown:
+    return (*dynamic_cast<Annotation::StatementUnknown *>(first.get()) ==
+            *dynamic_cast<Annotation::StatementUnknown *>(second.get()));
+  case Annotation::StatementKind::Deref:
+    return (*dynamic_cast<Annotation::StatementDeref *>(first.get()) ==
+            *dynamic_cast<Annotation::StatementDeref *>(second.get()));
+  case Annotation::StatementKind::InitNull:
+    return (*dynamic_cast<Annotation::StatementInitNull *>(first.get()) ==
+            *dynamic_cast<Annotation::StatementInitNull *>(second.get()));
+  default:
+    __builtin_unreachable();
+  }
 }
 
 } // namespace klee
