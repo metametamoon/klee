@@ -1,6 +1,8 @@
 #ifndef KLEE_MOCKBUILDER_H
 #define KLEE_MOCKBUILDER_H
 
+#include "klee/Module/Annotation.h"
+
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Module.h"
 
@@ -15,6 +17,7 @@ private:
   std::unique_ptr<llvm::Module> mockModule;
   std::unique_ptr<llvm::IRBuilder<>> builder;
   std::map<std::string, llvm::Type *> externals;
+  Annotations annotations;
 
   const std::string mockEntrypoint, userEntrypoint;
 
@@ -29,7 +32,8 @@ private:
 public:
   MockBuilder(const llvm::Module *initModule, std::string mockEntrypoint,
               std::string userEntrypoint,
-              std::map<std::string, llvm::Type *> externals);
+              std::map<std::string, llvm::Type *> externals,
+              Annotations annotations);
 
   std::unique_ptr<llvm::Module> build();
 };

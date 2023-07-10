@@ -1836,7 +1836,7 @@ int run_klee(int argc, char **argv, char **envp) {
     paths = parseStaticAnalysisInput();
   }
 
-  Annotations annotations = (AnnotationsFile.empty())
+  const Annotations annotations = (AnnotationsFile.empty())
     ? Annotations()
     : parseAnnotationsFile(AnnotationsFile);
 

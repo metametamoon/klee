@@ -1,18 +1,21 @@
 #include "klee/Core/MockBuilder.h"
 
+#include "klee/Module/Annotation.h"
 #include "klee/Support/ErrorHandling.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Module.h"
 
 #include <memory>
+#include <utility>
 
 namespace klee {
 
 MockBuilder::MockBuilder(const llvm::Module *initModule,
                          std::string mockEntrypoint, std::string userEntrypoint,
-                         std::map<std::string, llvm::Type *> externals)
+                         std::map<std::string, llvm::Type *> externals,
+                         Annotations annotations)
     : userModule(initModule), externals(std::move(externals)),
-      mockEntrypoint(std::move(mockEntrypoint)),
+      annotations(std::move(annotations)), mockEntrypoint(std::move(mockEntrypoint)),
       userEntrypoint(std::move(userEntrypoint)) {}
 
 std::unique_ptr<llvm::Module> MockBuilder::build() {
