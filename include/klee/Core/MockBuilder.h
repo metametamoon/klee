@@ -28,6 +28,10 @@ private:
   void buildCallKleeMakeSymbol(const std::string &klee_function_name,
                                llvm::Value *source, llvm::Type *type,
                                const std::string &symbol_name);
+  void buildAnnotationForExternalFunctionParams(llvm::Function *func,
+                                          Annotation &annotation);
+  llvm::Value *goByOffset(llvm::Value *value,
+                          const std::vector<std::string> &offset);
 
 public:
   MockBuilder(const llvm::Module *initModule, std::string mockEntrypoint,
