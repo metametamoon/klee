@@ -11,8 +11,8 @@
 #define KLEE_MEMORYMANAGER_H
 
 #include <cstddef>
-#include <set>
 #include <cstdint>
+#include <set>
 
 namespace llvm {
 class Value;
@@ -55,6 +55,6 @@ public:
   size_t getUsedDeterministicSize();
 };
 
-} // End klee namespace
+} // namespace klee
 
 #endif /* KLEE_MEMORYMANAGER_H */

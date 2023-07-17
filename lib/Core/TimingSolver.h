@@ -72,6 +72,6 @@ public:
                                            ref<Expr> query,
                                            SolverQueryMetaData &metaData);
 };
-}
+} // namespace klee
 
 #endif /* KLEE_TIMINGSOLVER_H */

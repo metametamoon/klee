@@ -7,8 +7,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "klee/Expr/Constraints.h"
 #include "klee/Expr/Assignment.h"
+#include "klee/Expr/Constraints.h"
 #include "klee/Solver/Solver.h"
 #include "klee/Solver/SolverImpl.h"
 
@@ -32,7 +32,7 @@ public:
   bool computeValue(const Query &, ref<Expr> &result);
   bool computeInitialValues(const Query &,
                             const std::vector<const Array *> &objects,
-                            std::vector<std::vector<unsigned char> > &values,
+                            std::vector<std::vector<unsigned char>> &values,
                             bool &hasSolution);
   SolverRunStatus getOperationStatusCode();
   char *getConstraintLog(const Query &);
@@ -55,7 +55,7 @@ bool AssignmentValidatingSolver::computeValue(const Query &query,
 
 bool AssignmentValidatingSolver::computeInitialValues(
     const Query &query, const std::vector<const Array *> &objects,
-    std::vector<std::vector<unsigned char> > &values, bool &hasSolution) {
+    std::vector<std::vector<unsigned char>> &values, bool &hasSolution) {
   bool success =
       solver->impl->computeInitialValues(query, objects, values, hasSolution);
   if (!hasSolution)
@@ -155,4 +155,4 @@ createAssignmentValidatingSolver(std::unique_ptr<Solver> s) {
   return std::make_unique<Solver>(
       std::make_unique<AssignmentValidatingSolver>(std::move(s)));
 }
-}
+} // namespace klee

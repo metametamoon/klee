@@ -14,17 +14,17 @@
 #define EXIT exit
 #endif
 
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <unistd.h>
 #include <assert.h>
+#include <fcntl.h>
 #include <stdio.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
 
-int main(int argc, char** argv) {
+int main(int argc, char **argv) {
   int fd, n;
   char buf[1024];
-  
+
   fd = open("A", O_RDONLY);
   assert(fd != -1);
   n = read(fd, buf, 3);
@@ -39,5 +39,3 @@ int main(int argc, char** argv) {
 
   return 0;
 }
-
-    
