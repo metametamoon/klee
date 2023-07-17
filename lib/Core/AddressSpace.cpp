@@ -297,19 +297,14 @@ bool AddressSpace::resolve(ExecutionState &state, TimingSolver *solver,
 // transparently avoid screwing up symbolics (if the byte is symbolic
 // then its concrete cache byte isn't being used) but is just a hack.
 
-std::size_t AddressSpace::copyOutConcretes() {
-  std::size_t numPages{};
+void AddressSpace::copyOutConcretes() {
   for (const auto &object : objects) {
     auto &mo = object.first;
     auto &os = object.second;
     if (!mo->isUserSpecified && !os->readOnly && os->size != 0) {
-      auto size = std::max(os->size, mo->alignment);
-      numPages +=
-          (size + MemoryManager::pageSize - 1) / MemoryManager::pageSize;
       copyOutConcrete(mo, os.get());
     }
   }
-  return numPages;
 }
 
 void AddressSpace::copyOutConcrete(const MemoryObject *mo,

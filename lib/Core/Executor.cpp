@@ -36,7 +36,6 @@
 #include "klee/Expr/ExprPPrinter.h"
 #include "klee/Expr/ExprSMTLIBPrinter.h"
 #include "klee/Expr/ExprUtil.h"
-#include "klee/KDAlloc/kdalloc.h"
 #include "klee/Module/Cell.h"
 #include "klee/Module/InstructionInfoTable.h"
 #include "klee/Module/KCallable.h"
@@ -211,14 +210,6 @@ cl::opt<bool> AllExternalWarnings(
              "as opposed to once per function (default=false)"),
     cl::cat(ExtCallsCat));
 
-cl::opt<std::size_t> ExternalPageThreshold(
-    "kdalloc-external-page-threshold", cl::init(1024),
-    cl::desc(
-        "Threshold for garbage collecting pages used by external calls. If "
-        "there is a significant number of infrequently used pages resident in "
-        "memory, these will only be cleaned up if the total number of pages "
-        "used for external calls is above the given threshold (default=1024)."),
-    cl::cat(ExtCallsCat));
 
 /*** Seeding options ***/
 
@@ -694,7 +685,7 @@ void Executor::allocateGlobalObjects(ExecutionState &state) {
       // We allocate an object to represent each function,
       // its address can be used for function pointers.
       // TODO: Check whether the object is accessed?
-      auto mo = memory->allocate(8, false, true, &state, &f, 8);
+      auto mo = memory->allocate(8, false, true, &f, 8);
       addr = Expr::createPointer(mo->address);
       legalFunctions.emplace(mo->address, &f);
     }
@@ -773,8 +764,7 @@ void Executor::allocateGlobalObjects(ExecutionState &state) {
     }
 
     MemoryObject *mo = memory->allocate(size, /*isLocal=*/false,
-                                        /*isGlobal=*/true, /*state=*/nullptr,
-                                        /*allocSite=*/&v,
+                                        /*isGlobal=*/true, /*allocSite=*/&v,
                                         /*alignment=*/globalObjectAlignment);
     if (!mo)
       klee_error("out of memory");
@@ -1542,7 +1532,7 @@ MemoryObject *Executor::serializeLandingpad(ExecutionState &state,
   }
 
   MemoryObject *mo =
-      memory->allocate(serialized.size(), true, false, &state, nullptr, 1);
+      memory->allocate(serialized.size(), true, false, nullptr, 1);
   ObjectState *os = bindObjectInState(state, mo, false);
   for (unsigned i = 0; i < serialized.size(); i++) {
     os->write8(i, serialized[i]);
@@ -1995,7 +1985,7 @@ void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f,
 
       StackFrame &sf = state.stack.back();
       MemoryObject *mo = sf.varargs =
-          memory->allocate(size, true, false, &state, state.prevPC->inst,
+          memory->allocate(size, true, false, state.prevPC->inst,
                            (requires16ByteAlignment ? 16 : 8));
       if (!mo && size) {
         terminateStateOnExecError(state, "out of memory (varargs)");
@@ -3916,35 +3906,7 @@ void Executor::callExternalFunction(ExecutionState &state,
   }
 
   // Prepare external memory for invoking the function
-  static std::size_t residentPages = 0;
-  double avgNeededPages = 0;
-  if (MemoryManager::isDeterministic) {
-    auto const minflt = [] {
-      struct rusage ru = {};
-      [[maybe_unused]] int ret = getrusage(RUSAGE_SELF, &ru);
-      assert(!ret && "getrusage failed");
-      assert(ru.ru_minflt >= 0);
-      return ru.ru_minflt;
-    };
-
-    auto tmp = minflt();
-    std::size_t neededPages = state.addressSpace.copyOutConcretes();
-    auto newPages = minflt() - tmp;
-    assert(newPages >= 0);
-    residentPages += newPages;
-    assert(residentPages >= neededPages &&
-           "allocator too full, assumption that each object occupies its own "
-           "page is no longer true");
-
-    // average of pages needed for an external function call
-    static double avgNeededPages_ = residentPages;
-    // exponential moving average with alpha = 1/3
-    avgNeededPages_ = (3.0 * avgNeededPages_ + neededPages) / 4.0;
-    avgNeededPages = avgNeededPages_;
-  } else {
-    state.addressSpace.copyOutConcretes();
-  }
-
+  state.addressSpace.copyOutConcretes();
 #ifndef WINDOWS
   // Update external errno state with local state value
   int *errno_addr = getErrnoLocation(state);
@@ -3996,13 +3958,6 @@ void Executor::callExternalFunction(ExecutionState &state,
     terminateStateOnExecError(state, "external modified read-only object",
                               StateTerminationType::External);
     return;
-  }
-
-  if (MemoryManager::isDeterministic && residentPages > ExternalPageThreshold &&
-      residentPages > 2 * avgNeededPages) {
-    if (memory->markMappingsAsUnneeded()) {
-      residentPages = 0;
-    }
   }
 
 #ifndef WINDOWS
@@ -4081,7 +4036,7 @@ void Executor::executeAlloc(ExecutionState &state,
     }
     MemoryObject *mo =
         memory->allocate(CE->getZExtValue(), isLocal, /*isGlobal=*/false,
-                         &state, allocSite, allocationAlignment);
+                         allocSite, allocationAlignment);
     if (!mo) {
       bindLocal(target, state, 
                 ConstantExpr::alloc(0, Context::get().getPointerWidth()));
@@ -4098,9 +4053,7 @@ void Executor::executeAlloc(ExecutionState &state,
         unsigned count = std::min(reallocFrom->size, os->size);
         for (unsigned i=0; i<count; i++)
           os->write(i, reallocFrom->read8(i));
-        const MemoryObject *reallocObject = reallocFrom->getObject();
-        state.deallocate(reallocObject);
-        state.addressSpace.unbindObject(reallocObject);
+        state.addressSpace.unbindObject(reallocFrom->getObject());
       }
     }
   } else {
@@ -4216,7 +4169,6 @@ void Executor::executeFree(ExecutionState &state,
                                      StateTerminationType::Free,
                                      getAddressInfo(*it->second, address));
       } else {
-        it->second->deallocate(mo);
         it->second->addressSpace.unbindObject(mo);
         if (target)
           bindLocal(target, *it->second, Expr::createPointer(0));
@@ -4251,19 +4203,6 @@ void Executor::resolveExact(ExecutionState &state,
   }
 
   if (unbound) {
-    auto CE = dyn_cast<ConstantExpr>(p);
-    if (MemoryManager::isDeterministic && CE) {
-      using kdalloc::LocationInfo;
-      auto ptr = reinterpret_cast<void *>(CE->getZExtValue());
-      auto locinfo = unbound->heapAllocator.location_info(ptr, 1);
-      if (locinfo == LocationInfo::LI_AllocatedOrQuarantined &&
-          locinfo.getBaseAddress() == ptr && name == "free") {
-        terminateStateOnProgramError(*unbound, "memory error: double free",
-                                     StateTerminationType::Ptr,
-                                     getAddressInfo(*unbound, p));
-        return;
-      }
-    }
     terminateStateOnProgramError(
         *unbound, "memory error: invalid pointer: " + name,
         StateTerminationType::Ptr, getAddressInfo(*unbound, p));
@@ -4390,32 +4329,6 @@ void Executor::executeMemoryOperation(ExecutionState &state,
     if (incomplete) {
       terminateStateOnSolverError(*unbound, "Query timed out (resolve).");
     } else {
-      if (auto CE = dyn_cast<ConstantExpr>(address)) {
-        std::uintptr_t ptrval = CE->getZExtValue();
-        auto ptr = reinterpret_cast<void *>(ptrval);
-        if (ptrval < MemoryManager::pageSize) {
-          terminateStateOnProgramError(
-              *unbound, "memory error: null page access",
-              StateTerminationType::Ptr, getAddressInfo(*unbound, address));
-          return;
-        } else if (MemoryManager::isDeterministic) {
-          using kdalloc::LocationInfo;
-          auto li = unbound->heapAllocator.location_info(ptr, bytes);
-          if (li == LocationInfo::LI_AllocatedOrQuarantined) {
-            // In case there is no size mismatch (checked by resolving for base
-            // address), the object is quarantined.
-            auto base = reinterpret_cast<std::uintptr_t>(li.getBaseAddress());
-            auto baseExpr = Expr::createPointer(base);
-            ObjectPair op;
-            if (!unbound->addressSpace.resolveOne(baseExpr, op)) {
-              terminateStateOnProgramError(
-                  *unbound, "memory error: use after free",
-                  StateTerminationType::Ptr, getAddressInfo(*unbound, address));
-              return;
-            }
-          }
-        }
-      }
       terminateStateOnProgramError(
           *unbound, "memory error: out of bound pointer",
           StateTerminationType::Ptr, getAddressInfo(*unbound, address));
@@ -4527,10 +4440,10 @@ void Executor::runFunctionAsMain(Function *f,
     arguments.push_back(ConstantExpr::alloc(argc, Expr::Int32));
     if (++ai!=ae) {
       Instruction *first = &*(f->begin()->begin());
-      argvMO = memory->allocate((argc + 1 + envc + 1 + 1) * NumPtrBytes,
-                                /*isLocal=*/false, /*isGlobal=*/true,
-                                /*state=*/nullptr, /*allocSite=*/first,
-                                /*alignment=*/8);
+      argvMO =
+          memory->allocate((argc + 1 + envc + 1 + 1) * NumPtrBytes,
+                           /*isLocal=*/false, /*isGlobal=*/true,
+                           /*allocSite=*/first, /*alignment=*/8);
 
       if (!argvMO)
         klee_error("Could not allocate memory for function arguments");
@@ -4548,7 +4461,7 @@ void Executor::runFunctionAsMain(Function *f,
   }
 
   ExecutionState *state =
-      new ExecutionState(kmodule->functionMap[f], memory.get());
+      new ExecutionState(kmodule->functionMap[f]);
 
   if (pathWriter) 
     state->pathOS = pathWriter->open();
@@ -4576,8 +4489,7 @@ void Executor::runFunctionAsMain(Function *f,
 
         MemoryObject *arg =
             memory->allocate(len + 1, /*isLocal=*/false, /*isGlobal=*/true,
-                             state, /*allocSite=*/state->pc->inst,
-                             /*alignment=*/8);
+                             /*allocSite=*/state->pc->inst, /*alignment=*/8);
         if (!arg)
           klee_error("Could not allocate memory for function arguments");
         ObjectState *os = bindObjectInState(*state, arg, false);

@@ -128,7 +128,7 @@ namespace klee {
     /// actual system memory location they were allocated at.
     /// Returns the (hypothetical) number of pages needed provided each written
     /// object occupies (at least) a single page.
-    std::size_t copyOutConcretes();
+    void copyOutConcretes();
 
     void copyOutConcrete(const MemoryObject *mo, const ObjectState *os) const;
 

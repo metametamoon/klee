@@ -70,14 +70,10 @@ StackFrame::~StackFrame() {
 
 /***/
 
-ExecutionState::ExecutionState(KFunction *kf, MemoryManager *mm)
+ExecutionState::ExecutionState(KFunction *kf)
     : pc(kf->instructions), prevPC(pc) {
   pushFrame(nullptr, kf);
   setID();
-  if (mm->stackFactory && mm->heapFactory) {
-    stackAllocator = mm->stackFactory.makeAllocator();
-    heapAllocator = mm->heapFactory.makeAllocator();
-  }
 }
 
 ExecutionState::~ExecutionState() {
@@ -95,8 +91,6 @@ ExecutionState::ExecutionState(const ExecutionState& state):
     incomingBBIndex(state.incomingBBIndex),
     depth(state.depth),
     addressSpace(state.addressSpace),
-    stackAllocator(state.stackAllocator),
-    heapAllocator(state.heapAllocator),
     constraints(state.constraints),
     pathOS(state.pathOS),
     symPathOS(state.symPathOS),
@@ -134,22 +128,9 @@ void ExecutionState::pushFrame(KInstIterator caller, KFunction *kf) {
 void ExecutionState::popFrame() {
   const StackFrame &sf = stack.back();
   for (const auto *memoryObject : sf.allocas) {
-    deallocate(memoryObject);
     addressSpace.unbindObject(memoryObject);
   }
   stack.pop_back();
-}
-
-void ExecutionState::deallocate(const MemoryObject *mo) {
-  if (!stackAllocator || !heapAllocator)
-    return;
-
-  auto address = reinterpret_cast<void *>(mo->address);
-  if (mo->isLocal) {
-    stackAllocator.free(address, std::max(mo->size, mo->alignment));
-  } else {
-    heapAllocator.free(address, std::max(mo->size, mo->alignment));
-  }
 }
 
 void ExecutionState::addSymbolic(const MemoryObject *mo, const Array *array) {
