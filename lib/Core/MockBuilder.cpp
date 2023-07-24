@@ -124,7 +124,12 @@ void MockBuilder::buildExternalFunctionsDefinitions() {
         builder->CreateAlloca(func->getReturnType(), nullptr);
     buildCallKleeMakeSymbol("klee_make_mock", mockReturnValue,
                             func->getReturnType(), "@call_" + extName);
+#if LLVM_VERSION_CODE >= LLVM_VERSION(14, 0)
+    auto *loadInst =
+        builder->CreateLoad(func->getReturnType(), mockReturnValue, "klee_var");
+#else
     auto *loadInst = builder->CreateLoad(mockReturnValue, "klee_var");
+#endif
     builder->CreateRet(loadInst);
   }
 }
@@ -143,7 +148,12 @@ void MockBuilder::buildCallKleeMakeSymbol(const std::string &klee_function_name,
   auto bitcastInst = builder->CreateBitCast(
       source, llvm::Type::getInt8PtrTy(mockModule->getContext()));
   auto str_name = builder->CreateGlobalString(symbol_name);
+#if LLVM_VERSION_CODE >= LLVM_VERSION(14, 0)
+  auto gep = builder->CreateConstInBoundsGEP2_64(
+      llvm::Type::getInt8PtrTy(mockModule->getContext()), str_name, 0, 0);
+#else
   auto gep = builder->CreateConstInBoundsGEP2_64(str_name, 0, 0);
+#endif
   builder->CreateCall(
       kleeMakeSymbolCallee,
       {bitcastInst,
