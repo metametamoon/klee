@@ -8,6 +8,7 @@ DISABLE_WARNING_DEPRECATED_DECLARATIONS
 #include "llvm/IR/Module.h"
 DISABLE_WARNING_POP
 
+#include <map>
 #include <set>
 #include <string>
 
