@@ -147,12 +147,17 @@ void MockBuilder::buildCallKleeMakeSymbol(const std::string &klee_function_name,
       mockModule->getOrInsertFunction(klee_function_name, klee_mk_symb_type);
   auto bitcastInst = builder->CreateBitCast(
       source, llvm::Type::getInt8PtrTy(mockModule->getContext()));
-  auto str_name = builder->CreateGlobalStringPtr(symbol_name);
+  auto str_name = builder->CreateGlobalString(symbol_name);
+  auto mockReturnValue = builder->CreateAlloca(str_name->getType());
+  builder->CreateStore(str_name, mockReturnValue);
+  auto mockStr = builder->CreateLoad(str_name->getType(), mockReturnValue);
+  auto bitcastStr = builder->CreateBitCast(
+      mockStr, llvm::Type::getInt8PtrTy(mockModule->getContext()));
 #if LLVM_VERSION_CODE >= LLVM_VERSION(14, 0)
-  auto ptrTy = llvm::Type::getInt8PtrTy(mockModule->getContext());
-  auto gep = builder->CreateConstInBoundsGEP1_64(ptrTy, str_name, 0);
+  auto ptrTy = llvm::Type::getInt8Ty(mockModule->getContext());
+  auto gep = builder->CreateConstInBoundsGEP1_64(ptrTy, bitcastStr, 0);
 #else
-  auto gep = builder->CreateConstInBoundsGEP2_64(str_name, 0, 0);
+  auto gep = builder->CreateConstInBoundsGEP1_64(bitcastStr, 0);
 #endif
   builder->CreateCall(
       kleeMakeSymbolCallee,
