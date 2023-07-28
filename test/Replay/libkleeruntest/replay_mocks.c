@@ -4,8 +4,9 @@
 // RUN: rm -rf %t.klee-out
 // RUN: %klee --output-dir=%t.klee-out --external-calls=all --mock-strategy=naive %t.bc
 // RUN: %clang -c %t.bc -o %t.o
-// RUN: %llvmobjcopy --redefine-syms %t.klee-out/redefinitions.txt %t.o
-// RUN: %clang %s %libkleeruntest -Wl,-rpath %libkleeruntestdir %t.klee-out/externals.ll -o %t_runner %t.o
+// RUN: %llc %t.klee-out/externals.ll -filetype=obj -o %t_externals.o
+// RUN: %objcopy --redefine-syms %t.klee-out/redefinitions.txt %t.o
+// RUN: %cc -no-pie %t_externals.o %t.o %libkleeruntest -Wl,-rpath %libkleeruntestdir -o %t_runner
 // RUN: test -f %t.klee-out/test000001.ktest
 // RUN: env KTEST_FILE=%t.klee-out/test000001.ktest %t_runner
 
