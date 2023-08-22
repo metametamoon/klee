@@ -6707,7 +6707,7 @@ void Executor::runFunctionAsMain(Function *f, int argc, char **argv,
       KBlock *kCallBlock = kfunction->entryKBlock;
       forest->add(ReproduceErrorTarget::create(
           {ReachWithError::Reachable}, "",
-          ErrorLocation(kCallBlock->getFirstInstruction()), kCallBlock));
+          LineColumnRange(kCallBlock->getFirstInstruction()), kCallBlock));
       prepTargets.emplace(kEntryFunction, forest);
     }
 
