@@ -88,7 +88,7 @@ public:
 struct Free final : public Unknown {
 public:
   enum Type {
-    Free_ = 1,           // Kind of free function
+    Free_ = 1,          // Kind of free function
     Delete = 2,         // operator delete
     DeleteBrackets = 3, // operator delete[]
     CloseFile = 4,      // close file

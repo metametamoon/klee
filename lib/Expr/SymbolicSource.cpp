@@ -204,7 +204,7 @@ unsigned InstructionSource::computeHash() {
 
 unsigned MockNaiveSource::computeHash() {
   unsigned res = (getKind() * SymbolicSource::MAGIC_HASH_CONSTANT) + version;
-  unsigned funcID = km->functionIDMap.at(&function);
+  unsigned funcID = km->getFunctionId(&function);
   res = (res * SymbolicSource::MAGIC_HASH_CONSTANT) + funcID;
   hashValue = res;
   return res;
@@ -218,8 +218,8 @@ int MockNaiveSource::internalCompare(const SymbolicSource &b) const {
   if (version != mnb.version) {
     return version < mnb.version ? -1 : 1;
   }
-  unsigned funcID = km->functionIDMap.at(&function);
-  unsigned bFuncID = mnb.km->functionIDMap.at(&mnb.function);
+  unsigned funcID = km->getFunctionId(&function);
+  unsigned bFuncID = mnb.km->getFunctionId(&mnb.function);
   if (funcID != bFuncID) {
     return funcID < bFuncID ? -1 : 1;
   }
@@ -234,7 +234,7 @@ MockDeterministicSource::MockDeterministicSource(
 unsigned MockDeterministicSource::computeHash() {
   unsigned res = getKind();
   res = (res * SymbolicSource::MAGIC_HASH_CONSTANT) +
-        km->functionIDMap.at(&function);
+        km->getFunctionId(&function);
   for (const auto &arg : args) {
     res = (res * SymbolicSource::MAGIC_HASH_CONSTANT) + arg->hash();
   }
@@ -248,8 +248,8 @@ int MockDeterministicSource::internalCompare(const SymbolicSource &b) const {
   }
   const MockDeterministicSource &mdb =
       static_cast<const MockDeterministicSource &>(b);
-  unsigned funcID = km->functionIDMap.at(&function);
-  unsigned bFuncID = mdb.km->functionIDMap.at(&mdb.function);
+  unsigned funcID = km->getFunctionId(&function);
+  unsigned bFuncID = mdb.km->getFunctionId(&mdb.function);
   if (funcID != bFuncID) {
     return funcID < bFuncID ? -1 : 1;
   }
