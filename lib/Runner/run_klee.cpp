@@ -1584,7 +1584,7 @@ void wait_until_any_child_dies(
   }
 }
 
-int main(int argc, char **argv, char **envp) {
+int run_klee(int argc, char **argv, char **envp) {
   if (theInterpreter) {
     theInterpreter = nullptr;
   }

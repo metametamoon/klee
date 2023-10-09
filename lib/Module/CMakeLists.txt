@@ -57,3 +57,8 @@ target_link_libraries(kleeModule PRIVATE
 target_include_directories(kleeModule PRIVATE ${KLEE_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
 target_compile_options(kleeModule PRIVATE ${KLEE_COMPONENT_CXX_FLAGS})
 target_compile_definitions(kleeModule PRIVATE ${KLEE_COMPONENT_CXX_DEFINES})
+
+install(TARGETS kleeModule
+        EXPORT run_klee
+        DESTINATION "${RUN_KLEE_LIB_DEST}"
+)
