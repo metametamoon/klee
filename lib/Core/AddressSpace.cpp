@@ -37,9 +37,15 @@ llvm::cl::opt<bool> SkipNotLazyInitialized(
     llvm::cl::cat(PointerResolvingCat));
 
 llvm::cl::opt<bool> SkipLocal(
-    "skip-local", llvm::cl::init(true),
+    "skip-local", llvm::cl::init(false),
     llvm::cl::desc(
-        "Do not set symbolic pointers on local objects (default=true)"),
+        "Do not set symbolic pointers on local objects (default=false)"),
+    llvm::cl::cat(PointerResolvingCat));
+
+llvm::cl::opt<bool> SkipGlobal(
+    "skip-global", llvm::cl::init(false),
+    llvm::cl::desc(
+        "Do not set symbolic pointers on global objects (default=false)"),
     llvm::cl::cat(PointerResolvingCat));
 
 llvm::cl::opt<bool> UseTimestamps(
@@ -92,10 +98,11 @@ ObjectState *AddressSpace::getWriteable(const MemoryObject *mo,
 
 ///
 
-bool AddressSpace::resolveOne(const ref<ConstantExpr> &addr, KType *objectType,
-                              IDType &result) const {
-  uint64_t address = addr->getZExtValue();
-  MemoryObject hack(address);
+bool AddressSpace::resolveOne(ref<ConstantPointerExpr> address,
+                              KType *objectType, IDType &result) const {
+  uint64_t segmentConst = address->getConstantSegment()->getZExtValue();
+  uint64_t addressConst = address->getConstantValue()->getZExtValue();
+  MemoryObject hack(segmentConst);
 
   if (const auto res = objects.lookup_previous(&hack)) {
     const auto &mo = res->first;
@@ -105,8 +112,9 @@ bool AddressSpace::resolveOne(const ref<ConstantExpr> &addr, KType *objectType,
       // [mo->address, mo->address + mo->size) or the object is a 0-sized
       // object.
       uint64_t size = arrayConstantSize->getZExtValue();
-      if ((size == 0 && address == mo->address) ||
-          (address - mo->address < size)) {
+      if (segmentConst == mo->address &&
+          ((size == 0 && addressConst == mo->address) ||
+           (addressConst - mo->address < size))) {
         result = mo->id;
         return true;
       }
@@ -116,57 +124,26 @@ bool AddressSpace::resolveOne(const ref<ConstantExpr> &addr, KType *objectType,
   return false;
 }
 
-bool AddressSpace::resolveOneIfUnique(ExecutionState &state,
-                                      TimingSolver *solver, ref<Expr> address,
-                                      KType *objectType, IDType &result,
-                                      bool &success) const {
-  ref<Expr> base =
-      state.isGEPExpr(address) ? state.gepExprBases.at(address).first : address;
-  ref<Expr> uniqueAddress =
-      state.constraints.cs().concretization().evaluate(base);
-  if (!isa<ConstantExpr>(uniqueAddress) &&
-      !solver->tryGetUnique(state.constraints.cs(), base, uniqueAddress,
-                            state.queryMetaData)) {
-    return false;
-  }
-
-  success = false;
-  if (ref<ConstantExpr> CE = dyn_cast<ConstantExpr>(uniqueAddress)) {
-    MemoryObject hack(CE->getZExtValue());
-    if (const auto *res = objects.lookup_previous(&hack)) {
-      const MemoryObject *mo = res->first;
-      ref<Expr> inBounds = mo->getBoundsCheckPointer(address);
-
-      if (!solver->mayBeTrue(state.constraints.cs(), inBounds, success,
-                             state.queryMetaData)) {
-        return false;
-      }
-      if (success) {
-        result = mo->id;
-      }
-    }
-  }
-
-  return true;
-}
-
 class ResolvePredicate {
   bool useTimestamps;
   bool skipNotSymbolicObjects;
   bool skipNotLazyInitialized;
   bool skipLocal;
+  bool skipGlobal;
   unsigned timestamp;
   ExecutionState *state;
+  KType *objectType;
 
 public:
-  explicit ResolvePredicate(ExecutionState &state, ref<Expr> address)
+  explicit ResolvePredicate(ExecutionState &state, ref<PointerExpr> address,
+                            KType *objectType)
       : useTimestamps(UseTimestamps),
         skipNotSymbolicObjects(SkipNotSymbolicObjects),
         skipNotLazyInitialized(SkipNotLazyInitialized), skipLocal(SkipLocal),
-        timestamp(UINT_MAX), state(&state) {
-    auto base =
-        state.isGEPExpr(address) ? state.gepExprBases[address].first : address;
-    if (!isa<ConstantExpr>(address)) {
+        skipGlobal(SkipGlobal), timestamp(UINT_MAX), state(&state),
+        objectType(objectType) {
+    ref<Expr> base = address->getBase();
+    if (!isa<ConstantExpr>(base)) {
       std::pair<ref<const MemoryObject>, ref<Expr>> moBasePair;
       if (state.getBase(base, moBasePair)) {
         timestamp = moBasePair.first->timestamp;
@@ -174,22 +151,26 @@ public:
     }
   }
 
-  bool operator()(const MemoryObject *mo) const {
+  bool operator()(const MemoryObject *mo, const ObjectState *os) const {
     bool result = !useTimestamps || mo->timestamp <= timestamp;
     result = result && (!skipNotSymbolicObjects || state->inSymbolics(mo));
     result = result && (!skipNotLazyInitialized || mo->isLazyInitialized);
     result = result && (!skipLocal || !mo->isLocal);
+    result = result && (!skipGlobal || !mo->isGlobal);
+    result = result && os->isAccessableFrom(objectType);
     return result;
   }
 };
 
 bool AddressSpace::resolveOne(ExecutionState &state, TimingSolver *solver,
-                              ref<Expr> address, KType *objectType,
+                              ref<PointerExpr> address, KType *objectType,
                               IDType &result, bool &success,
                               const std::atomic_bool &haltExecution) const {
-  ResolvePredicate predicate(state, address);
-  if (ref<ConstantExpr> CE = dyn_cast<ConstantExpr>(address)) {
-    if (resolveOne(CE, objectType, result)) {
+  ResolvePredicate predicate(state, address, objectType);
+  ref<Expr> segment = address->getSegment();
+  ref<Expr> addressExpr = address->getValue();
+  if (ref<ConstantPointerExpr> CP = dyn_cast<ConstantPointerExpr>(address)) {
+    if (resolveOne(CP, objectType, result)) {
       success = true;
       return true;
     }
@@ -197,35 +178,16 @@ bool AddressSpace::resolveOne(ExecutionState &state, TimingSolver *solver,
 
   TimerStatIncrementer timer(stats::resolveTime);
 
-  if (!resolveOneIfUnique(state, solver, address, objectType, result,
-                          success)) {
-    return false;
-  }
-  if (success) {
-    return true;
-  }
-
   // try cheap search, will succeed for any inbounds pointer
 
-  ref<ConstantExpr> cex;
-  if (!solver->getValue(state.constraints.cs(), address, cex,
-                        state.queryMetaData))
+  ref<ConstantPointerExpr> addressCex;
+  if (!solver->getPointer(state.constraints.cs(), address, addressCex,
+                          state.queryMetaData))
     return false;
-  uint64_t example = cex->getZExtValue();
-  MemoryObject hack(example);
-  const auto res = objects.lookup_previous(&hack);
 
-  if (res && predicate(res->first)) {
-    const MemoryObject *mo = res->first;
-    if (ref<ConstantExpr> arrayConstantSize =
-            dyn_cast<ConstantExpr>(mo->getSizeExpr())) {
-      if (example - mo->address < arrayConstantSize->getZExtValue() &&
-          res->second->isAccessableFrom(objectType)) {
-        result = mo->id;
-        success = true;
-        return true;
-      }
-    }
+  if (resolveOne(addressCex, objectType, result)) {
+    success = true;
+    return true;
   }
 
   // didn't work, now we have to search
@@ -233,10 +195,7 @@ bool AddressSpace::resolveOne(ExecutionState &state, TimingSolver *solver,
   for (MemoryMap::iterator oi = objects.begin(), oe = objects.end(); oi != oe;
        ++oi) {
     const auto &mo = oi->first;
-    if (!predicate(mo))
-      continue;
-
-    if (!oi->second->isAccessableFrom(objectType)) {
+    if (!predicate(mo, oi->second.get())) {
       continue;
     }
 
@@ -261,7 +220,7 @@ bool AddressSpace::resolveOne(ExecutionState &state, TimingSolver *solver,
 }
 
 int AddressSpace::checkPointerInObject(ExecutionState &state,
-                                       TimingSolver *solver, ref<Expr> p,
+                                       TimingSolver *solver, ref<PointerExpr> p,
                                        const ObjectPair &op, ResolutionList &rl,
                                        unsigned maxResolutions) const {
   // XXX in the common case we can save one query if we ask
@@ -296,29 +255,18 @@ int AddressSpace::checkPointerInObject(ExecutionState &state,
 }
 
 bool AddressSpace::resolve(ExecutionState &state, TimingSolver *solver,
-                           ref<Expr> p, KType *objectType, ResolutionList &rl,
-                           ResolutionList &rlSkipped, unsigned maxResolutions,
-                           time::Span timeout) const {
-  ResolvePredicate predicate(state, p);
-  if (ConstantExpr *CE = dyn_cast<ConstantExpr>(p)) {
+                           ref<PointerExpr> p, KType *objectType,
+                           ResolutionList &rl, ResolutionList &rlSkipped,
+                           unsigned maxResolutions, time::Span timeout) const {
+  ResolvePredicate predicate(state, p, objectType);
+  if (ref<ConstantPointerExpr> CP = dyn_cast<ConstantPointerExpr>(p)) {
     IDType res;
-    if (resolveOne(CE, objectType, res)) {
+    if (resolveOne(CP, objectType, res)) {
       rl.push_back(res);
       return false;
     }
   }
   TimerStatIncrementer timer(stats::resolveTime);
-
-  IDType fastPathObjectID;
-  bool fastPathSuccess;
-  if (!resolveOneIfUnique(state, solver, p, objectType, fastPathObjectID,
-                          fastPathSuccess)) {
-    return true;
-  }
-  if (fastPathSuccess) {
-    rl.push_back(fastPathObjectID);
-    return false;
-  }
 
   // XXX in general this isn't exactly what we want... for
   // a multiple resolution case (or for example, a \in {b,c,0})
@@ -338,10 +286,7 @@ bool AddressSpace::resolve(ExecutionState &state, TimingSolver *solver,
   for (MemoryMap::iterator oi = objects.begin(), oe = objects.end(); oi != oe;
        ++oi) {
     const MemoryObject *mo = oi->first;
-    if (!predicate(mo))
-      continue;
-    if (!oi->second->isAccessableFrom(objectType)) {
-      rlSkipped.push_back(mo->id);
+    if (!predicate(mo, oi->second.get())) {
       continue;
     }
 
@@ -374,6 +319,14 @@ void AddressSpace::copyOutConcretes(const Assignment &assignment) {
   }
 }
 
+ref<ConstantExpr> toConstantExpr(ref<Expr> expr) {
+  if (ref<ConstantPointerExpr> pointer = dyn_cast<ConstantPointerExpr>(expr)) {
+    return pointer->getConstantValue();
+  } else {
+    return cast<ConstantExpr>(expr);
+  }
+}
+
 void AddressSpace::copyOutConcrete(const MemoryObject *mo,
                                    const ObjectState *os,
                                    const Assignment &assignment) const {
@@ -382,7 +335,7 @@ void AddressSpace::copyOutConcrete(const MemoryObject *mo,
   std::vector<uint8_t> concreteStore(mo->size);
   for (size_t i = 0; i < mo->size; i++) {
     auto byte = ae.visit(os->read8(i));
-    concreteStore[i] = cast<ConstantExpr>(byte)->getZExtValue(8);
+    concreteStore[i] = toConstantExpr(byte)->getZExtValue(Expr::Int8);
   }
   std::memcpy(address, concreteStore.data(), mo->size);
 }
@@ -410,7 +363,7 @@ bool AddressSpace::copyInConcrete(const MemoryObject *mo, const ObjectState *os,
   std::vector<uint8_t> concreteStore(mo->size);
   for (size_t i = 0; i < mo->size; i++) {
     auto byte = ae.visit(os->read8(i));
-    concreteStore[i] = cast<ConstantExpr>(byte)->getZExtValue(8);
+    concreteStore[i] = toConstantExpr(byte)->getZExtValue(8);
   }
   if (memcmp(address, concreteStore.data(), mo->size) != 0) {
     if (os->readOnly) {

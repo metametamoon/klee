@@ -24,7 +24,6 @@ class Value;
 
 namespace klee {
 class MemoryObject;
-class ArrayCache;
 class AddressManager;
 
 typedef uint64_t IDType;
@@ -37,15 +36,13 @@ private:
   objects_ty objects;
   std::unordered_map<IDType, std::map<uint64_t, MemoryObject *>> allocatedSizes;
 
-  ArrayCache *const arrayCache;
-
   char *deterministicSpace;
   char *nextFreeSlot;
   size_t spaceSize;
 
 public:
   AddressManager *am;
-  MemoryManager(ArrayCache *arrayCache);
+  MemoryManager();
   ~MemoryManager();
 
   /**
@@ -61,7 +58,6 @@ public:
                               const llvm::Value *allocSite);
   void deallocate(const MemoryObject *mo);
   void markFreed(MemoryObject *mo);
-  ArrayCache *getArrayCache() const { return arrayCache; }
   const std::map<uint64_t, MemoryObject *> &
   getAllocatedObjects(IDType idObject);
   /*

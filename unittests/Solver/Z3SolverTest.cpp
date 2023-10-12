@@ -25,9 +25,6 @@
 
 using namespace klee;
 
-namespace {
-ArrayCache AC;
-}
 class Z3SolverTest : public ::testing::Test {
 protected:
   std::unique_ptr<Solver> Z3Solver_;
@@ -50,7 +47,7 @@ TEST_F(Z3SolverTest, GetConstraintLog) {
   }
 
   const Array *ConstantArray =
-      AC.CreateArray(ConstantExpr::create(4, sizeof(uint64_t) * CHAR_BIT),
+      Array::create(ConstantExpr::create(4, sizeof(uint64_t) * CHAR_BIT),
                      SourceBuilder::constant(ConstantExpressions));
 
   const UpdateList ConstantArrayUL(ConstantArray, nullptr);

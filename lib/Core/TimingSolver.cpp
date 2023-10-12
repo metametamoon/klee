@@ -84,23 +84,34 @@ bool TimingSolver::tryGetUnique(const ConstraintSet &constraints, ref<Expr> e,
                                 SolverQueryMetaData &metaData) {
   ++stats::queries;
   result = e;
-  if (!isa<ConstantExpr>(result)) {
-    ref<ConstantExpr> value;
+  if (!isa<ConstantExpr>(result) && !isa<ConstantPointerExpr>(result)) {
+    ref<Expr> unique;
     bool isTrue = false;
 
     e = optimizer.optimizeExpr(e, true);
     TimerStatIncrementer timer(stats::solverTime);
 
-    if (!solver->getValue(Query(constraints, e, metaData.id), value)) {
-      return false;
+    if (isa<PointerExpr>(e)) {
+      ref<ConstantPointerExpr> pointer;
+      if (!solver->getPointer(Query(constraints, e, metaData.id), pointer)) {
+        return false;
+      }
+      unique = pointer;
+
+    } else {
+      ref<ConstantExpr> value;
+      if (!solver->getValue(Query(constraints, e, metaData.id), value)) {
+        return false;
+      }
+      unique = value;
     }
-    ref<Expr> cond = EqExpr::create(e, value);
+    ref<Expr> cond = EqExpr::create(e, unique);
     cond = optimizer.optimizeExpr(cond, false);
     if (!solver->mustBeTrue(Query(constraints, cond, metaData.id), isTrue)) {
       return false;
     }
     if (isTrue) {
-      result = value;
+      result = unique;
     }
 
     metaData.queryCost += timer.delta();
@@ -180,6 +191,30 @@ bool TimingSolver::getValue(const ConstraintSet &constraints, ref<Expr> expr,
 
   bool success =
       solver->getValue(Query(constraints, expr, metaData.id), result);
+
+  metaData.queryCost += timer.delta();
+
+  return success;
+}
+
+bool TimingSolver::getPointer(const ConstraintSet &constraints,
+                              ref<PointerExpr> pointer,
+                              ref<ConstantPointerExpr> &result,
+                              SolverQueryMetaData &metaData) {
+  ++stats::queries;
+  // Fast path, to avoid timer and OS overhead.
+  if (ConstantPointerExpr *CE = dyn_cast<ConstantPointerExpr>(pointer)) {
+    result = CE;
+    return true;
+  }
+
+  TimerStatIncrementer timer(stats::solverTime);
+
+  if (simplifyExprs)
+    pointer = Simplificator::simplifyExpr(constraints, pointer).simplified;
+
+  bool success =
+      solver->getPointer(Query(constraints, pointer, metaData.id), result);
 
   metaData.queryCost += timer.delta();
 

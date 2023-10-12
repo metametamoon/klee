@@ -28,6 +28,7 @@ public:
                                  ref<Expr> offset);
 
   static ReadExpr *hasOrderedReads(const ConcatExpr &ce);
+  static bool hasOrderedReads(ref<Expr> e);
   static void collectAlternatives(const SelectExpr &se,
                                   std::vector<ref<Expr>> &alternatives);
 };

@@ -36,6 +36,13 @@ ref<SymbolicSource> SourceBuilder::makeSymbolic(const std::string &name,
 }
 
 ref<SymbolicSource>
+SourceBuilder::lazyInitializationSegment(ref<Expr> pointer) {
+  ref<SymbolicSource> r(new LazyInitializationSegmentSource(pointer));
+  r->computeHash();
+  return r;
+}
+
+ref<SymbolicSource>
 SourceBuilder::lazyInitializationAddress(ref<Expr> pointer) {
   ref<SymbolicSource> r(new LazyInitializationAddressSource(pointer));
   r->computeHash();

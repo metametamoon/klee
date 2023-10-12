@@ -55,6 +55,10 @@ ReadExpr *ArrayExprHelper::hasOrderedReads(const ConcatExpr &ce) {
   return cast<ReadExpr>(e.get());
 }
 
+bool ArrayExprHelper::hasOrderedReads(ref<Expr> e) {
+  return isa<ConcatExpr>(e) && hasOrderedReads(*cast<ConcatExpr>(e)) != nullptr;
+}
+
 void ArrayExprHelper::collectAlternatives(
     const SelectExpr &se, std::vector<ref<Expr>> &alternatives) {
   if (isa<SelectExpr>(se.trueExpr)) {
