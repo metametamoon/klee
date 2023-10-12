@@ -18,6 +18,8 @@
 #include "klee/Expr/IndependentConstraintSetUnion.h"
 #include "klee/Expr/IndependentSet.h"
 #include "klee/Expr/Path.h"
+#include "klee/Expr/SourceBuilder.h"
+#include "klee/Expr/SymbolicSource.h"
 #include "klee/Expr/Symcrete.h"
 #include "klee/Module/KModule.h"
 #include "klee/Support/OptionCategories.h"
@@ -132,6 +134,67 @@ public:
     } else {
       return Action::skipChildren();
     }
+  }
+
+  ref<SymbolicSource> visitSource(ref<SymbolicSource> source) {
+    if (ref<LazyInitializationSource> liSource =
+            dyn_cast<LazyInitializationSource>(source)) {
+      ref<Expr> pointer = visit(liSource->pointer);
+      switch (source->getKind()) {
+      case SymbolicSource::Kind::LazyInitializationAddress: {
+        return SourceBuilder::lazyInitializationAddress(pointer);
+      }
+      case SymbolicSource::Kind::LazyInitializationSize: {
+        return SourceBuilder::lazyInitializationSize(pointer);
+      }
+      case SymbolicSource::Kind::LazyInitializationContent: {
+        return SourceBuilder::lazyInitializationContent(pointer);
+      }
+      default:
+        assert(0 && "unreachable");
+      }
+    } else {
+      return source;
+    }
+  }
+
+  const Array *visitArray(const Array *arr) {
+    ref<SymbolicSource> source = visitSource(arr->source);
+    ref<Expr> size = visit(arr->getSize());
+    if (source != arr->source || size != arr->getSize()) {
+      return Array::create(size, source, arr->getDomain(), arr->getRange());
+    } else {
+      return arr;
+    }
+  }
+
+  UpdateList visitUpdateList(UpdateList u) {
+    const Array *root = visitArray(u.root);
+    std::vector<ref<UpdateNode>> updates;
+
+    for (auto un = u.head; un; un = un->next) {
+      updates.push_back(un);
+    }
+
+    updates.push_back(nullptr);
+
+    for (int i = updates.size() - 2; i >= 0; i--) {
+      ref<Expr> index = visit(updates[i]->index);
+      ref<Expr> value = visit(updates[i]->value);
+      updates[i] = new UpdateNode(updates[i + 1], index, value);
+    }
+    return UpdateList(root, updates[0]);
+  }
+
+  Action visitRead(const ReadExpr &re) override {
+    // ref<Expr> v = visit(re.index);
+    // UpdateList u = visitUpdateList(re.updates);
+    // // UpdateList u = re.updates;
+    // if (v != re.index || u != re.updates) {
+    //   return Action::changeTo(ReadExpr::create(u, v));
+    // }
+    // return Action::skipChildren();
+    return Action::doChildren();
   }
 
 public:
