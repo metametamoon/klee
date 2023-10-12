@@ -4,6 +4,7 @@
 #include "klee/Expr/SymbolicSource.h"
 
 namespace klee {
+class KModule;
 
 class KInstruction;
 class KGlobalVariable;
@@ -29,6 +30,7 @@ public:
 
   static ref<SymbolicSource> makeSymbolic(const std::string &name,
                                           unsigned version);
+  static ref<SymbolicSource> lazyInitializationSegment(ref<Expr> pointer);
   static ref<SymbolicSource> lazyInitializationAddress(ref<Expr> pointer);
   static ref<SymbolicSource> lazyInitializationSize(ref<Expr> pointer);
   static ref<SymbolicSource> lazyInitializationContent(ref<Expr> pointer);

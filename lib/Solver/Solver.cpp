@@ -91,13 +91,38 @@ bool Solver::getValue(const Query &query, ref<ConstantExpr> &result) {
     result = CE;
     return true;
   }
+  if (ConstantPointerExpr *CP = dyn_cast<ConstantPointerExpr>(query.expr)) {
+    result = CP->getConstantValue();
+    return true;
+  }
 
   // FIXME: Push ConstantExpr requirement down.
   ref<Expr> tmp;
   if (!impl->computeValue(query, tmp))
     return false;
 
-  result = cast<ConstantExpr>(tmp);
+  assert(isa<ConstantExpr>(tmp) || isa<ConstantPointerExpr>(tmp));
+  result = isa<ConstantExpr>(tmp)
+               ? cast<ConstantExpr>(tmp)
+               : cast<ConstantPointerExpr>(tmp)->getConstantValue();
+  return true;
+}
+
+bool Solver::getPointer(const Query &query, ref<ConstantPointerExpr> &result) {
+  ref<PointerExpr> pointer = cast<PointerExpr>(query.expr);
+
+  if (ConstantPointerExpr *CP = dyn_cast<ConstantPointerExpr>(query.expr)) {
+    result = CP;
+    return true;
+  }
+
+  // FIXME: Push ConstantExpr requirement down.
+  ref<Expr> tmp;
+  if (!impl->computeValue(query, tmp))
+    return false;
+
+  assert(isa<ConstantPointerExpr>(tmp));
+  result = cast<ConstantPointerExpr>(tmp);
   return true;
 }
 

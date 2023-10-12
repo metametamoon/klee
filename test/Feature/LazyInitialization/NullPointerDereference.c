@@ -8,10 +8,10 @@ int main() {
   int *x;
   klee_make_symbolic(&x, sizeof(x), "*x");
   if ((uintptr_t)x < (uintptr_t)10) {
-    // CHECK: ImpossibleAddressForLI.c:[[@LINE+1]]: memory error: null pointer exception
+    // CHECK: NullPointerDereference.c:[[@LINE+1]]: memory error: null pointer exception
     *x = 20;
   }
-  // CHECK-NOT: ImpossibleAddressForLI.c:[[@LINE+1]]: memory error: null pointer exception
+  // CHECK-NOT: NullPointerDereference.c:[[@LINE+1]]: memory error: null pointer exception
   *x = 30;
 }
 

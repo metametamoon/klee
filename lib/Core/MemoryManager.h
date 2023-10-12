@@ -26,7 +26,6 @@ class Value;
 
 namespace klee {
 class MemoryObject;
-class ArrayCache;
 
 typedef uint64_t IDType;
 
@@ -36,14 +35,12 @@ private:
   objects_ty objects;
   ExprHashMap<MemoryObject *> symbolicAddresses;
 
-  ArrayCache *const arrayCache;
-
   char *deterministicSpace;
   char *nextFreeSlot;
   size_t spaceSize;
 
 public:
-  MemoryManager(ArrayCache *arrayCache);
+  MemoryManager();
   ~MemoryManager();
 
   /**
@@ -60,7 +57,6 @@ public:
                               const llvm::Value *allocSite, KType *type);
   void deallocate(const MemoryObject *mo);
   void markFreed(MemoryObject *mo);
-  ArrayCache *getArrayCache() const { return arrayCache; }
   const MemoryObject *getAllocatedObject(ref<Expr> address);
   /*
    * Returns the size used by deterministic allocation in bytes
