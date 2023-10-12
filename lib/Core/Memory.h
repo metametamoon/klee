@@ -28,6 +28,7 @@ DISABLE_WARNING_DEPRECATED_DECLARATIONS
 DISABLE_WARNING_POP
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -37,7 +38,6 @@ class Value;
 
 namespace klee {
 
-class ArrayCache;
 class BitArray;
 class ExecutionState;
 class KType;
@@ -139,11 +139,21 @@ public:
   ref<Expr> getOffsetExpr(ref<Expr> pointer) const {
     return SubExpr::create(pointer, getBaseExpr());
   }
-  ref<Expr> getBoundsCheckPointer(ref<Expr> pointer) const {
-    return getBoundsCheckOffset(getOffsetExpr(pointer));
+  ref<Expr> getOffsetExpr(ref<PointerExpr> pointer) const {
+    return SubExpr::create(pointer->getValue(), getBaseExpr());
   }
-  ref<Expr> getBoundsCheckPointer(ref<Expr> pointer, unsigned bytes) const {
-    return getBoundsCheckOffset(getOffsetExpr(pointer), bytes);
+  ref<Expr> getBoundsCheckPointer(ref<PointerExpr> pointer) const {
+    ref<Expr> base = pointer->getBase();
+    ref<Expr> address = pointer->getValue();
+    return AndExpr::create(EqExpr::create(getBaseExpr(), base),
+                           getBoundsCheckOffset(getOffsetExpr(address)));
+  }
+  ref<Expr> getBoundsCheckPointer(ref<PointerExpr> pointer,
+                                  unsigned bytes) const {
+    ref<Expr> base = pointer->getBase();
+    ref<Expr> address = pointer->getValue();
+    return AndExpr::create(EqExpr::create(getBaseExpr(), base),
+                           getBoundsCheckOffset(getOffsetExpr(address), bytes));
   }
 
   ref<Expr> getBoundsCheckOffset(ref<Expr> offset) const {
@@ -187,6 +197,56 @@ public:
   bool equals(const MemoryObject &b) const { return compare(b) == 0; }
 };
 
+class ObjectStage {
+private:
+  /// knownSymbolics[byte] holds the expression for byte,
+  /// if byte is known
+  mutable SparseStorage<ref<Expr>, OptionalRefEq<Expr>> knownSymbolics;
+
+  /// unflushedMask[byte] is set if byte is unflushed
+  /// mutable because may need flushed during read of const
+  mutable SparseStorage<bool> unflushedMask;
+
+  // mutable because we may need flush during read of const
+  mutable UpdateList updates;
+
+  ref<Expr> size;
+  bool safeRead;
+  Expr::Width width;
+
+public:
+  ObjectStage(const Array *array, ref<Expr> defaultValue, bool safe = true, Expr::Width width = Expr::Int8);
+  ObjectStage(ref<Expr> size, ref<Expr> defaultValue, bool safe = true, Expr::Width width = Expr::Int8);
+
+  ObjectStage(const ObjectStage &os);
+  ~ObjectStage() = default;
+
+  ref<Expr> readWidth(unsigned offset) const;
+  ref<Expr> readWidth(ref<Expr> offset) const;
+  void writeWidth(unsigned offset, ref<Expr> value);
+  void writeWidth(ref<Expr> offset, ref<Expr> value);
+  void write(const ObjectStage &os);
+
+  void write(unsigned offset, ref<Expr> value);
+  void write(ref<Expr> offset, ref<Expr> value);
+
+  void writeWidth(unsigned offset, uint64_t value);
+  void print() const;
+
+  size_t getSparseStorageEntries() {
+    return knownSymbolics.storage().size() + unflushedMask.storage().size();
+  }
+  void initializeToZero();
+
+private:
+  const UpdateList &getUpdates() const;
+
+  void makeConcrete();
+
+  void flushForRead() const;
+  void flushForWrite();
+};
+
 class ObjectState {
 private:
   friend class AddressSpace;
@@ -200,16 +260,8 @@ private:
 
   ref<const MemoryObject> object;
 
-  /// knownSymbolics[byte] holds the expression for byte,
-  /// if byte is known
-  mutable SparseStorage<ref<Expr>, OptionalRefEq<Expr>> knownSymbolics;
-
-  /// unflushedMask[byte] is set if byte is unflushed
-  /// mutable because may need flushed during read of const
-  mutable SparseStorage<bool> unflushedMask;
-
-  // mutable because we may need flush during read of const
-  mutable UpdateList updates;
+  ObjectStage valueOS;
+  ObjectStage baseOS;
 
   ref<UpdateNode> lastUpdate;
 
@@ -221,7 +273,6 @@ public:
   bool readOnly;
   bool wasWritten = false;
 
-public:
   /// Create a new object state for the given memory
   // For objects in memory
   ObjectState(const MemoryObject *mo, const Array *array, KType *dt);
@@ -237,7 +288,7 @@ public:
   void setReadOnly(bool ro) { readOnly = ro; }
 
   size_t getSparseStorageEntries() {
-    return knownSymbolics.storage().size() + unflushedMask.storage().size();
+    return valueOS.getSparseStorageEntries() + baseOS.getSparseStorageEntries();
   }
 
   void swapObjectHack(MemoryObject *mo) { object = mo; }
@@ -245,6 +296,7 @@ public:
   ref<Expr> read(ref<Expr> offset, Expr::Width width) const;
   ref<Expr> read(unsigned offset, Expr::Width width) const;
   ref<Expr> read8(unsigned offset) const;
+  ref<Expr> readValue8(unsigned offset) const;
 
   void write(unsigned offset, ref<Expr> value);
   void write(ref<Expr> offset, ref<Expr> value);
@@ -261,18 +313,9 @@ public:
   KType *getDynamicType() const;
 
 private:
-  const UpdateList &getUpdates() const;
-
-  void makeConcrete();
-
   ref<Expr> read8(ref<Expr> offset) const;
   void write8(unsigned offset, ref<Expr> value);
   void write8(ref<Expr> offset, ref<Expr> value);
-
-  void flushForRead() const;
-  void flushForWrite();
-
-  ArrayCache *getArrayCache() const;
 };
 
 } // namespace klee

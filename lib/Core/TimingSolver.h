@@ -87,6 +87,10 @@ public:
   bool getValue(const ConstraintSet &, ref<Expr> expr,
                 ref<ConstantExpr> &result, SolverQueryMetaData &metaData);
 
+  bool getPointer(const ConstraintSet &, ref<PointerExpr> pointer,
+                  ref<ConstantPointerExpr> &result,
+                  SolverQueryMetaData &metaData);
+
   bool getMinimalUnsignedValue(const ConstraintSet &, ref<Expr> expr,
                                ref<ConstantExpr> &result,
                                SolverQueryMetaData &metaData);

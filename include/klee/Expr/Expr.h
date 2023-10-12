@@ -257,7 +257,9 @@ public:
     BinaryKindFirst = Add,
     BinaryKindLast = FOGe,
     CmpKindFirst = Eq,
-    CmpKindLast = FOGe
+    CmpKindLast = FOGe,
+    Pointer,
+    ConstantPointer
   };
 
   /// @brief Required by klee::ref-managed objects
@@ -367,6 +369,7 @@ public:
   /// null.
   ref<ReadExpr> hasOrderedReads(bool stride) const;
   ref<ReadExpr> hasOrderedReads() const;
+  ref<Expr> getValue();
 
   /* Static utility methods */
 
@@ -383,13 +386,14 @@ public:
   static ref<Expr> createZExtToPointerWidth(ref<Expr> e);
   static ref<Expr> createImplies(ref<Expr> hyp, ref<Expr> conc);
   static ref<Expr> createIsZero(ref<Expr> e);
-  static ref<Expr> createTrue();
-  static ref<Expr> createFalse();
+  static ref<ConstantExpr> createTrue();
+  static ref<ConstantExpr> createFalse();
 
   /// Create a little endian read of the given type at offset 0 of the
   /// given object.
   static ref<Expr> createTempRead(const Array *array, Expr::Width w,
-                                  unsigned off = 0);
+                                  ref<Expr> off);
+  static ref<Expr> createTempRead(const Array *array, Expr::Width w);
 
   static ref<ConstantExpr> createPointer(uint64_t v);
 
@@ -629,6 +633,8 @@ public:
   std::set<const Array *> dependency;
 
 private:
+  static ArrayCache cachedArrays;
+
   unsigned hashValue;
 
   // FIXME: Make =delete when we switch to C++11
@@ -646,10 +652,14 @@ private:
   /// when printing expressions. When expressions are printed the output will
   /// not parse correctly since two arrays with the same name cannot be
   /// distinguished once printed.
-public:
   Array(ref<Expr> _size, const ref<SymbolicSource> source,
         Expr::Width _domain = Expr::Int32, Expr::Width _range = Expr::Int8,
         unsigned _id = 0);
+
+public:
+  static const Array *create(ref<Expr> _size, const ref<SymbolicSource> source,
+                             Expr::Width _domain = Expr::Int32,
+                             Expr::Width _range = Expr::Int8);
 
 public:
   bool isSymbolicArray() const { return !isConstantArray(); }
@@ -719,7 +729,8 @@ public:
     return createCachedExpr(r);
   }
 
-  static ref<Expr> create(const UpdateList &updates, ref<Expr> i);
+  static ref<Expr> create(const UpdateList &updates, ref<Expr> i,
+                          bool safe = true);
 
   Width getWidth() const {
     assert(updates.root);
@@ -1623,6 +1634,118 @@ public:
   // binary representations for NaN but we need try to use the same
   // representation for consistency with the solver.
   static ref<ConstantExpr> GetNaN(Expr::Width w);
+};
+
+class PointerExpr : public NonConstantExpr {
+public:
+  static const Kind kind = Expr::Pointer;
+  static const unsigned numKids = 2;
+  ref<Expr> base;
+  ref<Expr> value;
+  static ref<Expr> alloc(const ref<Expr> &b, const ref<Expr> &v) {
+    ref<Expr> r(new PointerExpr(b, v));
+    r->computeHash();
+    r->computeHeight();
+    return createCachedExpr(r);
+  }
+  static ref<Expr> create(const ref<Expr> &b, const ref<Expr> &o);
+  static ref<Expr> create(const ref<Expr> &v);
+  static ref<Expr> createSymbolic(const ref<Expr> &expr,
+                                  const ref<ReadExpr> &pointer,
+                                  const ref<Expr> &off);
+
+  Width getWidth() const { return value->getWidth(); }
+  Kind getKind() const { return Expr::Pointer; }
+  ref<Expr> getBase() const { return base; }
+  ref<Expr> getValue() const { return value; }
+  ref<Expr> getOffset() const {
+    assert(value->getWidth() == base->getWidth() && "Invalid getOffset() call!");
+    return SubExpr::create(value, base);
+  }
+
+  unsigned getNumKids() const { return numKids; }
+  ref<Expr> getKid(unsigned i) const {
+    if (i == 0)
+      return base;
+    if (i == 1)
+      return value;
+    return 0;
+  }
+
+  int compareContents(const Expr &b) const { return 0; }
+  virtual ref<Expr> rebuild(ref<Expr> kids[]) const {
+    return create(kids[0], kids[1]);
+  }
+  static bool classof(const Expr *E) {
+    return E->getKind() == Expr::Pointer ||
+           E->getKind() == Expr::ConstantPointer;
+  }
+  static bool classof(const PointerExpr *) { return true; }
+
+  bool isKnownValue() const { return getBase()->isZero(); }
+
+  ref<Expr> Add(const ref<PointerExpr> &RHS);
+  ref<Expr> Sub(const ref<PointerExpr> &RHS);
+  ref<Expr> Mul(const ref<PointerExpr> &RHS);
+  ref<Expr> UDiv(const ref<PointerExpr> &RHS);
+  ref<Expr> SDiv(const ref<PointerExpr> &RHS);
+  ref<Expr> URem(const ref<PointerExpr> &RHS);
+  ref<Expr> SRem(const ref<PointerExpr> &RHS);
+  ref<Expr> And(const ref<PointerExpr> &RHS);
+  ref<Expr> Or(const ref<PointerExpr> &RHS);
+  ref<Expr> Xor(const ref<PointerExpr> &RHS);
+  ref<Expr> Shl(const ref<PointerExpr> &RHS);
+  ref<Expr> LShr(const ref<PointerExpr> &RHS);
+  ref<Expr> AShr(const ref<PointerExpr> &RHS);
+
+  ref<Expr> Eq(const ref<PointerExpr> &RHS);
+  ref<Expr> Ne(const ref<PointerExpr> &RHS);
+  ref<Expr> Ult(const ref<PointerExpr> &RHS);
+  ref<Expr> Ule(const ref<PointerExpr> &RHS);
+  ref<Expr> Ugt(const ref<PointerExpr> &RHS);
+  ref<Expr> Uge(const ref<PointerExpr> &RHS);
+  ref<Expr> Slt(const ref<PointerExpr> &RHS);
+  ref<Expr> Sle(const ref<PointerExpr> &RHS);
+  ref<Expr> Sgt(const ref<PointerExpr> &RHS);
+  ref<Expr> Sge(const ref<PointerExpr> &RHS);
+
+  ref<Expr> Not();
+
+protected:
+  PointerExpr(const ref<Expr> &b, const ref<Expr> &v) : base(b), value(v) {}
+};
+
+class ConstantPointerExpr : public PointerExpr {
+public:
+  static const Kind kind = Expr::ConstantPointer;
+  static const unsigned numKids = 2;
+  static ref<Expr> alloc(const ref<ConstantExpr> &b,
+                         const ref<ConstantExpr> &o) {
+    ref<Expr> r(new ConstantPointerExpr(b, o));
+    r->computeHash();
+    r->computeHeight();
+    return r;
+  }
+  static ref<Expr> create(const ref<ConstantExpr> &b,
+                          const ref<ConstantExpr> &o);
+
+  Kind getKind() const { return Expr::ConstantPointer; }
+  ref<ConstantExpr> getConstantBase() const { return cast<ConstantExpr>(base); }
+  ref<ConstantExpr> getConstantOffset() const {
+    return getConstantValue()->Sub(getConstantBase());
+  }
+  ref<ConstantExpr> getConstantValue() const {
+    return cast<ConstantExpr>(value);
+  }
+
+  static bool classof(const Expr *E) {
+    return E->getKind() == Expr::ConstantPointer;
+  }
+  static bool classof(const ConstantPointerExpr *) { return true; }
+
+private:
+  ConstantPointerExpr(const ref<ConstantExpr> &b, const ref<ConstantExpr> &v)
+      : PointerExpr(b, v) {}
 };
 
 // Implementations
