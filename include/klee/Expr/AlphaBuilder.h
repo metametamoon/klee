@@ -23,7 +23,6 @@ public:
   ArrayCache::ArrayHashMap<const Array *> alphaArrayMap;
 
 private:
-  ArrayCache &arrayCache;
   unsigned index = 0;
 
   const Array *visitArray(const Array *arr);
@@ -32,7 +31,7 @@ private:
   using ExprVisitor::visitExpr;
 
 public:
-  AlphaBuilder(ArrayCache &_arrayCache);
+  AlphaBuilder();
   constraints_ty visitConstraints(constraints_ty cs);
   ref<Expr> build(ref<Expr> v);
   const Array *buildArray(const Array *arr) { return visitArray(arr); }

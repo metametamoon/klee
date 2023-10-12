@@ -4,9 +4,9 @@
 #include "klee/ADT/Ref.h"
 #include "klee/ADT/SparseStorage.h"
 #include "klee/Expr/SymbolicSource.h"
-#include "klee/Module/KModule.h"
 
 namespace klee {
+class KModule;
 
 class SourceBuilder {
 public:
@@ -22,6 +22,7 @@ public:
                               ref<Expr> size);
   static ref<SymbolicSource> makeSymbolic(const std::string &name,
                                           unsigned version);
+  static ref<SymbolicSource> lazyInitializationSegment(ref<Expr> pointer);
   static ref<SymbolicSource> lazyInitializationAddress(ref<Expr> pointer);
   static ref<SymbolicSource> lazyInitializationSize(ref<Expr> pointer);
   static ref<SymbolicSource> lazyInitializationContent(ref<Expr> pointer);

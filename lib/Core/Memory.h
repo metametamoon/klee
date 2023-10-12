@@ -27,6 +27,7 @@ DISABLE_WARNING_DEPRECATED_DECLARATIONS
 DISABLE_WARNING_POP
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -36,7 +37,6 @@ class Value;
 
 namespace klee {
 
-class ArrayCache;
 class BitArray;
 class ExecutionState;
 class KType;
@@ -66,6 +66,14 @@ private:
 public:
   IDType id;
   mutable unsigned timestamp;
+
+  // std::shared_ptr<void> systemAddress;
+
+  // ref<Expr> segment;
+  // ref<Expr> address;
+  // ref<Expr> size;
+
+  ref<Expr> segment;
 
   uint64_t address;
   ref<Expr> addressExpr;
@@ -108,7 +116,8 @@ public:
       bool _isGlobal, bool _isFixed, bool _isLazyInitialized,
       const llvm::Value *_allocSite, MemoryManager *_parent,
       ref<Expr> _addressExpr = nullptr, ref<Expr> _sizeExpr = nullptr,
-      unsigned _timestamp = 0 /* unused if _isLazyInitialized is false*/)
+      unsigned _timestamp = 0 /* unused if _isLazyInitialized is false*/,
+      ref<Expr> _segmentExpr = nullptr)
       : id(counter++), timestamp(_timestamp), address(_address),
         addressExpr(_addressExpr), size(_size), sizeExpr(_sizeExpr),
         alignment(alignment), name("unnamed"), isLocal(_isLocal),
@@ -117,8 +126,10 @@ public:
         parent(_parent), allocSite(_allocSite) {
     if (isLazyInitialized) {
       timestamp = _timestamp;
+      segment = _segmentExpr;
     } else {
       timestamp = time++;
+      segment = Expr::createPointer(id);
     }
   }
 
@@ -147,14 +158,27 @@ public:
     }
     return Expr::createPointer(size);
   }
+  ref<Expr> getSegmentDiff(ref<Expr> pointer) const {
+    return SubExpr::create(pointer, getBaseExpr());
+  }
   ref<Expr> getOffsetExpr(ref<Expr> pointer) const {
     return SubExpr::create(pointer, getBaseExpr());
   }
-  ref<Expr> getBoundsCheckPointer(ref<Expr> pointer) const {
-    return getBoundsCheckOffset(getOffsetExpr(pointer));
+  ref<Expr> getOffsetExpr(ref<PointerExpr> pointer) const {
+    return SubExpr::create(pointer->getValue(), getBaseExpr());
   }
-  ref<Expr> getBoundsCheckPointer(ref<Expr> pointer, unsigned bytes) const {
-    return getBoundsCheckOffset(getOffsetExpr(pointer), bytes);
+  ref<Expr> getBoundsCheckPointer(ref<PointerExpr> pointer) const {
+    ref<Expr> segment = pointer->getSegment();
+    ref<Expr> address = pointer->getValue();
+    return AndExpr::create(EqExpr::create(getBaseExpr(), segment),
+                           getBoundsCheckOffset(getOffsetExpr(address)));
+  }
+  ref<Expr> getBoundsCheckPointer(ref<PointerExpr> pointer,
+                                  unsigned bytes) const {
+    ref<Expr> segment = pointer->getSegment();
+    ref<Expr> address = pointer->getValue();
+    return AndExpr::create(EqExpr::create(getBaseExpr(), segment),
+                           getBoundsCheckOffset(getOffsetExpr(address), bytes));
   }
 
   ref<Expr> getBoundsCheckOffset(ref<Expr> offset) const {
@@ -198,6 +222,53 @@ public:
   bool equals(const MemoryObject &b) const { return compare(b) == 0; }
 };
 
+class ObjectStage {
+private:
+  /// knownSymbolics[byte] holds the expression for byte,
+  /// if byte is known
+  mutable SparseStorage<ref<Expr>, OptionalRefEq<Expr>> knownSymbolics;
+
+  /// unflushedMask[byte] is set if byte is unflushed
+  /// mutable because may need flushed during read of const
+  mutable SparseStorage<bool> unflushedMask;
+
+  // mutable because we may need flush during read of const
+  mutable UpdateList updates;
+
+  ref<Expr> size;
+  bool safeRead;
+
+public:
+  ObjectStage(const Array *array, ref<Expr> defaultValue, bool safe = true);
+  ObjectStage(ref<Expr> size, ref<Expr> defaultValue, bool safe = true);
+
+  ObjectStage(const ObjectStage &os);
+  ~ObjectStage() = default;
+
+  ref<Expr> read8(unsigned offset) const;
+  ref<Expr> read8(ref<Expr> offset) const;
+  void write8(unsigned offset, ref<Expr> value);
+  void write8(ref<Expr> offset, ref<Expr> value);
+  void write(const ObjectStage &os);
+
+  void write(unsigned offset, ref<Expr> value);
+  void write(ref<Expr> offset, ref<Expr> value);
+
+  void write8(unsigned offset, uint8_t value);
+  void write16(unsigned offset, uint16_t value);
+  void write32(unsigned offset, uint32_t value);
+  void write64(unsigned offset, uint64_t value);
+  void print() const;
+
+private:
+  const UpdateList &getUpdates() const;
+
+  void makeConcrete();
+
+  void flushForRead() const;
+  void flushForWrite();
+};
+
 class ObjectState {
 private:
   friend class AddressSpace;
@@ -211,16 +282,9 @@ private:
 
   ref<const MemoryObject> object;
 
-  /// knownSymbolics[byte] holds the expression for byte,
-  /// if byte is known
-  mutable SparseStorage<ref<Expr>, OptionalRefEq<Expr>> knownSymbolics;
-
-  /// unflushedMask[byte] is set if byte is unflushed
-  /// mutable because may need flushed during read of const
-  mutable SparseStorage<bool> unflushedMask;
-
-  // mutable because we may need flush during read of const
-  mutable UpdateList updates;
+  ObjectStage valueOS;
+  ObjectStage segmentOS;
+  ObjectStage baseOS;
 
   ref<UpdateNode> lastUpdate;
 
@@ -231,7 +295,6 @@ private:
 public:
   bool readOnly;
 
-public:
   /// Create a new object state for the given memory
   // For objects in memory
   ObjectState(const MemoryObject *mo, const Array *array, KType *dt);
@@ -267,18 +330,9 @@ public:
   KType *getDynamicType() const;
 
 private:
-  const UpdateList &getUpdates() const;
-
-  void makeConcrete();
-
   ref<Expr> read8(ref<Expr> offset) const;
   void write8(unsigned offset, ref<Expr> value);
   void write8(ref<Expr> offset, ref<Expr> value);
-
-  void flushForRead() const;
-  void flushForWrite();
-
-  ArrayCache *getArrayCache() const;
 };
 
 } // namespace klee

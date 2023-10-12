@@ -25,7 +25,6 @@ void foo(void *s) {
 int main() {
   int n = klee_int("n");
   void *s = malloc(n);
-  // KLEE: ERROR: VoidStar.c:28: memory error: invalid pointer: make_symbolic
   klee_make_symbolic(s, n, "s");
   foo(s);
 }

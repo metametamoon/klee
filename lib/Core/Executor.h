@@ -19,11 +19,11 @@
 #include "TargetedExecutionManager.h"
 #include "UserSearcher.h"
 
+#include "klee/ADT/Either.h"
 #include "klee/ADT/RNG.h"
 #include "klee/Core/BranchTypes.h"
 #include "klee/Core/Interpreter.h"
 #include "klee/Core/TerminationTypes.h"
-#include "klee/Expr/ArrayCache.h"
 #include "klee/Expr/ArrayExprOptimizer.h"
 #include "klee/Expr/Constraints.h"
 #include "klee/Expr/SourceBuilder.h"
@@ -31,6 +31,7 @@
 #include "klee/Module/Cell.h"
 #include "klee/Module/KInstruction.h"
 #include "klee/Module/KModule.h"
+#include "klee/Support/Timer.h"
 #include "klee/System/Time.h"
 
 #include "klee/Support/CompilerWarning.h"
@@ -101,6 +102,9 @@ class TypeManager;
 class MergeHandler;
 class MergingSearcher;
 template <class T> class ref;
+
+using ConstantEitherConstantPointer =
+    either<klee::ConstantExpr, ConstantPointerExpr>;
 
 /// \todo Add a context object to keep track of data only live
 /// during an instruction step. Should contain addedStates,
@@ -177,7 +181,7 @@ private:
 
   /// Map of globals to their bound address. This also includes
   /// globals that have no representative object (i.e. functions).
-  std::map<const llvm::GlobalValue *, ref<ConstantExpr>> globalAddresses;
+  std::map<const llvm::GlobalValue *, ref<ConstantPointerExpr>> globalAddresses;
 
   /// Map of legal function addresses to the corresponding Function.
   /// Used to validate and dereference function pointers.
@@ -225,9 +229,6 @@ private:
 
   /// Maximum time to allow for a single instruction.
   time::Span maxInstructionTime;
-
-  /// Assumes ownership of the created array objects
-  ArrayCache arrayCache;
 
   /// File to print executed instructions to
   std::unique_ptr<llvm::raw_ostream> debugInstFile;
@@ -318,7 +319,7 @@ private:
                          bool isGlobal, const llvm::Value *allocSite,
                          size_t allocationAlignment,
                          ref<Expr> lazyInitializationSource = ref<Expr>(),
-                         unsigned timestamp = 0);
+                         unsigned timestamp = 0, bool isSymbolic = false);
 
   /// Allocate and bind a new object in a particular state. NOTE: This
   /// function may fork.
@@ -350,7 +351,7 @@ private:
   /// convenience for realloc). Note that this function can cause the
   /// state to fork and that \ref state cannot be safely accessed
   /// afterwards.
-  void executeFree(ExecutionState &state, ref<Expr> address,
+  void executeFree(ExecutionState &state, ref<PointerExpr> address,
                    KInstruction *target = 0);
 
   /// Serialize a landingpad instruction so it can be handled by the
@@ -366,7 +367,7 @@ private:
   void executeCall(ExecutionState &state, KInstruction *ki, llvm::Function *f,
                    std::vector<ref<Expr>> &arguments);
 
-  bool resolveMemoryObjects(ExecutionState &state, ref<Expr> address,
+  bool resolveMemoryObjects(ExecutionState &state, ref<PointerExpr> address,
                             KType *targetType, KInstruction *target,
                             unsigned bytes,
                             std::vector<IDType> &mayBeResolvedMemoryObjects,
@@ -374,7 +375,7 @@ private:
                             bool &incomplete, bool onlyLazyInitialize = false);
 
   bool checkResolvedMemoryObjects(
-      ExecutionState &state, ref<Expr> address, KInstruction *target,
+      ExecutionState &state, ref<PointerExpr> address, KInstruction *target,
       unsigned bytes, const std::vector<IDType> &mayBeResolvedMemoryObjects,
       bool hasLazyInitialized, std::vector<IDType> &resolvedMemoryObjects,
       std::vector<ref<Expr>> &resolveConditions,
@@ -396,8 +397,8 @@ private:
                               std::vector<Assignment> &resolveConcretizations,
                               bool &mayBeInBounds);
 
-  void collectReads(ExecutionState &state, ref<Expr> address, KType *targetType,
-                    Expr::Width type, unsigned bytes,
+  void collectReads(ExecutionState &state, ref<PointerExpr> address,
+                    KType *targetType, Expr::Width type, unsigned bytes,
                     const std::vector<IDType> &resolvedMemoryObjects,
                     const std::vector<Assignment> &resolveConcretizations,
                     std::vector<ref<Expr>> &results);
@@ -405,14 +406,14 @@ private:
   // do address resolution / object binding / out of bounds checking
   // and perform the operation
   void executeMemoryOperation(ExecutionState &state, bool isWrite,
-                              KType *targetType, ref<Expr> address,
+                              KType *targetType, ref<PointerExpr> address,
                               ref<Expr> value /* undef if read */,
                               KInstruction *target /* undef if write */);
 
-  bool lazyInitializeObject(ExecutionState &state, ref<Expr> address,
+  bool lazyInitializeObject(ExecutionState &state, ref<PointerExpr> address,
                             const KInstruction *target, KType *targetType,
-                            uint64_t size, bool isLocal, IDType &id,
-                            bool isConstant = true);
+                            uint64_t concreteSize, ref<Expr> size, bool isLocal,
+                            IDType &id, bool isConstant = true);
 
   IDType lazyInitializeLocalObject(ExecutionState &state, StackFrame &sf,
                                    ref<Expr> address,
@@ -525,12 +526,16 @@ private:
   void bindArgument(KFunction *kf, unsigned index, ExecutionState &state,
                     ref<Expr> value);
 
+  ref<Expr> toExpr(ref<ConstantEitherConstantPointer> cecp);
+
   /// Evaluates an LLVM constant expression.  The optional argument ki
   /// is the instruction where this constant was encountered, or NULL
   /// if not applicable/unavailable.
-  ref<klee::ConstantExpr> evalConstantExpr(const llvm::ConstantExpr *c,
-                                           llvm::APFloat::roundingMode rm,
-                                           const KInstruction *ki = NULL);
+  ref<Expr> evalConstantExpr(const llvm::ConstantExpr *c,
+                             llvm::APFloat::roundingMode rm,
+                             const KInstruction *ki = NULL);
+  ref<Expr> evalExpr(const llvm::Constant *c, llvm::APFloat::roundingMode rm,
+                     const KInstruction *ki = NULL);
 
   /// Evaluates an LLVM float comparison. the operands are two float
   /// expressions.
@@ -540,14 +545,14 @@ private:
   /// Evaluates an LLVM constant.  The optional argument ki is the
   /// instruction where this constant was encountered, or NULL if
   /// not applicable/unavailable.
-  ref<klee::ConstantExpr> evalConstant(const llvm::Constant *c,
-                                       llvm::APFloat::roundingMode rm,
-                                       const KInstruction *ki = NULL);
+  ref<ConstantEitherConstantPointer>
+  evalConstant(const llvm::Constant *c, llvm::APFloat::roundingMode rm,
+               const KInstruction *ki = NULL);
 
   /// Return a unique constant value for the given expression in the
   /// given state, if it has one (i.e. it provably only has a single
   /// value). Otherwise return the original expression.
-  ref<Expr> toUnique(const ExecutionState &state, ref<Expr> &e);
+  ref<Expr> toUnique(const ExecutionState &state, ref<Expr> e);
 
   /// Return a constant value for the given expression, forcing it to
   /// be constant in the given state by adding a constraint if
@@ -558,13 +563,17 @@ private:
   ref<klee::ConstantExpr> toConstant(ExecutionState &state, ref<Expr> e,
                                      const char *purpose);
 
+  ref<klee::ConstantPointerExpr> toConstantPointer(ExecutionState &state,
+                                                   ref<PointerExpr> e,
+                                                   const char *purpose);
+
   /// Bind a constant value for e to the given target. NOTE: This
   /// function may fork state if the state has multiple seeds.
   void executeGetValue(ExecutionState &state, ref<Expr> e,
                        KInstruction *target);
 
   /// Get textual information regarding a memory address.
-  std::string getAddressInfo(ExecutionState &state, ref<Expr> address,
+  std::string getAddressInfo(ExecutionState &state, ref<PointerExpr> address,
                              unsigned size = 0,
                              const MemoryObject *mo = nullptr) const;
 
@@ -648,7 +657,10 @@ private:
 
   uint64_t updateNameVersion(ExecutionState &state, const std::string &name);
 
-  const Array *makeArray(ref<Expr> size, const ref<SymbolicSource> source);
+  const Array *makeArray(ref<Expr> size,
+                         const ref<SymbolicSource> source) const;
+
+  ref<PointerExpr> makePointer(ref<Expr> expr) const;
 
   ExecutionState *prepareStateForPOSIX(KInstIterator &caller,
                                        ExecutionState *state);

@@ -8,7 +8,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "klee/Expr/Parser/Parser.h"
-#include "klee/Expr/ArrayCache.h"
 #include "klee/Expr/Constraints.h"
 #include "klee/Expr/Expr.h"
 #include "klee/Expr/ExprBuilder.h"
@@ -114,9 +113,7 @@ class ParserImpl : public Parser {
   const std::string Filename;
   const llvm::MemoryBuffer *TheMemoryBuffer;
   ExprBuilder *Builder;
-  ArrayCache *TheArrayCache;
   KModule *km;
-  bool ownArrayCache;
   bool ClearArrayAfterQuery;
 
   Lexer TheLexer;
@@ -280,8 +277,6 @@ class ParserImpl : public Parser {
     }
   }
 
-  ArrayCache &getArrayCache() { return *TheArrayCache; }
-
   /*** Grammar productions ****/
 
   /* Top level decls */
@@ -343,20 +338,13 @@ public:
              ExprBuilder *_Builder, bool _ClearArrayAfterQuery)
       : Filename(_Filename), TheMemoryBuffer(MB), Builder(_Builder),
         ClearArrayAfterQuery(_ClearArrayAfterQuery), TheLexer(MB),
-        MaxErrors(~0u), NumErrors(0) {
-    TheArrayCache = new ArrayCache();
-    ownArrayCache = true;
-  }
+        MaxErrors(~0u), NumErrors(0) {}
 
   ParserImpl(const std::string _Filename, const llvm::MemoryBuffer *MB,
-             ExprBuilder *_Builder, ArrayCache *_TheArrayCache, KModule *km,
-             bool _ClearArrayAfterQuery)
+             ExprBuilder *_Builder, KModule *km, bool _ClearArrayAfterQuery)
       : Filename(_Filename), TheMemoryBuffer(MB), Builder(_Builder),
-        TheArrayCache(_TheArrayCache), km(km ? km : 0),
-        ClearArrayAfterQuery(_ClearArrayAfterQuery), TheLexer(MB),
-        MaxErrors(~0u), NumErrors(0) {
-    ownArrayCache = false;
-  }
+        km(km ? km : 0), ClearArrayAfterQuery(_ClearArrayAfterQuery),
+        TheLexer(MB), MaxErrors(~0u), NumErrors(0) {}
 
   virtual ~ParserImpl();
 
@@ -460,7 +448,7 @@ DeclResult ParserImpl::ParseArrayDecl() {
   auto domain = DomainType.get();
   auto range = RangeType.get();
 
-  auto array = TheArrayCache->CreateArray(size, source, domain, range);
+  auto array = Array::create(size, source, domain, range);
 
   // auto IDExpr = ParseNumberToken(64, ID).get();
   // assert(isa<ConstantExpr>(IDExpr));
@@ -592,7 +580,7 @@ SourceResult ParserImpl::ParseLazyInitializationContentSource() {
 
 SourceResult ParserImpl::ParseLazyInitializationAddressSource() {
   auto pointer = ParseExpr(TypeResult()).get();
-  return SourceBuilder::lazyInitializationAddress(pointer);
+  return SourceBuilder::lazyInitializationSegment(pointer);
 }
 
 SourceResult ParserImpl::ParseLazyInitializationSizeSource() {
@@ -1435,10 +1423,9 @@ VersionResult ParserImpl::ParseVersionSpecifier() {
   // Define update list to avoid use-of-undef errors.
   if (!Res.isValid()) {
     // FIXME: I'm not sure if this is right. Do we need a unique array here?
-    Res = VersionResult(true,
-                        UpdateList(TheArrayCache->CreateArray(
-                                       0, SourceBuilder::makeSymbolic("", 0)),
-                                   NULL));
+    Res = VersionResult(
+        true,
+        UpdateList(Array::create(0, SourceBuilder::makeSymbolic("", 0)), NULL));
   }
 
   if (Label)
@@ -1714,10 +1701,6 @@ ParserImpl::~ParserImpl() {
     if (freedNodes.insert(id).second)
       delete id;
   }
-
-  if (ownArrayCache) {
-    delete TheArrayCache;
-  }
 }
 
 // AST API
@@ -1764,10 +1747,10 @@ Parser *Parser::Create(const std::string Filename, const llvm::MemoryBuffer *MB,
 }
 
 Parser *Parser::Create(const std::string Filename, const llvm::MemoryBuffer *MB,
-                       ExprBuilder *Builder, ArrayCache *TheArrayCache,
-                       KModule *km, bool ClearArrayAfterQuery) {
-  ParserImpl *P = new ParserImpl(Filename, MB, Builder, TheArrayCache, km,
-                                 ClearArrayAfterQuery);
+                       ExprBuilder *Builder, KModule *km,
+                       bool ClearArrayAfterQuery) {
+  ParserImpl *P =
+      new ParserImpl(Filename, MB, Builder, km, ClearArrayAfterQuery);
   P->Initialize();
   return P;
 }

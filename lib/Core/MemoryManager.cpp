@@ -91,8 +91,8 @@ llvm::cl::opt<bool> UseSymbolicSizeAllocation(
     llvm::cl::init(false), llvm::cl::cat(MemoryCat));
 
 /***/
-MemoryManager::MemoryManager(ArrayCache *_arrayCache)
-    : arrayCache(_arrayCache), deterministicSpace(0), nextFreeSlot(0),
+MemoryManager::MemoryManager()
+    : deterministicSpace(0), nextFreeSlot(0),
       spaceSize(DeterministicAllocationSize.getValue() * 1024 * 1024) {
   if (DeterministicAllocation) {
     // Page boundary

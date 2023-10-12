@@ -23,12 +23,12 @@ const Array *AlphaBuilder::visitArray(const Array *arr) {
     if (!arr->isConstantArray()) {
       source = SourceBuilder::alpha(index);
       index++;
-      alphaArrayMap[arr] = arrayCache.CreateArray(
-          size, source, arr->getDomain(), arr->getRange());
+      alphaArrayMap[arr] =
+          Array::create(size, source, arr->getDomain(), arr->getRange());
       reverseAlphaArrayMap[alphaArrayMap[arr]] = arr;
     } else if (size != arr->getSize()) {
-      alphaArrayMap[arr] = arrayCache.CreateArray(
-          size, source, arr->getDomain(), arr->getRange());
+      alphaArrayMap[arr] =
+          Array::create(size, source, arr->getDomain(), arr->getRange());
       reverseAlphaArrayMap[alphaArrayMap[arr]] = arr;
     } else {
       alphaArrayMap[arr] = arr;
@@ -63,7 +63,7 @@ ExprVisitor::Action AlphaBuilder::visitRead(const ReadExpr &re) {
   return Action::changeTo(e);
 }
 
-AlphaBuilder::AlphaBuilder(ArrayCache &_arrayCache) : arrayCache(_arrayCache) {}
+AlphaBuilder::AlphaBuilder() {}
 
 constraints_ty AlphaBuilder::visitConstraints(constraints_ty cs) {
   constraints_ty result;

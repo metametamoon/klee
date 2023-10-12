@@ -271,6 +271,12 @@ public:
     return Assignment(objects, values);
   }
 
+  void
+  initialValuesFor(const std::vector<const Array *> objects,
+                   std::vector<SparseStorage<unsigned char>> &values) const {
+    tryGetInitialValuesFor(objects, values);
+  }
+
   Assignment initialValues() const {
     Assignment::bindings_ty values;
     tryGetInitialValues(values);
