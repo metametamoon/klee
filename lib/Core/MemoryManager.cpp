@@ -90,8 +90,8 @@ llvm::cl::opt<bool> UseSymbolicSizeAllocation(
     llvm::cl::init(false), llvm::cl::cat(MemoryCat));
 
 /***/
-MemoryManager::MemoryManager(ArrayCache *_arrayCache)
-    : arrayCache(_arrayCache), deterministicSpace(0), nextFreeSlot(0),
+MemoryManager::MemoryManager()
+    : deterministicSpace(0), nextFreeSlot(0),
       spaceSize(DeterministicAllocationSize.getValue() * 1024 * 1024) {
   if (DeterministicAllocation) {
     // Page boundary
@@ -220,7 +220,7 @@ MemoryObject *MemoryManager::allocate(ref<Expr> size, bool isLocal,
 }
 
 MemoryObject *MemoryManager::allocateFixed(uint64_t address, uint64_t size,
-                                           ref<CodeLocation> allocSite),
+                                           ref<CodeLocation> allocSite,
                                            KType *type) {
 #ifndef NDEBUG
   for (objects_ty::iterator it = objects.begin(), ie = objects.end(); it != ie;
