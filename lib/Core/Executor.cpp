@@ -249,6 +249,11 @@ llvm::cl::opt<bool> X86FPAsX87FP80(
     cl::desc("Convert X86 fp values to X87FP80 during computation according to "
              "GCC behavior (default=false)"),
     cl::cat(ExecCat));
+
+cl::opt<bool> InitializeInJoinBlocks(
+    "initialize-in-join-blocks",
+    cl::desc("Initialize execution in join blocks (default=false)"),
+    cl::init(false), cl::cat(ExecCat));
 } // namespace klee
 
 namespace {
@@ -5090,8 +5095,10 @@ void Executor::run(std::vector<ExecutionState *> initialStates,
     BackwardSearcher *backward = constructUserBackwardSearcher(*this);
     InitializerPredicate *predicate =
         errorAndBackward ? (InitializerPredicate *)new TraceVerifyPredicate(
-                               data.specialPoints, *codeGraphInfo.get())
-                         : (InitializerPredicate *)new JointBlockPredicate;
+                               data.specialPoints, *codeGraphInfo.get(),
+                               InitializeInJoinBlocks)
+                         : (InitializerPredicate *)new DefaultBlockPredicate(
+                               InitializeInJoinBlocks);
     objectManager->setPredicate(predicate);
     Initializer *initializer = new ConflictCoreInitializer(
         codeGraphInfo.get(), *predicate, errorAndBackward);
