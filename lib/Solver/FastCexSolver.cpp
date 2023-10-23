@@ -18,6 +18,7 @@
 #include "klee/Solver/IncompleteSolver.h"
 #include "klee/Support/Debug.h"
 #include "klee/Support/ErrorHandling.h"
+#include "klee/Support/OptionCategories.h"
 
 #include "klee/Support/CompilerWarning.h"
 DISABLE_WARNING_PUSH
@@ -33,6 +34,20 @@ DISABLE_WARNING_POP
 #include <vector>
 
 using namespace klee;
+using namespace llvm;
+
+namespace {
+enum class FastCexSolverType { EQUALITY, ALL };
+
+cl::opt<FastCexSolverType> FastCexFor(
+    "fast-cex-for",
+    cl::desc(
+        "Specifiy a query predicate to filter queries for FastCexSolver using"),
+    cl::values(clEnumValN(FastCexSolverType::EQUALITY, "equality",
+                          "Query with only equality expressions"),
+               clEnumValN(FastCexSolverType::ALL, "all", "All queries")),
+    cl::init(FastCexSolverType::EQUALITY), cl::cat(SolvingCat));
+} // namespace
 
 // Hacker's Delight, pgs 58-63
 static uint64_t minOR(uint64_t a, uint64_t b, uint64_t c, uint64_t d) {
@@ -403,10 +418,11 @@ protected:
   ref<Expr> getInitialValue(const Array &array, unsigned index) {
     // If the index is out of range, we cannot assign it a value, since that
     // value cannot be part of the assignment.
-    ref<ConstantExpr> constantArraySize = dyn_cast<ConstantExpr>(array.size);
+    ref<ConstantExpr> constantArraySize =
+        dyn_cast<ConstantExpr>(visit(array.size));
     if (!constantArraySize) {
-      klee_error(
-          "FIXME: Arrays of symbolic sizes are unsupported in FastCex\n");
+      klee_error("FIXME: CexPossibleEvaluator: Arrays of symbolic sizes are "
+                 "unsupported in FastCex\n");
       std::abort();
     }
 
@@ -433,11 +449,11 @@ protected:
   ref<Expr> getInitialValue(const Array &array, unsigned index) {
     // If the index is out of range, we cannot assign it a value, since that
     // value cannot be part of the assignment.
-    ref<ConstantExpr> constantArraySize = dyn_cast<ConstantExpr>(array.size);
+    ref<ConstantExpr> constantArraySize =
+        dyn_cast<ConstantExpr>(visit(array.size));
     if (!constantArraySize) {
-      klee_error(
-          "FIXME: Arrays of symbolic sizes are unsupported in FastCex\n");
-      std::abort();
+      return ReadExpr::create(UpdateList(&array, 0),
+                              ConstantExpr::alloc(index, array.getDomain()));
     }
 
     if (index >= constantArraySize->getZExtValue()) {
@@ -485,10 +501,11 @@ public:
   CexObjectData &getObjectData(const Array *A) {
     CexObjectData *&Entry = objects[A];
 
-    ref<ConstantExpr> constantArraySize = dyn_cast<ConstantExpr>(A->size);
+    ref<ConstantExpr> constantArraySize =
+        dyn_cast<ConstantExpr>(evaluatePossible(A->size));
     if (!constantArraySize) {
-      klee_error(
-          "FIXME: Arrays of symbolic sizes are unsupported in FastCex\n");
+      klee_error("FIXME: CexData: Arrays of symbolic sizes are unsupported in "
+                 "FastCex\n");
       std::abort();
     }
 
@@ -529,7 +546,7 @@ public:
       // to see if this is an initial read or not.
       if (ConstantExpr *CE = dyn_cast<ConstantExpr>(re->index)) {
         if (ref<ConstantExpr> constantArraySize =
-                dyn_cast<ConstantExpr>(array->size)) {
+                dyn_cast<ConstantExpr>(evaluatePossible(array->size))) {
           uint64_t index = CE->getZExtValue();
 
           if (index < constantArraySize->getZExtValue()) {
@@ -1171,6 +1188,7 @@ bool FastCexSolver::computeInitialValues(
     const Query &query, const std::vector<const Array *> &objects,
     std::vector<SparseStorage<unsigned char>> &values, bool &hasSolution) {
   CexData cd;
+  query.dump();
 
   bool isValid;
   bool success = propagateValues(query, cd, true, isValid);
@@ -1187,7 +1205,7 @@ bool FastCexSolver::computeInitialValues(
   for (unsigned i = 0; i != objects.size(); ++i) {
     const Array *array = objects[i];
     assert(array);
-    SparseStorage<unsigned char> data;
+    SparseStorage<unsigned char> data(0);
     ref<ConstantExpr> arrayConstantSize =
         dyn_cast<ConstantExpr>(cd.evaluatePossible(array->size));
     assert(arrayConstantSize &&
@@ -1212,7 +1230,45 @@ bool FastCexSolver::computeInitialValues(
   return true;
 }
 
+class OnlyEqualityWithConstantQueryPredicate {
+public:
+  explicit OnlyEqualityWithConstantQueryPredicate() {}
+
+  bool operator()(const Query &query) const {
+    for (auto constraint : query.constraints.cs()) {
+      if (const EqExpr *ee = dyn_cast<EqExpr>(constraint)) {
+        if (!isa<ConstantExpr>(ee->left)) {
+          return false;
+        }
+      } else {
+        return false;
+      }
+    }
+    if (ref<EqExpr> ee = dyn_cast<EqExpr>(query.negateExpr().expr)) {
+      if (!isa<ConstantExpr>(ee->left)) {
+        return false;
+      }
+    } else {
+      return false;
+    }
+    return true;
+  }
+};
+
+class TrueQueryPredicate {
+public:
+  explicit TrueQueryPredicate() {}
+
+  bool operator()(const Query &query) const { return true; }
+};
+
 std::unique_ptr<Solver> klee::createFastCexSolver(std::unique_ptr<Solver> s) {
-  return std::make_unique<Solver>(std::make_unique<StagedSolverImpl>(
-      std::make_unique<FastCexSolver>(), std::move(s)));
+  if (FastCexFor == FastCexSolverType::EQUALITY) {
+    return std::make_unique<Solver>(std::make_unique<StagedSolverImpl>(
+        std::make_unique<FastCexSolver>(), std::move(s),
+        OnlyEqualityWithConstantQueryPredicate()));
+  } else {
+    return std::make_unique<Solver>(std::make_unique<StagedSolverImpl>(
+        std::make_unique<FastCexSolver>(), std::move(s), TrueQueryPredicate()));
+  }
 }
