@@ -282,16 +282,6 @@ void KModule::optimiseAndPrepare(
     pm.run(*module);
   }
 
-  if (opts.Optimize)
-    Optimize(module.get(), preservedFunctions);
-
-  // Add internal functions which are not used to check if instructions
-  // have been already visited
-  if (opts.CheckDivZero)
-    addInternalFunction("klee_div_zero_check");
-  if (opts.CheckOvershift)
-    addInternalFunction("klee_overshift_check");
-
   // Use KLEE's internal float classification functions if requested.
   if (opts.WithFPRuntime) {
     if (UseKleeFloatInternals) {
@@ -303,6 +293,16 @@ void KModule::optimiseAndPrepare(
       replaceFunction(module, p.first.c_str(), p.second.c_str());
     }
   }
+
+  if (opts.Optimize)
+    Optimize(module.get(), preservedFunctions);
+
+  // Add internal functions which are not used to check if instructions
+  // have been already visited
+  if (opts.CheckDivZero)
+    addInternalFunction("klee_div_zero_check");
+  if (opts.CheckOvershift)
+    addInternalFunction("klee_overshift_check");
 
   // Needs to happen after linking (since ctors/dtors can be modified)
   // and optimization (since global optimization can rewrite lists).
