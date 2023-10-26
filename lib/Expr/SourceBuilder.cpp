@@ -106,7 +106,6 @@ SourceBuilder::mockDeterministic(const KModule *km,
   return r;
 }
 
-
 ref<SymbolicSource> SourceBuilder::alpha(int _index) {
   ref<SymbolicSource> r(new AlphaSource(_index));
   r->computeHash();

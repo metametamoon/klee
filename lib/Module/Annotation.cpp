@@ -6,10 +6,6 @@
 #include <llvm/Support/raw_ostream.h>
 #include <utility>
 
-#ifdef ENABLE_XML_ANNOTATION
-#include "pugixml.hpp"
-#endif
-
 namespace klee {
 
 static inline std::string toLower(const std::string &str) {
@@ -241,107 +237,6 @@ AnnotationsMap parseAnnotationsJson(const json &annotationsJson) {
   return annotations;
 }
 
-#ifdef ENABLE_XML_ANNOTATION
-
-namespace annotationXml {
-
-const std::map<std::string, Statement::Kind> StringToKindMap = {
-    {"C_NULLDEREF", Statement::Kind::Deref},
-    {"C_NULLRETURN", Statement::Kind::InitNull}};
-
-inline Statement::Kind xmlTypeToKind(const std::string &str) {
-  auto it = StringToKindMap.find(str);
-  if (it != StringToKindMap.end()) {
-    return it->second;
-  }
-  klee_message("Annotations: unknown xml type \"%s\"", str.c_str());
-  return Statement::Kind::Unknown;
-}
-
-const std::map<std::string, Statement::Property> xmlPropertyMap = {};
-
-inline Statement::Property xmlTypeToProperty(const std::string &str) {
-  auto it = xmlPropertyMap.find(str);
-  if (it != xmlPropertyMap.end()) {
-    return it->second;
-  }
-  return Statement::Property::Unknown;
-}
-
-AnnotationsMap parseAnnotationsXml(const pugi::xml_document &annotationsXml,
-                                   const llvm::Module *m) {
-  AnnotationsMap result;
-  for (pugi::xml_node rules : annotationsXml.child("RuleSet")) {
-    for (pugi::xml_node customRule : rules) {
-      for (pugi::xml_node keyword : customRule.child("Keywords")) {
-        std::string name = keyword.attribute("name").value();
-        std::string isRegex = keyword.attribute("isRegex").value();
-        if (toLower(isRegex) == "true") {
-          klee_warning("Annotation: regexp currently not implemented");
-          continue;
-        }
-        std::string value = keyword.attribute("value").value();
-        std::string type = keyword.attribute("type").value();
-        std::string pairedTo = keyword.attribute("pairedTo").value();
-
-        llvm::Function *func = m->getFunction(name);
-        if (!func) {
-          continue;
-        }
-
-        auto it = result.find(name);
-        if (result.find(name) == result.end()) {
-          Annotation newAnnotation;
-          newAnnotation.functionName = name;
-          newAnnotation.argsStatements =
-              std::vector<std::vector<Statement::Ptr>>(func->arg_size());
-
-          result[name] = std::move(newAnnotation);
-          it = result.find(name);
-        }
-        Annotation &curAnnotation = it->second;
-        Statement::Kind curKind = xmlTypeToKind(type);
-
-        switch (curKind) {
-        case Statement::Kind::InitNull: {
-          curAnnotation.returnStatements.push_back(
-              std::make_shared<Statement::InitNull>());
-          break;
-        }
-        case Statement::Kind::Deref: {
-          size_t i = 0;
-          for (const auto &arg : func->args()) {
-            if (arg.getType()->isPointerTy()) {
-              curAnnotation.argsStatements[i].push_back(
-                  std::make_shared<Statement::Deref>());
-              ++i;
-            }
-          }
-          break;
-        }
-        case Statement::Kind::AllocSource: {
-          assert(false);
-        }
-        case Statement::Kind::Unknown:
-          break;
-        }
-
-        Statement::Property curProperty = xmlTypeToProperty(type);
-
-        switch (curProperty) {
-        case Statement::Property::Deterministic:
-        case Statement::Property::Noreturn:
-        case Statement::Property::Unknown:
-          break;
-        }
-      }
-    }
-  }
-  return result;
-}
-} // namespace annotationXml
-#endif
-
 AnnotationsMap parseAnnotations(const std::string &path,
                                 const llvm::Module *m) {
   if (path.empty()) {
@@ -351,20 +246,7 @@ AnnotationsMap parseAnnotations(const std::string &path,
   if (!annotationsFile.good()) {
     klee_error("Annotation: Opening %s failed.", path.c_str());
   }
-#ifdef ENABLE_XML_ANNOTATION
-  if (toLower(std::filesystem::path(path).extension()) == ".xml") {
-
-    pugi::xml_document doc;
-    pugi::xml_parse_result result = doc.load_file(path.c_str());
-    if (!result) {
-      klee_error("Annotation: Parsing XML %s failed.", path.c_str());
-    }
-
-    return annotationXml::parseAnnotationsXml(doc, m);
-  } else {
-#else
   {
-#endif
     json annotationsJson = json::parse(annotationsFile, nullptr, false);
     if (annotationsJson.is_discarded()) {
       klee_error("Annotation: Parsing JSON %s failed.", path.c_str());
