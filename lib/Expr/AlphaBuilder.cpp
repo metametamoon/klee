@@ -69,9 +69,9 @@ ExprVisitor::Action AlphaBuilder::visitRead(const ReadExpr &re) {
 
 AlphaBuilder::AlphaBuilder(ArrayCache &_arrayCache) : arrayCache(_arrayCache) {}
 
-constraints_ty AlphaBuilder::visitConstraints(constraints_ty cs) {
+constraints_ty AlphaBuilder::visitConstraints(const constraints_ty &cs) {
   constraints_ty result;
-  for (auto arg : cs) {
+  for (const auto &arg : cs) {
     ref<Expr> v = visit(arg);
     reverseExprMap[v] = arg;
     reverseExprMap[Expr::createIsZero(v)] = Expr::createIsZero(arg);
@@ -79,6 +79,7 @@ constraints_ty AlphaBuilder::visitConstraints(constraints_ty cs) {
   }
   return result;
 }
+
 ref<Expr> AlphaBuilder::build(ref<Expr> v) {
   ref<Expr> e = visit(v);
   reverseExprMap[e] = v;
