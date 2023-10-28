@@ -837,8 +837,8 @@ public:
               // range?
 
               // FIXME: choose both
-              // range = CexValueData(llvm::APInt::getNullValue(CE->getWidth()),
-              //                     value - 1);
+              range = CexValueData(llvm::APInt::getNullValue(CE->getWidth()),
+                                   value - 1);
               // range = CexValueData(
               //    value + 1, llvm::APInt::getAllOnesValue(CE->getWidth()));
             }
