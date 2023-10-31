@@ -364,45 +364,62 @@ cl::opt<std::string> XMLMetadataProgramHash(
     llvm::cl::desc("Test-Comp hash sum of original file for xml metadata"),
     llvm::cl::cat(TestCompCat));
 
-
 /*** Mocking options ***/
 
-cl::OptionCategory MockCat("Mock category");
+cl::OptionCategory MockCat("Mocking options");
 
-cl::opt<bool> MockLinkedExternals(
-    "mock-linked-externals",
-    cl::desc("Mock modelled linked externals (default=false)"), cl::init(false),
-    cl::cat(MockCat));
+cl::opt<bool> MockModeledFunction(
+    "mock-modeled-functions",
+    cl::desc("Link modeled mocks from libkleeRuntimeMocks (default=false)"),
+    cl::init(false), cl::cat(MockCat));
 
-cl::opt<MockStrategy> MockUnlinkedStrategy(
-    "mock-strategy", cl::init(MockStrategy::None),
-    cl::desc("Specify strategy for mocking external calls"),
+cl::opt<MockPolicy>
+    Mock("mock-policy", cl::desc("Specify policy for mocking external calls"),
+         cl::values(clEnumValN(MockPolicy::None, "none",
+                               "No mock function generated (default)"),
+                    clEnumValN(MockPolicy::Failed, "failed",
+                               "Generate symbolic value for failed external "
+                               "calls, test will be irreproducible"),
+                    clEnumValN(MockPolicy::All, "all",
+                               "Generate IR module with all external symbols")),
+         cl::init(MockPolicy::None), cl::cat(MockCat));
+
+cl::opt<MockStrategyKind> MockStrategy(
+    "mock-strategy", cl::desc("Specify strategy for mocking external calls"),
     cl::values(
-        clEnumValN(MockStrategy::None, "none",
-                   "External calls are not mocked (default)"),
-        clEnumValN(MockStrategy::Naive, "naive",
+        clEnumValN(MockStrategyKind::Naive, "naive",
                    "Every time external function is called, new symbolic value "
-                   "is generated for its return value"),
+                   "is generated for its return value (default)"),
         clEnumValN(
-            MockStrategy::Deterministic, "deterministic",
+            MockStrategyKind::Deterministic, "deterministic",
             "NOTE: this option is compatible with Z3 solver only. Each "
             "external function is treated as a deterministic "
             "function. Therefore, when function is called many times "
             "with equal arguments, every time equal values will be returned.")),
-    cl::init(MockStrategy::None), cl::cat(MockCat));
+    cl::init(MockStrategyKind::Naive), cl::cat(MockCat));
+
+cl::opt<MockMutableGlobalsPolicy> MockMutableGlobals(
+    "mock-mutable-globals",
+    cl::desc("Specify strategy for mocking global vars"),
+    cl::values(
+        clEnumValN(MockMutableGlobalsPolicy::None, "none",
+                   "No mutable global object are allowed o mock except "
+                   "external (default)"),
+        clEnumValN(MockMutableGlobalsPolicy::All, "all",
+                   "Mock globals on module build stage and generate bicode "
+                   "module for it")),
+    cl::init(MockMutableGlobalsPolicy::None), cl::cat(MockCat));
 
 /*** Annotations options ***/
 
-cl::OptionCategory AnnotCat("Annotations category");
-
 cl::opt<std::string>
     AnnotationsFile("annotations", cl::desc("Path to the annotation JSON file"),
-                    cl::value_desc("path file"), cl::cat(AnnotCat));
+                    cl::value_desc("path file"), cl::cat(MockCat));
 
 cl::opt<bool> AnnotateOnlyExternal(
     "annotate-only-external",
     cl::desc("Ignore annotations for defined function (default=false)"),
-    cl::init(false), cl::cat(AnnotCat));
+    cl::init(false), cl::cat(MockCat));
 
 } // namespace
 
@@ -1624,7 +1641,7 @@ void wait_until_any_child_dies(
   }
 }
 
-void mockLinkedExternals(
+void mockModeledFunction(
     const Interpreter::ModuleOptions &Opts, llvm::LLVMContext &ctx,
     llvm::Module *mainModule,
     std::vector<std::unique_ptr<llvm::Module>> &loadedLibsModules,
@@ -1867,12 +1884,14 @@ int main(int argc, char **argv, char **envp) {
     klee_error("Entry function '%s' not found in module.", EntryPoint.c_str());
 
   std::vector<std::pair<std::string, std::string>> redefinitions;
-  if (MockLinkedExternals) {
-    mockLinkedExternals(Opts, ctx, mainModule, loadedLibsModules,
-                        redefinitions);
-  }
-  if (MockUnlinkedStrategy != MockStrategy::None) {
+  if (Mock == MockPolicy::All ||
+      MockMutableGlobals == MockMutableGlobalsPolicy::All ||
+      AnnotationsFile.empty()) {
     redefinitions.emplace_back(EntryPoint, Opts.MainNameAfterMock);
+  }
+  if (MockModeledFunction) {
+    mockModeledFunction(Opts, ctx, mainModule, loadedLibsModules,
+                        redefinitions);
   }
 
   if (WithPOSIXRuntime) {
@@ -2043,7 +2062,10 @@ int main(int argc, char **argv, char **envp) {
   Interpreter::InterpreterOptions IOpts(paths);
   IOpts.MakeConcreteSymbolic = MakeConcreteSymbolic;
   IOpts.Guidance = UseGuidedSearch;
-  IOpts.MockStrategy = MockUnlinkedStrategy;
+  IOpts.Mock = Mock;
+  IOpts.MockStrategy = MockStrategy;
+  IOpts.MockMutableGlobals = MockMutableGlobals;
+
   std::unique_ptr<Interpreter> interpreter(
       Interpreter::create(ctx, IOpts, handler.get()));
   theInterpreter = interpreter.get();

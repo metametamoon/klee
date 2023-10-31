@@ -6,8 +6,6 @@
 #include "klee/Expr/SymbolicSource.h"
 #include "klee/Module/KModule.h"
 
-#include "llvm/IR/Function.h"
-
 namespace klee {
 
 class SourceBuilder {

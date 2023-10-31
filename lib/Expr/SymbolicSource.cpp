@@ -1,6 +1,5 @@
 #include "klee/Expr/SymbolicSource.h"
 #include "klee/Expr/Expr.h"
-
 #include "klee/Expr/ExprPPrinter.h"
 #include "klee/Expr/ExprUtil.h"
 #include "klee/Module/KInstruction.h"
@@ -215,13 +214,13 @@ int MockNaiveSource::internalCompare(const SymbolicSource &b) const {
     return getKind() < b.getKind() ? -1 : 1;
   }
   const MockNaiveSource &mnb = static_cast<const MockNaiveSource &>(b);
-  if (version != mnb.version) {
-    return version < mnb.version ? -1 : 1;
-  }
   unsigned funcID = km->getFunctionId(&function);
   unsigned bFuncID = mnb.km->getFunctionId(&mnb.function);
   if (funcID != bFuncID) {
     return funcID < bFuncID ? -1 : 1;
+  }
+  if (version != mnb.version) {
+    return version < mnb.version ? -1 : 1;
   }
   return 0;
 }

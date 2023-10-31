@@ -22,7 +22,6 @@
 #include "klee/Support/CompilerWarning.h"
 DISABLE_WARNING_PUSH
 DISABLE_WARNING_DEPRECATED_DECLARATIONS
-#include "klee/Support/ErrorHandling.h"
 #include "llvm/IR/Function.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/raw_ostream.h"
@@ -31,10 +30,8 @@ DISABLE_WARNING_POP
 #include <cassert>
 #include <fstream>
 #include <iomanip>
-#include <map>
 #include <set>
 #include <sstream>
-#include <stdarg.h>
 #include <string>
 
 using namespace llvm;

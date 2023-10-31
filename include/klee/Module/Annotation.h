@@ -63,24 +63,32 @@ struct Deref final : public Unknown {
 };
 
 struct InitNull final : public Unknown {
+public:
+  enum Type {
+    MAYBE, // Return value which maybe Null
+    MUST   // Create two branch one with Null second nonNull valu
+  };
+
+  Type value = InitNull::Type::MAYBE;
+
   explicit InitNull(const std::string &str = "InitNull");
 
   [[nodiscard]] Kind getKind() const override;
 };
 
-struct AllocSource final : public Unknown {
+struct Alloc final : public Unknown {
 public:
   enum Type {
-    Alloc = 1,       // malloc, calloc, realloc
-    New = 2,         // operator new
-    NewBrackets = 3, // operator new[]
-    OpenFile = 4,    // open file (fopen, open)
-    MutexLock = 5    // mutex lock (pthread_mutex_lock)
+    ALLOC = 1,        // malloc, calloc, realloc
+    NEW = 2,          // operator new
+    NEW_BRACKETS = 3, // operator new[]
+    OPEN_FILE = 4,    // open file (fopen, open)
+    MUTEX_LOCK = 5    // mutex lock (pthread_mutex_lock)
   };
 
-  Type value;
+  Type value = Alloc::Type::ALLOC;
 
-  explicit AllocSource(const std::string &str = "AllocSource::1");
+  explicit Alloc(const std::string &str = "AllocSource::1");
 
   [[nodiscard]] Kind getKind() const override;
 };
@@ -88,14 +96,14 @@ public:
 struct Free final : public Unknown {
 public:
   enum Type {
-    Free_ = 1,          // Kind of free function
-    Delete = 2,         // operator delete
-    DeleteBrackets = 3, // operator delete[]
-    CloseFile = 4,      // close file
-    MutexUnlock = 5     // mutex unlock (pthread_mutex_unlock)
+    FREE = 1,            // Kind of free function
+    DELETE = 2,          // operator delete
+    DELETE_BRACKETS = 3, // operator delete[]
+    CLOSE_FILE = 4,      // close file
+    MUTEX_UNLOCK = 5     // mutex unlock (pthread_mutex_unlock)
   };
 
-  Type value;
+  Type value = Free::Type::FREE;
 
   explicit Free(const std::string &str = "FreeSource::1");
 

@@ -8,10 +8,8 @@
 #include "klee/Expr/SymbolicSource.h"
 #include "klee/Expr/Symcrete.h"
 #include "klee/Module/KModule.h"
-#include "klee/Solver/Solver.h"
 
 #include <list>
-#include <map>
 #include <queue>
 #include <set>
 #include <vector>

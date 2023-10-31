@@ -952,7 +952,7 @@ void SpecialFunctionHandler::handleMakeMock(ExecutionState &state,
 
   name = arguments[2]->isZero() ? "" : readStringAtAddress(state, arguments[2]);
 
-  if (name.length() == 0) {
+  if (name.empty()) {
     executor.terminateStateOnUserError(
         state, "Empty name of function in klee_make_mock");
     return;
@@ -965,15 +965,14 @@ void SpecialFunctionHandler::handleMakeMock(ExecutionState &state,
                         executor.typeSystemManager->getUnknownType(), rl,
                         "make_symbolic");
 
-  for (Executor::ExactResolutionList::iterator it = rl.begin(), ie = rl.end();
-       it != ie; ++it) {
-    ObjectPair op = it->second->addressSpace.findObject(it->first);
+  for (auto &it : rl) {
+    ObjectPair op = it.second->addressSpace.findObject(it.first);
     const MemoryObject *mo = op.first;
     mo->setName(name);
     mo->updateTimestamp();
 
     const ObjectState *old = op.second;
-    ExecutionState *s = it->second;
+    ExecutionState *s = it.second;
 
     if (old->readOnly) {
       executor.terminateStateOnUserError(
@@ -993,15 +992,12 @@ void SpecialFunctionHandler::handleMakeMock(ExecutionState &state,
     if (res) {
       ref<SymbolicSource> source;
       switch (executor.interpreterOpts.MockStrategy) {
-      case MockStrategy::None:
-        klee_error("klee_make_mock is not allowed when mock strategy is none");
-        break;
-      case MockStrategy::Naive:
+      case MockStrategyKind::Naive:
         source =
             SourceBuilder::mockNaive(executor.kmodule.get(), *kf->function,
                                      executor.updateNameVersion(state, name));
         break;
-      case MockStrategy::Deterministic:
+      case MockStrategyKind::Deterministic:
         std::vector<ref<Expr>> args(kf->getNumArgs());
         for (size_t i = 0; i < kf->getNumArgs(); i++) {
           args[i] = executor.getArgumentCell(state, kf, i).value;

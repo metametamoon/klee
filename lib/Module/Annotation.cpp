@@ -1,10 +1,8 @@
 #include "klee/Module/Annotation.h"
-
 #include "klee/Support/ErrorHandling.h"
 
 #include <fstream>
 #include <llvm/Support/raw_ostream.h>
-#include <utility>
 
 namespace klee {
 
@@ -68,6 +66,7 @@ Unknown::~Unknown() = default;
 Kind Unknown::getKind() const { return Kind::Unknown; }
 
 const std::vector<std::string> &Unknown::getOffset() const { return offset; }
+
 std::string Unknown::toString() const {
   if (rawValue.empty()) {
     if (rawOffset.empty()) {
@@ -80,45 +79,50 @@ std::string Unknown::toString() const {
 }
 
 bool Unknown::operator==(const Unknown &other) const {
-  if (this->getKind() == other.getKind()) {
-    return toString() == other.toString();
-  }
-  return false;
+  return this->getKind() == other.getKind() && toString() == other.toString();
 }
 
 /*
- * InitNull:*[5]:
- * {kind}:{offset}:{data}
+ * Format: {kind}:{offset}:{data}
+ * Example: InitNull:*[5]:
  */
 
 Deref::Deref(const std::string &str) : Unknown(str) {}
 
 Kind Deref::getKind() const { return Kind::Deref; }
 
-InitNull::InitNull(const std::string &str) : Unknown(str) {}
+const std::map<std::string, InitNull::Type> initNullTypeMap = {
+    {"maybe", InitNull::Type::MAYBE}, {"must", InitNull::Type::MUST}};
+
+InitNull::InitNull(const std::string &str) : Unknown(str) {
+  if (!rawValue.empty()) {
+    auto val = initNullTypeMap.find(toLower(rawValue));
+    if (val != initNullTypeMap.end()) {
+      value = val->second;
+    } else {
+      klee_error("Annotation: Incorrect value \"%s\"", rawValue.c_str());
+    }
+  }
+}
 
 Kind InitNull::getKind() const { return Kind::InitNull; }
 
-AllocSource::AllocSource(const std::string &str) : Unknown(str) {
+Alloc::Alloc(const std::string &str) : Unknown(str) {
   if (!std::all_of(rawValue.begin(), rawValue.end(), isdigit)) {
     klee_error("Annotation: Incorrect value format \"%s\"", rawValue.c_str());
   }
-  if (rawValue.empty()) {
-    value = AllocSource::Type::Alloc;
-  } else {
+  if (!rawValue.empty()) {
     value = static_cast<Type>(std::stoi(rawValue));
   }
 }
 
-Kind AllocSource::getKind() const { return Kind::AllocSource; }
+Kind Alloc::getKind() const { return Kind::AllocSource; }
 
 Free::Free(const std::string &str) : Unknown(str) {
   if (!std::all_of(rawValue.begin(), rawValue.end(), isdigit)) {
     klee_error("Annotation: Incorrect value format \"%s\"", rawValue.c_str());
   }
-  if (rawValue.empty()) {
-    value = Free::Type::Free_;
-  } else {
+  if (!rawValue.empty()) {
     value = static_cast<Type>(std::stoi(rawValue));
   }
 }
@@ -150,7 +154,7 @@ Ptr stringToKindPtr(const std::string &str) {
   case Statement::Kind::InitNull:
     return std::make_shared<InitNull>(str);
   case Statement::Kind::AllocSource:
-    return std::make_shared<AllocSource>(str);
+    return std::make_shared<Alloc>(str);
   case Statement::Kind::Free:
     return std::make_shared<Free>(str);
   }
@@ -246,14 +250,12 @@ AnnotationsMap parseAnnotations(const std::string &path,
   if (!annotationsFile.good()) {
     klee_error("Annotation: Opening %s failed.", path.c_str());
   }
-  {
-    json annotationsJson = json::parse(annotationsFile, nullptr, false);
-    if (annotationsJson.is_discarded()) {
-      klee_error("Annotation: Parsing JSON %s failed.", path.c_str());
-    }
-
-    return parseAnnotationsJson(annotationsJson);
+  json annotationsJson = json::parse(annotationsFile, nullptr, false);
+  if (annotationsJson.is_discarded()) {
+    klee_error("Annotation: Parsing JSON %s failed.", path.c_str());
   }
+
+  return parseAnnotationsJson(annotationsJson);
 }
 
 } // namespace klee

@@ -266,17 +266,16 @@ Z3ASTHandle Z3Builder::getInitialArray(const Array *root) {
     } else if (ref<MockDeterministicSource> mockDeterministicSource =
                    dyn_cast<MockDeterministicSource>(root->source)) {
       size_t num_args = mockDeterministicSource->args.size();
-      std::vector<Z3ASTHandle> argsHandled(num_args);
-      std::vector<Z3SortHandle> argsSortHandled(num_args);
       std::vector<Z3_ast> args(num_args);
       std::vector<Z3_sort> argsSort(num_args);
       for (size_t i = 0; i < num_args; i++) {
         ref<Expr> kid = mockDeterministicSource->args[i];
         int kidWidth = kid->getWidth();
-        argsHandled[i] = construct(kid, &kidWidth);
-        args[i] = argsHandled[i];
-        argsSortHandled[i] = Z3SortHandle(Z3_get_sort(ctx, args[i]), ctx);
-        argsSort[i] = argsSortHandled[i];
+        Z3ASTHandle argsHandle = construct(kid, &kidWidth);
+        args[i] = argsHandle;
+        Z3SortHandle z3SortHandle =
+            Z3SortHandle(Z3_get_sort(ctx, args[i]), ctx);
+        argsSort[i] = z3SortHandle;
       }
 
       Z3SortHandle domainSort = getBvSort(root->getDomain());
@@ -294,7 +293,7 @@ Z3ASTHandle Z3Builder::getInitialArray(const Array *root) {
           ctx);
       array_expr =
           Z3ASTHandle(Z3_mk_app(ctx, func, num_args, args.data()), ctx);
-    }  else {
+    } else {
       array_expr =
           buildArray(unique_name.c_str(), root->getDomain(), root->getRange());
     }

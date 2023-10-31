@@ -58,11 +58,18 @@ std::map<std::string, llvm::Type *> MockBuilder::getExternalGlobals() {
 
 MockBuilder::MockBuilder(
     const llvm::Module *initModule, const Interpreter::ModuleOptions &opts,
+    const Interpreter::InterpreterOptions &interpreterOptions,
     const std::set<std::string> &ignoredExternals,
     std::vector<std::pair<std::string, std::string>> &redefinitions,
-    InterpreterHandler *interpreterHandler)
-    : userModule(initModule), opts(opts), ignoredExternals(ignoredExternals),
-      redefinitions(redefinitions), interpreterHandler(interpreterHandler) {
+    InterpreterHandler *interpreterHandler,
+    std::set<std::string> &mainModuleFunctions,
+    std::set<std::string> &mainModuleGlobals)
+    : userModule(initModule), opts(opts),
+      interpreterOptions(interpreterOptions),
+      ignoredExternals(ignoredExternals), redefinitions(redefinitions),
+      interpreterHandler(interpreterHandler),
+      mainModuleFunctions(mainModuleFunctions),
+      mainModuleGlobals(mainModuleGlobals) {
   annotations = parseAnnotations(opts.AnnotationsFile, userModule);
 }
 
@@ -107,11 +114,14 @@ void MockBuilder::initMockModule() {
 // Set up entrypoint in new module. Here we'll define external globals and then
 // call user's entrypoint.
 void MockBuilder::buildMockMain() {
-  llvm::Function *userMainFn = userModule->getFunction(opts.MainNameAfterMock);
+  mainModuleFunctions.insert(opts.MainNameAfterMock);
+  llvm::Function *userMainFn = userModule->getFunction(opts.MainCurrentName);
   if (!userMainFn) {
-    klee_error("Mock: Entry function '%s' not found in module",
-               opts.MainNameAfterMock.c_str());
+    klee_error("Entry function '%s' not found in module.",
+               opts.MainCurrentName.c_str());
   }
+  userMainFn->setName(opts.MainNameAfterMock);
+
   mockModule->getOrInsertFunction(opts.MainCurrentName,
                                   userMainFn->getFunctionType(),
                                   userMainFn->getAttributes());
@@ -120,18 +130,22 @@ void MockBuilder::buildMockMain() {
     klee_error("Mock: Entry function '%s' not found in module",
                opts.MainCurrentName.c_str());
   }
+  mockMainFn->setDSOLocal(true);
   auto globalsInitBlock =
-      llvm::BasicBlock::Create(mockModule->getContext(), "entry", mockMainFn);
+      llvm::BasicBlock::Create(mockModule->getContext(), "", mockMainFn);
   builder->SetInsertPoint(globalsInitBlock);
   // Define all the external globals
-  buildExternalGlobalsDefinitions();
+  if (interpreterOptions.Mock == MockPolicy::All ||
+      interpreterOptions.MockMutableGlobals == MockMutableGlobalsPolicy::All) {
+    buildExternalGlobalsDefinitions();
+  }
 
   auto userMainCallee = mockModule->getOrInsertFunction(
       opts.MainNameAfterMock, userMainFn->getFunctionType());
   std::vector<llvm::Value *> args;
   args.reserve(userMainFn->arg_size());
-  for (auto it = mockMainFn->arg_begin(); it != mockMainFn->arg_end(); it++) {
-    args.push_back(it);
+  for (auto &arg : mockMainFn->args()) {
+    args.push_back(&arg);
   }
   auto callUserMain = builder->CreateCall(userMainCallee, args);
   builder->CreateRet(callUserMain);
@@ -146,6 +160,7 @@ void MockBuilder::buildExternalGlobalsDefinitions() {
       klee_error("Mock: Unable to add global variable '%s' to module",
                  extName.c_str());
     }
+    mainModuleGlobals.insert(extName);
     global->setLinkage(llvm::GlobalValue::ExternalLinkage);
     if (!type->isSized()) {
       continue;
@@ -163,7 +178,10 @@ void MockBuilder::buildExternalGlobalsDefinitions() {
 }
 
 void MockBuilder::buildExternalFunctionsDefinitions() {
-  auto externalFunctions = getExternalFunctions();
+  std::map<std::string, llvm::FunctionType *> externalFunctions;
+  if (interpreterOptions.Mock == MockPolicy::All) {
+    externalFunctions = getExternalFunctions();
+  }
 
   if (!opts.AnnotateOnlyExternal) {
     for (const auto &annotation : annotations) {
@@ -184,6 +202,11 @@ void MockBuilder::buildExternalFunctionsDefinitions() {
       klee_error("Mock: Unable to find function '%s' in module",
                  extName.c_str());
     }
+    if (func->isIntrinsic()) {
+      klee_message("Mock: Skip intrinsic function '%s'", extName.c_str());
+      continue;
+    }
+    mainModuleFunctions.insert(extName);
     if (!func->empty()) {
       continue;
     }
@@ -195,15 +218,6 @@ void MockBuilder::buildExternalFunctionsDefinitions() {
     if (nameToAnnotations != annotations.end()) {
       klee_message("Annotation function %s", extName.c_str());
       const auto &annotation = nameToAnnotations->second;
-
-      //      if (llvm::Function *f = userModule->getFunction(extName)) {
-      //        std::string replacedName = extName + "_replaced_by_mock";
-      //        klee_message("Renamed symbol %s to %s",
-      //        f->getName().str().c_str(),
-      //                     replacedName.c_str());
-      //        redefinitions.emplace_back(f->getName(), extName);
-      //        f->setName(replacedName);
-      //      }
 
       buildAnnotationForExternalFunctionArgs(func, annotation.argsStatements);
       buildAnnotationForExternalFunctionReturn(func,
@@ -380,7 +394,7 @@ void MockBuilder::buildAnnotationForExternalFunctionArgs(
     for (const auto &[offset, statementsOffset] : statementsMap) {
       auto [prev, elem] = goByOffset(arg, offset);
 
-      Statement::AllocSource *allocSourcePtr = nullptr;
+      Statement::Alloc *allocSourcePtr = nullptr;
       Statement::Free *freePtr = nullptr;
       Statement::InitNull *initNullPtr = nullptr;
 
@@ -420,7 +434,7 @@ void MockBuilder::buildAnnotationForExternalFunctionArgs(
         }
         case Statement::Kind::AllocSource: {
           if (prev != nullptr) {
-            allocSourcePtr = (Statement::AllocSource *)statement.get();
+            allocSourcePtr = (Statement::Alloc *)statement.get();
           } else {
             klee_message("Annotation: not valid annotation %s",
                          statement->toString().c_str());
@@ -447,7 +461,7 @@ void MockBuilder::buildAnnotationForExternalFunctionArgs(
         }
         case Statement::Kind::Unknown:
         default:
-          klee_message("Annotation not implemented %s",
+          klee_message("Annotation: not implemented %s",
                        statement->toString().c_str());
           break;
         }
@@ -461,7 +475,7 @@ void MockBuilder::buildAnnotationForExternalFunctionArgs(
 }
 
 void MockBuilder::processingValue(llvm::Value *prev, llvm::Type *elemType,
-                                  const Statement::AllocSource *allocSourcePtr,
+                                  const Statement::Alloc *allocSourcePtr,
                                   const Statement::InitNull *initNullPtr) {
   if (initNullPtr) {
     auto intType = llvm::IntegerType::get(mockModule->getContext(), 1);
@@ -501,10 +515,9 @@ void MockBuilder::processingValue(llvm::Value *prev, llvm::Type *elemType,
   }
 }
 
-void MockBuilder::buildAllocSource(
-    llvm::Value *prev, llvm::Type *elemType,
-    const Statement::AllocSource *allocSourcePtr) {
-  if (allocSourcePtr->value != Statement::AllocSource::Alloc) {
+void MockBuilder::buildAllocSource(llvm::Value *prev, llvm::Type *elemType,
+                                   const Statement::Alloc *allocSourcePtr) {
+  if (allocSourcePtr->value != Statement::Alloc::ALLOC) {
     klee_warning("Annotation: AllocSource \"%d\" not implemented use alloc",
                  allocSourcePtr->value);
   }
@@ -522,7 +535,7 @@ void MockBuilder::buildAllocSource(
 }
 
 void MockBuilder::buildFree(llvm::Value *elem, const Statement::Free *freePtr) {
-  if (freePtr->value != Statement::Free::Free_) {
+  if (freePtr->value != Statement::Free::FREE) {
     klee_warning("Annotation: AllocSource \"%d\" not implemented use free",
                  freePtr->value);
   }
@@ -538,8 +551,7 @@ void MockBuilder::buildAnnotationForExternalFunctionReturn(
     return;
   }
 
-  // TODO: change to set
-  Statement::AllocSource *allocSourcePtr = nullptr;
+  Statement::Alloc *allocSourcePtr = nullptr;
   Statement::InitNull *initNullPtr = nullptr;
 
   for (const auto &statement : statements) {
@@ -550,7 +562,7 @@ void MockBuilder::buildAnnotationForExternalFunctionReturn(
       break;
     case Statement::Kind::AllocSource: {
       allocSourcePtr = returnType->isPointerTy()
-                           ? (Statement::AllocSource *)statement.get()
+                           ? (Statement::Alloc *)statement.get()
                            : nullptr;
       break;
     }
@@ -574,7 +586,11 @@ void MockBuilder::buildAnnotationForExternalFunctionReturn(
   std::string retName = "ret_" + func->getName().str();
   llvm::Value *retValuePtr = builder->CreateAlloca(returnType, nullptr);
 
-  if (!returnType->isPointerTy() || !allocSourcePtr) {
+  bool mustBeNull =
+      initNullPtr && initNullPtr->value == Statement::InitNull::Type::MUST;
+  if (returnType->isPointerTy() && (allocSourcePtr || mustBeNull)) {
+    processingValue(retValuePtr, returnType, allocSourcePtr, initNullPtr);
+  } else {
     buildCallKleeMakeSymbolic("klee_make_mock", retValuePtr, returnType,
                               func->getName().str());
     if (returnType->isPointerTy() && !initNullPtr) {
@@ -596,8 +612,6 @@ void MockBuilder::buildAnnotationForExternalFunctionReturn(
           cmpResult, llvm::Type::getInt64Ty(mockModule->getContext()));
       builder->CreateCall(kleeAssumeFunc, {cmpResult64});
     }
-  } else {
-    processingValue(retValuePtr, returnType, allocSourcePtr, initNullPtr);
   }
   llvm::Value *retValue = builder->CreateLoad(returnType, retValuePtr, retName);
   builder->CreateRet(retValue);

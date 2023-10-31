@@ -36,5 +36,14 @@
       ]
     ],
     "properties": []
+  },
+  "mustInitNull": {
+    "name": "mustInitNull",
+    "annotation": [
+      [
+        "InitNull::Must"
+      ]
+    ],
+    "properties": []
   }
 }

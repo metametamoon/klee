@@ -1,26 +1,30 @@
 // REQUIRES: z3
 // RUN: %clang -DInitNull1 %s -g -emit-llvm %O0opt -c -o %t1.bc
 // RUN: rm -rf %t1.klee-out-1
-// RUN: %klee --solver-backend=z3 --output-dir=%t1.klee-out-1 --annotations=%S/InitNull.json --external-calls=all --mock-all-externals --mock-external-calls --mock-linked-externals --mock-strategy=naive -emit-all-errors=true %t1.bc 2>&1 | FileCheck %s -check-prefix=CHECK-INITNULL1
+// RUN: %klee --solver-backend=z3 --output-dir=%t1.klee-out-1 --annotations=%S/InitNull.json --mock-policy=all -emit-all-errors=true %t1.bc 2>&1 | FileCheck %s -check-prefix=CHECK-INITNULL1
 
 // RUN: %clang -DInitNull2 %s -g -emit-llvm %O0opt -c -o %t2.bc
 // RUN: rm -rf %t2.klee-out-1
-// RUN: %klee --solver-backend=z3 --output-dir=%t2.klee-out-1 --annotations=%S/InitNull.json --external-calls=all --mock-all-externals --mock-external-calls --mock-linked-externals --mock-strategy=naive -emit-all-errors=true %t2.bc 2>&1 | FileCheck %s -check-prefix=CHECK-INITNULL2
+// RUN: %klee --solver-backend=z3 --output-dir=%t2.klee-out-1 --annotations=%S/InitNull.json --mock-policy=all -emit-all-errors=true %t2.bc 2>&1 | FileCheck %s -check-prefix=CHECK-INITNULL2
 
 // RUN: %clang -DInitNull3 %s -g -emit-llvm %O0opt -c -o %t3.bc
 // RUN: rm -rf %t3.klee-out-1
-// RUN: %klee --solver-backend=z3 --output-dir=%t3.klee-out-1 --annotations=%S/InitNull.json --external-calls=all --mock-all-externals --mock-external-calls --mock-linked-externals --mock-strategy=naive -emit-all-errors=true %t3.bc 2>&1 | FileCheck %s -check-prefix=CHECK-INITNULL3
+// RUN: %klee --solver-backend=z3 --output-dir=%t3.klee-out-1 --annotations=%S/InitNull.json --mock-policy=all -emit-all-errors=true %t3.bc 2>&1 | FileCheck %s -check-prefix=CHECK-INITNULL3
 
 // RUN: %clang -DInitNull4 %s -g -emit-llvm %O0opt -c -o %t4.bc
 // RUN: rm -rf %t4.klee-out-1
-// RUN: %klee --solver-backend=z3 --output-dir=%t4.klee-out-1 --annotations=%S/InitNull.json --external-calls=all --mock-all-externals --mock-external-calls --mock-linked-externals --mock-strategy=naive -emit-all-errors=true %t4.bc 2>&1 | FileCheck %s -check-prefix=CHECK-INITNULL4
+// RUN: %klee --solver-backend=z3 --output-dir=%t4.klee-out-1 --annotations=%S/InitNull.json --mock-policy=all -emit-all-errors=true %t4.bc 2>&1 | FileCheck %s -check-prefix=CHECK-INITNULL4
 
 // RUN: %clang -DInitNull1 -DInitNull2 -DInitNull3 -DInitNull4 %s -g -emit-llvm %O0opt -c -o %t5.bc
 // RUN: rm -rf %t5.klee-out-1
-// RUN: %klee --solver-backend=z3 --output-dir=%t5.klee-out-1 --annotations=%S/InitNullEmpty.json --external-calls=all --mock-all-externals --mock-external-calls --mock-linked-externals --mock-strategy=naive -emit-all-errors=true %t5.bc 2>&1 | FileCheck %s -check-prefix=CHECK-EMPTY
+// RUN: %klee --solver-backend=z3 --output-dir=%t5.klee-out-1 --annotations=%S/InitNullEmpty.json --mock-policy=all -emit-all-errors=true %t5.bc 2>&1 | FileCheck %s -check-prefix=CHECK-EMPTY
 // CHECK-EMPTY: ASSERTION FAIL: a != 0 && "A is Null"
 // CHECK-EMPTY: ASSERTION FAIL: a != 0 && "A is Null"
 // CHECK-EMPTY: partially completed paths = 2
+
+// RUN: %clang -DMustInitNull %s -g -emit-llvm %O0opt -c -o %t6.bc
+// RUN: rm -rf %t6.klee-out-1
+// RUN: %klee --solver-backend=z3 --output-dir=%t6.klee-out-1 --annotations=%S/InitNull.json --mock-policy=all -emit-all-errors=true %t6.bc 2>&1 | FileCheck %s -check-prefix=CHECK-MUSTINITNULL
 
 #include <assert.h>
 
@@ -30,6 +34,8 @@ void maybeInitNull1(int *a);
 void maybeInitNull2(int **a);
 int *maybeInitNull3();
 int **maybeInitNull4();
+
+int *mustInitNull();
 
 int main() {
   int c = 42;
@@ -62,7 +68,13 @@ int main() {
   // CHECK-INITNULL4: partially completed paths = 3
 #endif
 
+#ifdef MustInitNull
+  a = mustInitNull();
+  // CHECK-MUSTINITNULL: partially completed paths = 0
+  // CHECK-MUSTINITNULL: generated tests = 2
+#else
   assert(a != 0 && "A is Null");
+#endif
 
   return 0;
 }

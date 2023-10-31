@@ -425,8 +425,12 @@ public:
   MockDeterministicSource(const KModule *_km, const llvm::Function &_function,
                           const std::vector<ref<Expr>> &_args);
 
-  [[nodiscard]] Kind getKind() const override { return Kind::MockDeterministic; }
-  [[nodiscard]] std::string getName() const override { return "mockDeterministic"; }
+  [[nodiscard]] Kind getKind() const override {
+    return Kind::MockDeterministic;
+  }
+  [[nodiscard]] std::string getName() const override {
+    return "mockDeterministic";
+  }
 
   static bool classof(const SymbolicSource *S) {
     return S->getKind() == Kind::MockDeterministic;

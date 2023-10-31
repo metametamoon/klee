@@ -1,15 +1,15 @@
 // REQUIRES: z3
 // RUN: %clang -DFree1 %s -g -emit-llvm %O0opt -c -o %t1.bc
 // RUN: rm -rf %t1.klee-out-1
-// RUN: %klee --solver-backend=z3 --output-dir=%t1.klee-out-1 --annotations=%S/Free.json --external-calls=all --mock-all-externals --mock-external-calls --mock-linked-externals --mock-strategy=naive -emit-all-errors=true %t1.bc 2>&1 | FileCheck %s -check-prefix=CHECK-FREE1
+// RUN: %klee --solver-backend=z3 --output-dir=%t1.klee-out-1 --annotations=%S/Free.json --mock-policy=all --mock-modeled-functions --emit-all-errors=true %t1.bc 2>&1 | FileCheck %s -check-prefix=CHECK-FREE1
 
-// RUN: %clang %s -g -emit-llvm %O0opt -c -o %t1.bc
-// RUN: rm -rf %t1.klee-out-1
-// RUN: %klee --solver-backend=z3 --output-dir=%t1.klee-out-1 --annotations=%S/Free.json --external-calls=all --mock-all-externals --mock-external-calls --mock-linked-externals --mock-strategy=naive -emit-all-errors=true %t1.bc 2>&1 | FileCheck %s -check-prefix=CHECK-FREE2
+// RUN: %clang %s -g -emit-llvm %O0opt -c -o %t2.bc
+// RUN: rm -rf %t2.klee-out-1
+// RUN: %klee --solver-backend=z3 --output-dir=%t2.klee-out-1 --annotations=%S/Free.json --mock-policy=all --mock-modeled-functions --emit-all-errors=true %t2.bc 2>&1 | FileCheck %s -check-prefix=CHECK-FREE2
 
-// RUN: %clang -DFree3 %s -g -emit-llvm %O0opt -c -o %t1.bc
-// RUN: rm -rf %t1.klee-out-1
-// RUN: %klee --solver-backend=z3 --output-dir=%t1.klee-out-1 --annotations=%S/Free.json --external-calls=all --mock-all-externals --mock-external-calls --mock-linked-externals --mock-strategy=naive -emit-all-errors=true %t1.bc 2>&1 | FileCheck %s -check-prefix=CHECK-FREE3
+// RUN: %clang -DFree3 %s -g -emit-llvm %O0opt -c -o %t3.bc
+// RUN: rm -rf %t3.klee-out-1
+// RUN: %klee --solver-backend=z3 --output-dir=%t3.klee-out-1 --annotations=%S/Free.json --mock-policy=all --mock-modeled-functions --emit-all-errors=true %t3.bc 2>&1 | FileCheck %s -check-prefix=CHECK-FREE3
 
 #include <assert.h>
 

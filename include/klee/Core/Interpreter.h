@@ -68,11 +68,21 @@ using FLCtoOpcode = std::unordered_map<
     std::unordered_map<
         unsigned, std::unordered_map<unsigned, std::unordered_set<unsigned>>>>;
 
-enum class MockStrategy {
-  None,          // No mocks are generated
-  Naive,         // For each function call new symbolic value is generated
-  Deterministic, // Each function is treated as uninterpreted function in SMT.
-                 // Compatible with Z3 solver only
+enum class MockStrategyKind {
+  Naive,        // For each function call new symbolic value is generated
+  Deterministic // Each function is treated as uninterpreted function in SMT.
+                // Compatible with Z3 solver only
+};
+
+enum class MockPolicy {
+  None,   // No mock function generated
+  Failed, // Generate symbolic value for failed external calls
+  All     // Generate IR module with all external values
+};
+
+enum class MockMutableGlobalsPolicy {
+  None, // No mock for globals
+  All,  // Mock globals on module build stage and generate bc module for it
 };
 
 class Interpreter {
@@ -135,11 +145,15 @@ public:
     unsigned MakeConcreteSymbolic;
     GuidanceKind Guidance;
     nonstd::optional<SarifReport> Paths;
-    enum MockStrategy MockStrategy;
+    MockPolicy Mock;
+    MockStrategyKind MockStrategy;
+    MockMutableGlobalsPolicy MockMutableGlobals;
 
     InterpreterOptions(nonstd::optional<SarifReport> Paths)
         : MakeConcreteSymbolic(false), Guidance(GuidanceKind::NoGuidance),
-          Paths(std::move(Paths)), MockStrategy(MockStrategy::None) {}
+          Paths(std::move(Paths)), Mock(MockPolicy::None),
+          MockStrategy(MockStrategyKind::Naive),
+          MockMutableGlobals(MockMutableGlobalsPolicy::None) {}
   };
 
 protected:
@@ -162,15 +176,13 @@ public:
   ///                module
   /// \return The final module after it has been optimized, checks
   /// inserted, and modified for interpretation.
-  virtual llvm::Module *
-  setModule(std::vector<std::unique_ptr<llvm::Module>> &userModules,
-            std::vector<std::unique_ptr<llvm::Module>> &libsModules,
-            const ModuleOptions &opts,
-            std::set<std::string> &&mainModuleFunctions,
-            std::set<std::string> &&mainModuleGlobals,
-            FLCtoOpcode &&origInstructions,
-            const std::set<std::string> &ignoredExternals,
-            std::vector<std::pair<std::string, std::string>> redefinitions) = 0;
+  virtual llvm::Module *setModule(
+      std::vector<std::unique_ptr<llvm::Module>> &userModules,
+      std::vector<std::unique_ptr<llvm::Module>> &libsModules,
+      const ModuleOptions &opts, std::set<std::string> &&mainModuleFunctions,
+      std::set<std::string> &&mainModuleGlobals, FLCtoOpcode &&origInstructions,
+      const std::set<std::string> &ignoredExternals,
+      std::vector<std::pair<std::string, std::string>> redefinitions) = 0;
 
   // supply a tree stream writer which the interpreter will use
   // to record the concrete path (as a stream of '0' and '1' bytes).

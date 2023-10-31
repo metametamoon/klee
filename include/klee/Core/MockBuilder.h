@@ -19,11 +19,15 @@ private:
   std::unique_ptr<llvm::IRBuilder<>> builder;
 
   const Interpreter::ModuleOptions &opts;
+  const Interpreter::InterpreterOptions &interpreterOptions;
 
   std::set<std::string> ignoredExternals;
   std::vector<std::pair<std::string, std::string>> redefinitions;
 
   InterpreterHandler *interpreterHandler;
+
+  std::set<std::string> &mainModuleFunctions;
+  std::set<std::string> &mainModuleGlobals;
 
   AnnotationsMap annotations;
 
@@ -53,16 +57,19 @@ private:
 public:
   MockBuilder(const llvm::Module *initModule,
               const Interpreter::ModuleOptions &opts,
+              const Interpreter::InterpreterOptions &interpreterOptions,
               const std::set<std::string> &ignoredExternals,
               std::vector<std::pair<std::string, std::string>> &redefinitions,
-              InterpreterHandler *interpreterHandler);
+              InterpreterHandler *interpreterHandler,
+              std::set<std::string> &mainModuleFunctions,
+              std::set<std::string> &mainModuleGlobals);
 
   std::unique_ptr<llvm::Module> build();
   void buildAllocSource(llvm::Value *prev, llvm::Type *elemType,
-                        const Statement::AllocSource *allocSourcePtr);
+                        const Statement::Alloc *allocSourcePtr);
   void buildFree(llvm::Value *elem, const Statement::Free *freePtr);
   void processingValue(llvm::Value *prev, llvm::Type *elemType,
-                       const Statement::AllocSource *allocSourcePtr,
+                       const Statement::Alloc *allocSourcePtr,
                        const Statement::InitNull *initNullPtr);
 };
 
