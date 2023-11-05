@@ -335,7 +335,7 @@ void AddressSpace::copyOutConcrete(const MemoryObject *mo,
   std::vector<uint8_t> concreteStore(mo->size);
   for (size_t i = 0; i < mo->size; i++) {
     auto byte = ae.visit(os->read8(i));
-    concreteStore[i] = toConstantExpr(byte)->getZExtValue(Expr::Int8);
+    concreteStore[i] = cast<ConstantExpr>(byte)->getZExtValue(Expr::Int8);
   }
   std::memcpy(address, concreteStore.data(), mo->size);
 }
@@ -363,7 +363,7 @@ bool AddressSpace::copyInConcrete(const MemoryObject *mo, const ObjectState *os,
   std::vector<uint8_t> concreteStore(mo->size);
   for (size_t i = 0; i < mo->size; i++) {
     auto byte = ae.visit(os->read8(i));
-    concreteStore[i] = toConstantExpr(byte)->getZExtValue(8);
+    concreteStore[i] = cast<ConstantExpr>(byte)->getZExtValue(8);
   }
   if (memcmp(address, concreteStore.data(), mo->size) != 0) {
     if (os->readOnly) {

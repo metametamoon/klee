@@ -110,6 +110,10 @@ ref<Expr> ObjectState::read8(unsigned offset) const {
   }
 }
 
+ref<Expr> ObjectState::readValue8(unsigned offset) const {
+  return valueOS.read8(offset);
+}
+
 ref<Expr> ObjectState::read8(ref<Expr> offset) const {
   assert(!isa<ConstantExpr>(offset) &&
          "constant offset passed to symbolic read8");
