@@ -792,8 +792,12 @@ MemoryObject *Executor::addExternalObject(ExecutionState &state, void *addr,
   auto mo = memory->allocateFixed(reinterpret_cast<std::uint64_t>(addr), size,
                                   nullptr);
   ObjectState *os = bindObjectInState(state, mo, type, false);
-  for (unsigned i = 0; i < size; i++)
-    os->write8(i, ((uint8_t *)addr)[i]);
+  ref<ConstantExpr> seg =
+      Expr::createPointer(reinterpret_cast<std::uint64_t>(addr));
+  for (unsigned i = 0; i < size; i++) {
+    ref<Expr> byte = ConstantExpr::create(((uint8_t *)addr)[i], Expr::Int8);
+    os->write(i, PointerExpr::create(seg, seg, byte));
+  }
   if (isReadOnly)
     os->setReadOnly(true);
   return mo;
@@ -1037,8 +1041,12 @@ void Executor::initializeGlobalObjects(ExecutionState &state) {
         klee_error("Unable to load symbol(%.*s) while initializing globals",
                    static_cast<int>(v.getName().size()), v.getName().data());
       } else {
+        ref<ConstantExpr> seg =
+            Expr::createPointer(reinterpret_cast<std::uint64_t>(addr));
         for (unsigned offset = 0; offset < mo->size; offset++) {
-          os->write8(offset, static_cast<unsigned char *>(addr)[offset]);
+          ref<Expr> byte =
+              ConstantExpr::create(((uint8_t *)addr)[offset], Expr::Int8);
+          os->write(offset, PointerExpr::create(seg, seg, byte));
         }
       }
     } else if (v.hasInitializer()) {
@@ -1824,7 +1832,7 @@ MemoryObject *Executor::serializeLandingpad(ExecutionState &state,
   stateTerminated = false;
 
   std::vector<unsigned char> serialized;
-  std::vector<unsigned char> pointerMask;
+  std::vector<std::uint64_t> pointerMask;
 
   for (unsigned current_clause_id = 0; current_clause_id < lpi.getNumClauses();
        ++current_clause_id) {
@@ -1856,7 +1864,9 @@ MemoryObject *Executor::serializeLandingpad(ExecutionState &state,
       serialized.resize(old_size + 8);
       pointerMask.resize(old_size + 8);
       memcpy(serialized.data() + old_size, &ti_addr, sizeof(ti_addr));
-      memset(pointerMask.data() + old_size, 1, sizeof(ti_addr));
+      for (size_t i = 0; i < sizeof(ti_addr); ++i) {
+        pointerMask[old_size + i] = ti_addr;
+      }
     } else if (lpi.isFilter(current_clause_id)) {
       if (current_clause->isNullValue()) {
         // special handling for a catch-all filter clause, i.e., "[0 x i8*]"
@@ -1915,7 +1925,9 @@ MemoryObject *Executor::serializeLandingpad(ExecutionState &state,
           serialized.resize(old_size + 8);
           pointerMask.resize(old_size + 8);
           memcpy(serialized.data() + old_size, &ti_addr, sizeof(ti_addr));
-          memset(pointerMask.data() + old_size, 1, sizeof(ti_addr));
+          for (size_t i = 0; i < sizeof(ti_addr); ++i) {
+            pointerMask[old_size + i] = ti_addr;
+          }
         }
       }
     }
@@ -1928,7 +1940,8 @@ MemoryObject *Executor::serializeLandingpad(ExecutionState &state,
   for (unsigned i = 0; i < serialized.size(); i++) {
     ref<ConstantExpr> sec = ConstantExpr::create(serialized[i], Expr::Int8);
     if (pointerMask.at(i)) {
-      os->write(i, PointerExpr::create(sec, sec));
+      ref<ConstantExpr> seg = Expr::createPointer(pointerMask.at(i));
+      os->write(i, PointerExpr::create(seg, seg, sec));
     } else {
       os->write(i, sec);
     }
@@ -3476,9 +3489,12 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
 
     if (castToType->isPointerTy()) {
       castToType = castToType->getPointerElementType();
-      ref<Expr> base = makePointer(result)->getBase();
-      if (state.isGEPExpr(base)) {
-        state.gepExprBases[base] = castToType;
+      if (ref<PointerExpr> pointer =
+              dyn_cast<PointerExpr>(makePointer(result))) {
+        ref<Expr> base = pointer->getBase();
+        if (state.isGEPExpr(base)) {
+          state.gepExprBases[base] = castToType;
+        }
       }
     }
 
@@ -5178,7 +5194,8 @@ void Executor::callExternalFunction(ExecutionState &state, KInstruction *target,
   ObjectPair result = state.addressSpace.findObject(idResult);
   ref<Expr> errValueExpr = result.second->read(0, sizeof(*errno_addr) * 8);
   errValueExpr = toUnique(state, errValueExpr);
-  ConstantExpr *errnoValue = dyn_cast<ConstantExpr>(errValueExpr);
+  ConstantExpr *errnoValue =
+      dyn_cast<ConstantExpr>(makePointer(errValueExpr)->getValue());
   if (!errnoValue) {
     terminateStateOnExecError(state,
                               "external call with errno value symbolic: " +
@@ -5960,7 +5977,7 @@ bool Executor::checkResolvedMemoryObjects(
       baseInBounds = AndExpr::create(
           baseInBounds, Expr::createIsZero(mo->getOffsetExpr(base)));
       baseInBounds = AndExpr::create(
-          baseInBounds, Expr::createIsZero(mo->getSegmentDiff(segment)));
+          baseInBounds, Expr::createIsZero(mo->getOffsetExpr(segment)));
     }
 
     inBounds = AndExpr::create(inBounds, baseInBounds);
@@ -6004,7 +6021,7 @@ bool Executor::checkResolvedMemoryObjects(
           notInBounds = AndExpr::create(
               notInBounds, Expr::createIsZero(mo->getOffsetExpr(base)));
           notInBounds = AndExpr::create(
-              notInBounds, Expr::createIsZero(mo->getSegmentDiff(segment)));
+              notInBounds, Expr::createIsZero(mo->getOffsetExpr(segment)));
         }
         checkOutOfBounds = notInBounds;
       }
@@ -6016,7 +6033,7 @@ bool Executor::checkResolvedMemoryObjects(
           notInBounds = AndExpr::create(
               notInBounds, Expr::createIsZero(mo->getOffsetExpr(base)));
           notInBounds = AndExpr::create(
-              notInBounds, Expr::createIsZero(mo->getSegmentDiff(segment)));
+              notInBounds, Expr::createIsZero(mo->getOffsetExpr(segment)));
         }
         checkOutOfBounds = notInBounds;
       }
@@ -6036,7 +6053,7 @@ bool Executor::checkResolvedMemoryObjects(
         baseInBounds = AndExpr::create(
             baseInBounds, mo->getBoundsCheckPointer(basePointer, size));
         baseInBounds = AndExpr::create(
-            baseInBounds, Expr::createIsZero(mo->getSegmentDiff(segment)));
+            baseInBounds, Expr::createIsZero(mo->getOffsetExpr(segment)));
       }
 
       if (hasLazyInitialized && i == mayBeResolvedMemoryObjects.size() - 1) {
@@ -6044,7 +6061,7 @@ bool Executor::checkResolvedMemoryObjects(
         baseInBounds = AndExpr::create(
             baseInBounds, Expr::createIsZero(mo->getOffsetExpr(base)));
         baseInBounds = AndExpr::create(
-            baseInBounds, Expr::createIsZero(mo->getSegmentDiff(segment)));
+            baseInBounds, Expr::createIsZero(mo->getOffsetExpr(segment)));
       }
 
       inBounds = AndExpr::create(inBounds, baseInBounds);
@@ -6077,7 +6094,7 @@ bool Executor::checkResolvedMemoryObjects(
         notInBounds = AndExpr::create(
             notInBounds, Expr::createIsZero(mo->getOffsetExpr(base)));
         notInBounds = AndExpr::create(
-            notInBounds, Expr::createIsZero(mo->getSegmentDiff(segment)));
+            notInBounds, Expr::createIsZero(mo->getOffsetExpr(segment)));
       }
 
       if (mayBeOutOfBound) {

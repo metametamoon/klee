@@ -1775,19 +1775,17 @@ ref<Expr> ConcatExpr::create(const ref<Expr> &l, const ref<Expr> &r) {
   if (PointerExpr *ee_left = dyn_cast<PointerExpr>(l)) {
     if (PointerExpr *ee_right = dyn_cast<PointerExpr>(r)) {
       return PointerExpr::create(
-          ConcatExpr::create(ee_left->getSegment(), ee_right->getSegment()),
-          ConcatExpr::create(ee_left->getBase(), ee_right->getBase()),
+          SelectExpr::create(
+              EqExpr::create(ee_left->getSegment(), ee_right->getSegment()),
+              ee_left->getSegment(),
+              ConstantExpr::create(0, ee_left->getSegment()->getWidth())),
+
+          SelectExpr::create(
+              EqExpr::create(ee_left->getBase(), ee_right->getBase()),
+              ee_left->getBase(),
+              ConstantExpr::create(0, ee_left->getBase()->getWidth())),
           ConcatExpr::create(ee_left->getValue(), ee_right->getValue()));
-    } else {
-      return ConcatExpr::create(
-          l, PointerExpr::create(ConstantExpr::create(0, r->getWidth()),
-                                 ConstantExpr::create(0, r->getWidth()), r));
     }
-  } else if (PointerExpr *ee_right = dyn_cast<PointerExpr>(r)) {
-    return ConcatExpr::create(
-        PointerExpr::create(ConstantExpr::create(0, l->getWidth()),
-                            ConstantExpr::create(0, l->getWidth()), l),
-        r);
   }
 
   return ConcatExpr::alloc(l, r);
@@ -1837,8 +1835,7 @@ ref<Expr> ExtractExpr::create(ref<Expr> expr, unsigned off, Width w) {
   } else if (ConstantExpr *CE = dyn_cast<ConstantExpr>(expr)) {
     return CE->Extract(off, w);
   } else if (PointerExpr *pe = dyn_cast<PointerExpr>(expr)) {
-    return PointerExpr::create(ExtractExpr::create(pe->getSegment(), off, w),
-                               ExtractExpr::create(pe->getBase(), off, w),
+    return PointerExpr::create(pe->getSegment(), pe->getBase(),
                                ExtractExpr::create(pe->getValue(), off, w));
   } else {
     // Extract(Concat)
@@ -1906,8 +1903,7 @@ ref<Expr> ZExtExpr::create(const ref<Expr> &e, Width w) {
   } else if (ConstantExpr *CE = dyn_cast<ConstantExpr>(e)) {
     return CE->ZExt(w);
   } else if (PointerExpr *pe = dyn_cast<PointerExpr>(e)) {
-    return PointerExpr::create(ZExtExpr::create(pe->getSegment(), w),
-                               ZExtExpr::create(pe->getBase(), w),
+    return PointerExpr::create(pe->getSegment(), pe->getBase(),
                                ZExtExpr::create(pe->getValue(), w));
   } else if (SelectExpr *se = dyn_cast<SelectExpr>(e)) {
     if (isa<ConstantExpr>(se->trueExpr)) {
@@ -1928,8 +1924,7 @@ ref<Expr> SExtExpr::create(const ref<Expr> &e, Width w) {
   } else if (ConstantExpr *CE = dyn_cast<ConstantExpr>(e)) {
     return CE->SExt(w);
   } else if (PointerExpr *pe = dyn_cast<PointerExpr>(e)) {
-    return PointerExpr::create(SExtExpr::create(pe->getSegment(), w),
-                               SExtExpr::create(pe->getBase(), w),
+    return PointerExpr::create(pe->getSegment(), pe->getBase(),
                                SExtExpr::create(pe->getValue(), w));
   } else if (SelectExpr *se = dyn_cast<SelectExpr>(e)) {
     if (isa<ConstantExpr>(se->trueExpr)) {
@@ -2809,7 +2804,9 @@ ref<Expr> PointerExpr::create(const ref<Expr> &s, const ref<Expr> &b,
   assert(!isa<PointerExpr>(b));
   assert(!isa<PointerExpr>(v));
   assert(s->getWidth() == b->getWidth());
-  assert(s->getWidth() == v->getWidth());
+  if (s->isZero() && !b->isZero()) {
+    llvm::errs();
+  }
   if (isa<ConstantExpr>(s) && isa<ConstantExpr>(b) && isa<ConstantExpr>(v)) {
     return ConstantPointerExpr::create(
         cast<ConstantExpr>(s), cast<ConstantExpr>(b), cast<ConstantExpr>(v));
@@ -2862,6 +2859,10 @@ ref<Expr> PointerExpr::create(const ref<Expr> &expr) {
 ref<Expr> ConstantPointerExpr::create(const ref<ConstantExpr> &s,
                                       const ref<ConstantExpr> &b,
                                       const ref<ConstantExpr> &v) {
+  assert(!isa<PointerExpr>(s));
+  assert(!isa<PointerExpr>(b));
+  assert(!isa<PointerExpr>(v));
+  assert(s->getWidth() == b->getWidth());
   return ConstantPointerExpr::alloc(s, b, v);
 }
 

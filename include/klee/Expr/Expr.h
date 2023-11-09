@@ -1645,12 +1645,16 @@ public:
                                   const ref<ReadExpr> &pointer,
                                   const ref<Expr> &off);
 
-  Width getWidth() const { return base->getWidth(); }
+  Width getWidth() const { return value->getWidth(); }
   Kind getKind() const { return Expr::Pointer; }
   ref<Expr> getSegment() const { return segment; }
   ref<Expr> getBase() const { return base; }
   ref<Expr> getValue() const { return value; }
-  ref<Expr> getOffset() const { return SubExpr::create(value, base); }
+  ref<Expr> getOffset() const {
+    assert(value->getWidth() == base->getWidth() &&
+           "Invalid getOffset() call!");
+    return SubExpr::create(value, base);
+  }
 
   unsigned getNumKids() const { return numKids; }
   ref<Expr> getKid(unsigned i) const {

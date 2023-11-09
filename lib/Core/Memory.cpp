@@ -74,20 +74,20 @@ void MemoryObject::getAllocInfo(std::string &result) const {
 
 ObjectState::ObjectState(const MemoryObject *mo, const Array *array, KType *dt)
     : copyOnWriteOwner(0), object(mo), valueOS(ObjectStage(array, nullptr)),
-      segmentOS(
-          ObjectStage(array->size, ConstantExpr::create(0, Expr::Int8), false)),
-      baseOS(
-          ObjectStage(array->size, ConstantExpr::create(0, Expr::Int8), false)),
+      segmentOS(ObjectStage(array->size, Expr::createPointer(0), false,
+                            Context::get().getPointerWidth())),
+      baseOS(ObjectStage(array->size, Expr::createPointer(0), false,
+                         Context::get().getPointerWidth())),
       lastUpdate(nullptr), size(array->size), dynamicType(dt), readOnly(false) {
 }
 
 ObjectState::ObjectState(const MemoryObject *mo, KType *dt)
     : copyOnWriteOwner(0), object(mo),
       valueOS(ObjectStage(mo->getSizeExpr(), nullptr)),
-      segmentOS(ObjectStage(mo->getSizeExpr(),
-                            ConstantExpr::create(0, Expr::Int8), false)),
-      baseOS(ObjectStage(mo->getSizeExpr(), ConstantExpr::create(0, Expr::Int8),
-                         false)),
+      segmentOS(ObjectStage(mo->getSizeExpr(), Expr::createPointer(0), false,
+                            Context::get().getPointerWidth())),
+      baseOS(ObjectStage(mo->getSizeExpr(), Expr::createPointer(0), false,
+                         Context::get().getPointerWidth())),
       lastUpdate(nullptr), size(mo->getSizeExpr()), dynamicType(dt),
       readOnly(false) {}
 
@@ -99,11 +99,10 @@ ObjectState::ObjectState(const ObjectState &os)
 /***/
 
 ref<Expr> ObjectState::read8(unsigned offset) const {
-  ref<Expr> val = valueOS.read8(offset);
-  ref<Expr> seg = segmentOS.read8(offset);
-  ref<Expr> base = baseOS.read8(offset);
-  if (seg == base && isa<ConstantExpr>(seg) && isa<ConstantExpr>(base) &&
-      seg->isZero()) {
+  ref<Expr> val = valueOS.readWidth(offset);
+  ref<Expr> seg = segmentOS.readWidth(offset);
+  ref<Expr> base = baseOS.readWidth(offset);
+  if (seg->isZero()) {
     return val;
   } else {
     return PointerExpr::create(seg, base, val);
@@ -111,7 +110,7 @@ ref<Expr> ObjectState::read8(unsigned offset) const {
 }
 
 ref<Expr> ObjectState::readValue8(unsigned offset) const {
-  return valueOS.read8(offset);
+  return valueOS.readWidth(offset);
 }
 
 ref<Expr> ObjectState::read8(ref<Expr> offset) const {
@@ -128,11 +127,10 @@ ref<Expr> ObjectState::read8(ref<Expr> offset) const {
         "performance issues: %s",
         object->size, allocInfo.c_str());
   }
-  ref<Expr> seg = segmentOS.read8(offset);
-  ref<Expr> val = valueOS.read8(offset);
-  ref<Expr> base = baseOS.read8(offset);
-  if (seg == base && isa<ConstantExpr>(seg) && isa<ConstantExpr>(base) &&
-      seg->isZero()) {
+  ref<Expr> seg = segmentOS.readWidth(offset);
+  ref<Expr> val = valueOS.readWidth(offset);
+  ref<Expr> base = baseOS.readWidth(offset);
+  if (seg->isZero()) {
     return val;
   } else {
     return PointerExpr::create(seg, base, val);
@@ -140,20 +138,32 @@ ref<Expr> ObjectState::read8(ref<Expr> offset) const {
 }
 
 void ObjectState::write8(unsigned offset, uint8_t value) {
-  segmentOS.write8(offset, ConstantExpr::create(0, Expr::Int8));
-  valueOS.write8(offset, value);
-  baseOS.write8(offset, ConstantExpr::create(0, Expr::Int8));
+  segmentOS.writeWidth(
+      offset, ConstantExpr::create(0, Context::get().getPointerWidth()));
+  valueOS.writeWidth(offset, value);
+  baseOS.writeWidth(offset,
+                    ConstantExpr::create(0, Context::get().getPointerWidth()));
 }
 
 void ObjectState::write8(unsigned offset, ref<Expr> value) {
   if (auto pointer = dyn_cast<PointerExpr>(value)) {
-    segmentOS.write8(offset, pointer->getSegment());
-    valueOS.write8(offset, pointer->getValue());
-    baseOS.write8(offset, pointer->getBase());
+    if (pointer->getSegment()->isZero()) {
+      segmentOS.writeWidth(
+          offset, ConstantExpr::create(0, Context::get().getPointerWidth()));
+      valueOS.writeWidth(offset, pointer->getValue());
+      baseOS.writeWidth(
+          offset, ConstantExpr::create(0, Context::get().getPointerWidth()));
+    } else {
+      segmentOS.writeWidth(offset, pointer->getSegment());
+      valueOS.writeWidth(offset, pointer->getValue());
+      baseOS.writeWidth(offset, pointer->getBase());
+    }
   } else {
-    segmentOS.write8(offset, ConstantExpr::create(0, value->getWidth()));
-    valueOS.write8(offset, value);
-    baseOS.write8(offset, ConstantExpr::create(0, value->getWidth()));
+    segmentOS.writeWidth(
+        offset, ConstantExpr::create(0, Context::get().getPointerWidth()));
+    valueOS.writeWidth(offset, value);
+    baseOS.writeWidth(
+        offset, ConstantExpr::create(0, Context::get().getPointerWidth()));
   }
 }
 
@@ -173,13 +183,23 @@ void ObjectState::write8(ref<Expr> offset, ref<Expr> value) {
   }
 
   if (auto pointer = dyn_cast<PointerExpr>(value)) {
-    segmentOS.write8(offset, pointer->getSegment());
-    valueOS.write8(offset, pointer->getValue());
-    baseOS.write8(offset, pointer->getBase());
+    if (pointer->getSegment()->isZero()) {
+      segmentOS.writeWidth(
+          offset, ConstantExpr::create(0, Context::get().getPointerWidth()));
+      valueOS.writeWidth(offset, pointer->getValue());
+      baseOS.writeWidth(
+          offset, ConstantExpr::create(0, Context::get().getPointerWidth()));
+    } else {
+      segmentOS.writeWidth(offset, pointer->getSegment());
+      valueOS.writeWidth(offset, pointer->getValue());
+      baseOS.writeWidth(offset, pointer->getBase());
+    }
   } else {
-    segmentOS.write8(offset, ConstantExpr::create(0, value->getWidth()));
-    valueOS.write8(offset, value);
-    baseOS.write8(offset, ConstantExpr::create(0, value->getWidth()));
+    segmentOS.writeWidth(
+        offset, ConstantExpr::create(0, Context::get().getPointerWidth()));
+    valueOS.writeWidth(offset, value);
+    baseOS.writeWidth(
+        offset, ConstantExpr::create(0, Context::get().getPointerWidth()));
   }
 }
 
@@ -353,17 +373,21 @@ bool ObjectState::isAccessableFrom(KType *accessingType) const {
 
 /***/
 
-ObjectStage::ObjectStage(const Array *array, ref<Expr> defaultValue, bool safe)
+ObjectStage::ObjectStage(const Array *array, ref<Expr> defaultValue, bool safe,
+                         Expr::Width width)
     : knownSymbolics(defaultValue), unflushedMask(false),
-      updates(array, nullptr), size(array->size), safeRead(safe) {}
+      updates(array, nullptr), size(array->size), safeRead(safe), width(width) {
+}
 
-ObjectStage::ObjectStage(ref<Expr> size, ref<Expr> defaultValue, bool safe)
+ObjectStage::ObjectStage(ref<Expr> size, ref<Expr> defaultValue, bool safe,
+                         Expr::Width width)
     : knownSymbolics(defaultValue), unflushedMask(false),
-      updates(nullptr, nullptr), size(size), safeRead(safe) {}
+      updates(nullptr, nullptr), size(size), safeRead(safe), width(width) {}
 
 ObjectStage::ObjectStage(const ObjectStage &os)
     : knownSymbolics(os.knownSymbolics), unflushedMask(os.unflushedMask),
-      updates(os.updates), size(os.size), safeRead(os.safeRead) {}
+      updates(os.updates), size(os.size), safeRead(os.safeRead),
+      width(os.width) {}
 
 /***/
 
@@ -371,8 +395,7 @@ const UpdateList &ObjectStage::getUpdates() const {
   if (auto sizeExpr = dyn_cast<ConstantExpr>(size)) {
     auto size = sizeExpr->getZExtValue();
     if (knownSymbolics.storage().size() == size) {
-      SparseStorage<ref<ConstantExpr>> values(
-          ConstantExpr::create(0, Expr::Int8));
+      SparseStorage<ref<ConstantExpr>> values(ConstantExpr::create(0, width));
       UpdateList symbolicUpdates = UpdateList(nullptr, nullptr);
       for (unsigned i = 0; i < size; i++) {
         auto value = knownSymbolics.load(i);
@@ -383,7 +406,8 @@ const UpdateList &ObjectStage::getUpdates() const {
           symbolicUpdates.extend(ConstantExpr::create(i, Expr::Int32), value);
         }
       }
-      auto array = Array::create(sizeExpr, SourceBuilder::constant(values));
+      auto array = Array::create(sizeExpr, SourceBuilder::constant(values),
+                                 Expr::Int32, width);
       updates = UpdateList(array, symbolicUpdates.head);
       knownSymbolics.reset();
       unflushedMask.reset();
@@ -391,9 +415,9 @@ const UpdateList &ObjectStage::getUpdates() const {
   }
 
   if (!updates.root) {
-    SparseStorage<ref<ConstantExpr>> values(
-        ConstantExpr::create(0, Expr::Int8));
-    auto array = Array::create(size, SourceBuilder::constant(values));
+    SparseStorage<ref<ConstantExpr>> values(ConstantExpr::create(0, width));
+    auto array = Array::create(size, SourceBuilder::constant(values),
+                               Expr::Int32, width);
     updates = UpdateList(array, updates.head);
   }
 
@@ -420,7 +444,7 @@ void ObjectStage::flushForWrite() {
 
 /***/
 
-ref<Expr> ObjectStage::read8(unsigned offset) const {
+ref<Expr> ObjectStage::readWidth(unsigned offset) const {
   if (auto byte = knownSymbolics.load(offset)) {
     return byte;
   } else {
@@ -430,7 +454,7 @@ ref<Expr> ObjectStage::read8(unsigned offset) const {
   }
 }
 
-ref<Expr> ObjectStage::read8(ref<Expr> offset) const {
+ref<Expr> ObjectStage::readWidth(ref<Expr> offset) const {
   assert(!isa<ConstantExpr>(offset) &&
          "constant offset passed to symbolic read8");
   flushForRead();
@@ -439,22 +463,22 @@ ref<Expr> ObjectStage::read8(ref<Expr> offset) const {
                           safeRead);
 }
 
-void ObjectStage::write8(unsigned offset, uint8_t value) {
+void ObjectStage::writeWidth(unsigned offset, uint64_t value) {
   auto byte = knownSymbolics.load(offset);
   if (byte) {
     auto ce = dyn_cast<ConstantExpr>(byte);
-    if (ce && ce->getZExtValue(8) == value) {
+    if (ce && ce->getZExtValue(width) == value) {
       return;
     }
   }
-  knownSymbolics.store(offset, ConstantExpr::create(value, Expr::Int8));
+  knownSymbolics.store(offset, ConstantExpr::create(value, width));
   unflushedMask.store(offset, true);
 }
 
-void ObjectStage::write8(unsigned offset, ref<Expr> value) {
+void ObjectStage::writeWidth(unsigned offset, ref<Expr> value) {
   // can happen when ExtractExpr special cases
   if (ConstantExpr *CE = dyn_cast<ConstantExpr>(value)) {
-    write8(offset, (uint8_t)CE->getZExtValue(8));
+    writeWidth(offset, CE->getZExtValue(width));
   } else {
     auto byte = knownSymbolics.load(offset);
     if (byte && byte == value) {
@@ -465,7 +489,7 @@ void ObjectStage::write8(unsigned offset, ref<Expr> value) {
   }
 }
 
-void ObjectStage::write8(ref<Expr> offset, ref<Expr> value) {
+void ObjectStage::writeWidth(ref<Expr> offset, ref<Expr> value) {
   assert(!isa<ConstantExpr>(offset) &&
          "constant offset passed to symbolic write8");
 

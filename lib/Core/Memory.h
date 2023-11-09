@@ -67,14 +67,6 @@ public:
   IDType id;
   mutable unsigned timestamp;
 
-  // std::shared_ptr<void> systemAddress;
-
-  // ref<Expr> segment;
-  // ref<Expr> address;
-  // ref<Expr> size;
-
-  ref<Expr> segment;
-
   uint64_t address;
   ref<Expr> addressExpr;
 
@@ -116,8 +108,7 @@ public:
       bool _isGlobal, bool _isFixed, bool _isLazyInitialized,
       const llvm::Value *_allocSite, MemoryManager *_parent,
       ref<Expr> _addressExpr = nullptr, ref<Expr> _sizeExpr = nullptr,
-      unsigned _timestamp = 0 /* unused if _isLazyInitialized is false*/,
-      ref<Expr> _segmentExpr = nullptr)
+      unsigned _timestamp = 0 /* unused if _isLazyInitialized is false*/)
       : id(counter++), timestamp(_timestamp), address(_address),
         addressExpr(_addressExpr), size(_size), sizeExpr(_sizeExpr),
         alignment(alignment), name("unnamed"), isLocal(_isLocal),
@@ -126,10 +117,8 @@ public:
         parent(_parent), allocSite(_allocSite) {
     if (isLazyInitialized) {
       timestamp = _timestamp;
-      segment = _segmentExpr;
     } else {
       timestamp = time++;
-      segment = Expr::createPointer(id);
     }
   }
 
@@ -157,9 +146,6 @@ public:
       return sizeExpr;
     }
     return Expr::createPointer(size);
-  }
-  ref<Expr> getSegmentDiff(ref<Expr> pointer) const {
-    return SubExpr::create(pointer, getBaseExpr());
   }
   ref<Expr> getOffsetExpr(ref<Expr> pointer) const {
     return SubExpr::create(pointer, getBaseExpr());
@@ -237,10 +223,13 @@ private:
 
   ref<Expr> size;
   bool safeRead;
+  Expr::Width width;
 
 public:
-  ObjectStage(const Array *array, ref<Expr> defaultValue, bool safe = true);
-  ObjectStage(ref<Expr> size, ref<Expr> defaultValue, bool safe = true);
+  ObjectStage(const Array *array, ref<Expr> defaultValue, bool safe = true,
+              Expr::Width width = Expr::Int8);
+  ObjectStage(ref<Expr> size, ref<Expr> defaultValue, bool safe = true,
+              Expr::Width width = Expr::Int8);
 
   ObjectStage(const ObjectStage &os);
   ~ObjectStage() = default;
@@ -249,19 +238,16 @@ public:
     return knownSymbolics.storage().size() + unflushedMask.storage().size();
   }
 
-  ref<Expr> read8(unsigned offset) const;
-  ref<Expr> read8(ref<Expr> offset) const;
-  void write8(unsigned offset, ref<Expr> value);
-  void write8(ref<Expr> offset, ref<Expr> value);
+  ref<Expr> readWidth(unsigned offset) const;
+  ref<Expr> readWidth(ref<Expr> offset) const;
+  void writeWidth(unsigned offset, ref<Expr> value);
+  void writeWidth(ref<Expr> offset, ref<Expr> value);
   void write(const ObjectStage &os);
 
   void write(unsigned offset, ref<Expr> value);
   void write(ref<Expr> offset, ref<Expr> value);
 
-  void write8(unsigned offset, uint8_t value);
-  void write16(unsigned offset, uint16_t value);
-  void write32(unsigned offset, uint32_t value);
-  void write64(unsigned offset, uint64_t value);
+  void writeWidth(unsigned offset, uint64_t value);
   void print() const;
 
 private:
