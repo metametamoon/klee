@@ -527,8 +527,9 @@ Executor::Executor(LLVMContext &ctx, const InterpreterOptions &opts,
       targetedExecutionManager(
           new TargetedExecutionManager(*codeGraphInfo, *targetManager)),
       replayKTest(0), replayPath(0), usingSeeds(0), atMemoryLimit(false),
-      inhibitForking(false), coverOnTheFly(false), haltExecution(HaltExecution::NotHalt),
-      ivcEnabled(false), debugLogBuffer(debugBufferString) {
+      inhibitForking(false), coverOnTheFly(false),
+      haltExecution(HaltExecution::NotHalt), ivcEnabled(false),
+      debugLogBuffer(debugBufferString) {
 
   guidanceKind = opts.Guidance;
 
@@ -4708,7 +4709,8 @@ Executor::compose(const ExecutionState &state, const PathConstraints &pob,
 
   for (auto &symbolic : pobSymbolics) {
     if (symbolic.array->source->getKind() == SymbolicSource::MakeSymbolic) {
-      auto hack = composer.compose(ReadExpr::create(UpdateList(symbolic.array, nullptr), ConstantExpr::create(0, 64)));
+      auto hack = composer.compose(ReadExpr::create(
+          UpdateList(symbolic.array, nullptr), ConstantExpr::create(0, 64)));
       assert(hack.second);
       Symbolic _symbolic(symbolic);
       _symbolic.array = cast<ReadExpr>(hack.second)->updates.root;
@@ -4849,7 +4851,8 @@ void Executor::goBackward(ref<BackwardAction> action) {
   if (canReachSomeTargetThroughState(*pob, *state)) {
     auto nullPointerExpr =
         state->nullPointerExpr ? state->nullPointerExpr : pob->nullPointerExpr;
-    composeResult = compose(*state, pob->constraints, nullPointerExpr, pob->symbolics);
+    composeResult =
+        compose(*state, pob->constraints, nullPointerExpr, pob->symbolics);
   } else {
     composeResult.success = false;
   }
@@ -4907,7 +4910,8 @@ void Executor::goBackward(ref<BackwardAction> action) {
       auto state = ExecutionState();
       state.constraints = pob->constraints;
       state.symbolics = pob->symbolics;
-      interpreterHandler->processTestCase(state, "backward", "reachable.err", false);
+      interpreterHandler->processTestCase(state, "backward", "reachable.err",
+                                          false);
 
     } else {
       auto returnPropagation = state->constraints.path().fromOutTransition();
