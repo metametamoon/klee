@@ -6187,6 +6187,9 @@ MemoryObject *Executor::allocate(ExecutionState &state, ref<Expr> size,
                                  size_t allocationAlignment,
                                  ref<Expr> lazyInitializationSource,
                                  unsigned timestamp) {
+
+  size = ZExtExpr::create(size, Expr::Int64);
+
   /* Try to find existing solution. */
   ref<Expr> uniqueSize = toUnique(state, size);
 
