@@ -405,7 +405,7 @@ private:
   using kblocks_ty = std::set<KBlock *, KBlockCompare>;
 
   using ThirdLayer =
-      std::map<unsigned long long, states_ty, std::less<unsigned long long>>;
+      std::map<unsigned long long, states_ty, std::greater<unsigned long long>>;
   using SecondLayer =
       std::map<std::vector<unsigned>, ThirdLayer, VectorsCompare>;
   using FirstLayer = std::map<unsigned, SecondLayer, std::greater<unsigned>>;

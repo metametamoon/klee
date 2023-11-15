@@ -656,7 +656,7 @@ public:
     return state.isCycled(maxCycles);
   }
   void increaseLimit() final {
-    maxCycles *= 2ULL;
+    maxCycles *= 4ULL;
     klee_message("increased max-cycles to %llu", maxCycles);
   }
 };
