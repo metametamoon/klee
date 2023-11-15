@@ -29,7 +29,6 @@ def klee_options(
         "--strip-unwanted-calls",  # removes llvm.dbg.* instructions, exponentially reduces time on some benchmarks
         "--delete-dead-loops=false",  # without this optimizer removes some code, which decreases coverage
         "--emit-all-errors",  # without this we generate only one test for assertion failures, which decreases coverage
-        "--external-calls=all",
         "--mock-all-externals",  # this helps for some linux benchmarks, which have unused extern globals. without this flag we will not even start on them.
         "--external-calls=all",
         "--use-forked-solver=false",
@@ -80,6 +79,7 @@ def klee_options(
             "--dump-states-on-halt=false",  # Explicitly do not dump states
             "--exit-on-error-type=Assert",  # Only generate test cases of type assert
             # "--dump-test-case-type=Assert", # Only dump test cases of type assert
+            "--search=bls",
             "--search=dfs",
             #    "--search=nurs:covnew", "--search=random-path","--search=dfs", "--use-batching-search",
             #    "--search=distance","--search=random-path","--use-batching-search",
