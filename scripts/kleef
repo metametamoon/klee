@@ -19,6 +19,7 @@ def klee_options(
     is32,
     f_err,
     f_cov,
+    bd,
     write_ktests,
 ):
     if max_time and int(max_time) > 30:
@@ -72,7 +73,6 @@ def klee_options(
 
     if f_err:
         cmd += [
-            "--execution-mode=bidirectional",
             "--initialize-in-join-blocks",
             # "--debug-log=rootpob,backward,conflict,closepob,reached,init",
             "--use-alpha-equivalence=false",
@@ -119,6 +119,9 @@ def klee_options(
                 f"--delay-cover-on-the-fly={late_time}",
                 f"--max-time={last_time}",
             ]
+
+    if bd:
+        cmd += ["--execution-mode=bidirectional"]
 
     cmd += [compiled_file]  # Finally add the file to be tested
     return cmd
@@ -174,6 +177,7 @@ class KLEEF(object):
         is32=False,
         f_cov=False,
         f_err=False,
+        bd=False,
         max_memory=0,
         max_time=0,
         use_perf=False,
@@ -186,6 +190,7 @@ class KLEEF(object):
         self.compiled_file = None
         self.f_cov = f_cov
         self.f_err = f_err
+        self.bd = bd
         self.max_memory = max_memory / 1024 / 1024  # Convert to MB
         self.max_time = max_time
         self.use_perf = use_perf
