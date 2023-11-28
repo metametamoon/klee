@@ -5095,15 +5095,9 @@ void Executor::callExternalFunction(ExecutionState &state, KInstruction *target,
                                                  roundingMode);
 
   if (!success) {
-    if (interpreterOpts.Mock == MockPolicy::Failed) {
-      if (target->inst->getType()->isSized()) {
-        prepareMockValue(state, "mockExternResult", target);
-      }
-    } else {
-      terminateStateOnExecError(state,
-                                "failed external call: " + callable->getName(),
-                                StateTerminationType::External);
-    }
+    terminateStateOnExecError(state,
+                              "failed external call: " + callable->getName(),
+                              StateTerminationType::External);
     return;
   }
 
@@ -5124,14 +5118,6 @@ void Executor::callExternalFunction(ExecutionState &state, KInstruction *target,
   if (resultType != Type::getVoidTy(kmodule->module->getContext())) {
     ref<Expr> e =
         ConstantExpr::fromMemory((void *)args, getWidthForLLVMType(resultType));
-    if (ExternCallsCanReturnNull &&
-        e->getWidth() == Context::get().getPointerWidth()) {
-      ref<Expr> symExternCallsCanReturnNullExpr =
-          makeMockValue(state, "symExternCallsCanReturnNull", Expr::Bool);
-      e = SelectExpr::create(
-          symExternCallsCanReturnNullExpr,
-          ConstantExpr::alloc(0, Context::get().getPointerWidth()), e);
-    }
     bindLocal(target, state, e);
   }
 }

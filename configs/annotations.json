@@ -572,6 +572,16 @@
     ],
     "properties": []
   },
+  "localtime": {
+    "name": "localtime",
+    "annotation": [
+      [
+        "InitNull::Must"
+      ],
+      []
+    ],
+    "properties": []
+  },
   "malloc": {
     "name": "malloc",
     "annotation": [
