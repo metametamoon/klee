@@ -70,7 +70,7 @@ public:
   void buildFree(llvm::Value *elem, const Statement::Free *freePtr);
   void processingValue(llvm::Value *prev, llvm::Type *elemType,
                        const Statement::Alloc *allocSourcePtr,
-                       const Statement::InitNull *initNullPtr);
+                       bool initNullPtr);
 };
 
 } // namespace klee

@@ -70,7 +70,7 @@ MockBuilder::MockBuilder(
       interpreterHandler(interpreterHandler),
       mainModuleFunctions(mainModuleFunctions),
       mainModuleGlobals(mainModuleGlobals) {
-  annotations = parseAnnotations(opts.AnnotationsFile, userModule);
+  annotations = parseAnnotations(opts.AnnotationsFile);
 }
 
 std::unique_ptr<llvm::Module> MockBuilder::build() {
@@ -227,7 +227,7 @@ void MockBuilder::buildExternalFunctionsDefinitions() {
       klee_message("Mocking external function %s", extName.c_str());
       // Default annotation for externals return
       buildAnnotationForExternalFunctionReturn(
-          func, {std::make_shared<Statement::InitNull>()});
+          func, {std::make_shared<Statement::MaybeInitNull>()});
     }
   }
 }
@@ -476,7 +476,7 @@ void MockBuilder::buildAnnotationForExternalFunctionArgs(
 
 void MockBuilder::processingValue(llvm::Value *prev, llvm::Type *elemType,
                                   const Statement::Alloc *allocSourcePtr,
-                                  const Statement::InitNull *initNullPtr) {
+                                  bool initNullPtr) {
   if (initNullPtr) {
     auto intType = llvm::IntegerType::get(mockModule->getContext(), 1);
     auto *allocCond = builder->CreateAlloca(intType, nullptr);
@@ -552,7 +552,8 @@ void MockBuilder::buildAnnotationForExternalFunctionReturn(
   }
 
   Statement::Alloc *allocSourcePtr = nullptr;
-  Statement::InitNull *initNullPtr = nullptr;
+  Statement::InitNull *mustInitNull = nullptr;
+  Statement::MaybeInitNull *maybeInitNull = nullptr;
 
   for (const auto &statement : statements) {
     switch (statement->getKind()) {
@@ -567,9 +568,15 @@ void MockBuilder::buildAnnotationForExternalFunctionReturn(
       break;
     }
     case Statement::Kind::InitNull: {
-      initNullPtr = returnType->isPointerTy()
-                        ? (Statement::InitNull *)statement.get()
-                        : nullptr;
+      mustInitNull = returnType->isPointerTy()
+                         ? (Statement::InitNull *)statement.get()
+                         : nullptr;
+      break;
+    }
+    case Statement::Kind::MaybeInitNull: {
+      maybeInitNull = returnType->isPointerTy()
+                          ? (Statement::MaybeInitNull *)statement.get()
+                          : nullptr;
       break;
     }
     case Statement::Kind::Free: {
@@ -586,14 +593,13 @@ void MockBuilder::buildAnnotationForExternalFunctionReturn(
   std::string retName = "ret_" + func->getName().str();
   llvm::Value *retValuePtr = builder->CreateAlloca(returnType, nullptr);
 
-  bool mustBeNull =
-      initNullPtr && initNullPtr->value == Statement::InitNull::Type::MUST;
-  if (returnType->isPointerTy() && (allocSourcePtr || mustBeNull)) {
-    processingValue(retValuePtr, returnType, allocSourcePtr, initNullPtr);
+  if (returnType->isPointerTy() && (allocSourcePtr || mustInitNull)) {
+    processingValue(retValuePtr, returnType, allocSourcePtr,
+                    mustInitNull || maybeInitNull);
   } else {
     buildCallKleeMakeSymbolic("klee_make_mock", retValuePtr, returnType,
                               func->getName().str());
-    if (returnType->isPointerTy() && !initNullPtr) {
+    if (returnType->isPointerTy() && !maybeInitNull) {
       llvm::Value *retValue =
           builder->CreateLoad(returnType, retValuePtr, retName);
       auto cmpResult =

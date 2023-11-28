@@ -86,14 +86,14 @@ TEST(AnnotationsTest, KnownAnnotations) {
   const json j = json::parse(R"(
 {
     "foo" : {
-        "annotation" : [["InitNull"], ["Deref", "InitNull"]],
+        "annotation" : [["MaybeInitNull"], ["Deref", "InitNull"]],
         "properties" : []
     }
 }
 )");
   const AnnotationsMap actual = parseAnnotationsJson(j);
   ASSERT_EQ(actual.at("foo").returnStatements[0]->getKind(),
-            Statement::Kind::InitNull);
+            Statement::Kind::MaybeInitNull);
   ASSERT_EQ(actual.at("foo").argsStatements[0][0]->getKind(),
             Statement::Kind::Deref);
   ASSERT_EQ(actual.at("foo").argsStatements[0][1]->getKind(),

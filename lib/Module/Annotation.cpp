@@ -91,21 +91,13 @@ Deref::Deref(const std::string &str) : Unknown(str) {}
 
 Kind Deref::getKind() const { return Kind::Deref; }
 
-const std::map<std::string, InitNull::Type> initNullTypeMap = {
-    {"maybe", InitNull::Type::MAYBE}, {"must", InitNull::Type::MUST}};
-
-InitNull::InitNull(const std::string &str) : Unknown(str) {
-  if (!rawValue.empty()) {
-    auto val = initNullTypeMap.find(toLower(rawValue));
-    if (val != initNullTypeMap.end()) {
-      value = val->second;
-    } else {
-      klee_error("Annotation: Incorrect value \"%s\"", rawValue.c_str());
-    }
-  }
-}
+InitNull::InitNull(const std::string &str) : Unknown(str) {}
 
 Kind InitNull::getKind() const { return Kind::InitNull; }
+
+MaybeInitNull::MaybeInitNull(const std::string &str) : Unknown(str) {}
+
+Kind MaybeInitNull::getKind() const { return Kind::MaybeInitNull; }
 
 Alloc::Alloc(const std::string &str) : Unknown(str) {
   if (!std::all_of(rawValue.begin(), rawValue.end(), isdigit)) {
@@ -132,6 +124,7 @@ Kind Free::getKind() const { return Kind::Free; }
 const std::map<std::string, Statement::Kind> StringToKindMap = {
     {"deref", Statement::Kind::Deref},
     {"initnull", Statement::Kind::InitNull},
+    {"maybeinitnull", Statement::Kind::MaybeInitNull},
     {"allocsource", Statement::Kind::AllocSource},
     {"freesource", Statement::Kind::Free},
     {"freesink", Statement::Kind::Free}};
@@ -153,6 +146,8 @@ Ptr stringToKindPtr(const std::string &str) {
     return std::make_shared<Deref>(str);
   case Statement::Kind::InitNull:
     return std::make_shared<InitNull>(str);
+  case Statement::Kind::MaybeInitNull:
+    return std::make_shared<MaybeInitNull>(str);
   case Statement::Kind::AllocSource:
     return std::make_shared<Alloc>(str);
   case Statement::Kind::Free:
@@ -230,6 +225,17 @@ AnnotationsMap parseAnnotationsJson(const json &annotationsJson) {
                    annotation.functionName.c_str());
       }
       annotation.returnStatements = tmp[0];
+      if (std::any_of(tmp.begin() + 1, tmp.end(),
+                      [](const std::vector<Statement::Ptr> &statements) {
+                        return std::any_of(
+                            statements.begin() + 1, statements.end(),
+                            [](const Statement::Ptr &statement) {
+                              return statement->getKind() ==
+                                     Statement::Kind::MaybeInitNull;
+                            });
+                      })) {
+        klee_error("Annotation: MaybeInitNull can annotate only return value");
+      }
       annotation.argsStatements =
           std::vector<std::vector<Statement::Ptr>>(tmp.begin() + 1, tmp.end());
     }
@@ -241,8 +247,7 @@ AnnotationsMap parseAnnotationsJson(const json &annotationsJson) {
   return annotations;
 }
 
-AnnotationsMap parseAnnotations(const std::string &path,
-                                const llvm::Module *m) {
+AnnotationsMap parseAnnotations(const std::string &path) {
   if (path.empty()) {
     return {};
   }

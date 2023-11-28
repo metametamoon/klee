@@ -25,6 +25,7 @@ enum class Kind {
 
   Deref,
   InitNull,
+  MaybeInitNull,
   // TODO: rename to alloc
   AllocSource,
   Free
@@ -64,14 +65,14 @@ struct Deref final : public Unknown {
 
 struct InitNull final : public Unknown {
 public:
-  enum Type {
-    MAYBE, // Return value which maybe Null
-    MUST   // Create two branch one with Null second nonNull valu
-  };
-
-  Type value = InitNull::Type::MAYBE;
-
   explicit InitNull(const std::string &str = "InitNull");
+
+  [[nodiscard]] Kind getKind() const override;
+};
+
+struct MaybeInitNull final : public Unknown {
+public:
+  explicit MaybeInitNull(const std::string &str = "MaybeInitNull");
 
   [[nodiscard]] Kind getKind() const override;
 };
@@ -127,7 +128,7 @@ struct Annotation {
 using AnnotationsMap = std::map<std::string, Annotation>;
 
 AnnotationsMap parseAnnotationsJson(const json &annotationsJson);
-AnnotationsMap parseAnnotations(const std::string &path, const llvm::Module *m);
+AnnotationsMap parseAnnotations(const std::string &path);
 } // namespace klee
 
 #endif // KLEE_ANNOTATION_H

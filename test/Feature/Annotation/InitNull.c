@@ -22,56 +22,56 @@
 // CHECK-EMPTY: ASSERTION FAIL: a != 0 && "A is Null"
 // CHECK-EMPTY: partially completed paths = 2
 
-// RUN: %clang -DMustInitNull %s -g -emit-llvm %O0opt -c -o %t6.bc
+// RUN: %clang -DMustInitNull5 %s -g -emit-llvm %O0opt -c -o %t6.bc
 // RUN: rm -rf %t6.klee-out-1
-// RUN: %klee --solver-backend=z3 --output-dir=%t6.klee-out-1 --annotations=%S/InitNull.json --mock-policy=all -emit-all-errors=true %t6.bc 2>&1 | FileCheck %s -check-prefix=CHECK-MUSTINITNULL
+// RUN: %klee --solver-backend=z3 --output-dir=%t6.klee-out-1 --annotations=%S/InitNull.json --mock-policy=all -emit-all-errors=true %t6.bc 2>&1 | FileCheck %s -check-prefix=CHECK-INITNULL5
 
 #include <assert.h>
 
 #ifdef InitNull1
-void maybeInitNull1(int *a);
+void mustInitNull1(int *a);
 #endif
-void maybeInitNull2(int **a);
-int *maybeInitNull3();
-int **maybeInitNull4();
+void mustInitNull2(int **a);
+int *maybeInitNull1();
+int **maybeInitNull2();
 
-int *mustInitNull();
+int *mustInitNull3();
 
 int main() {
   int c = 42;
   int *a = &c;
 #ifdef InitNull1
   // CHECK-INITNULL1: not valid annotation
-  maybeInitNull1(a);
+  mustInitNull1(a);
   // CHECK-INITNULL1-NOT: A is Null
   // CHECK-INITNULL1: partially completed paths = 0
   // CHECK-INITNULL1: generated tests = 1
 #endif
 
 #ifdef InitNull2
-  maybeInitNull2(&a);
+  mustInitNull2(&a);
   // CHECK-INITNULL2: ASSERTION FAIL: a != 0 && "A is Null"
   // CHECK-INITNULL2: partially completed paths = 1
   // CHECK-INITNULL2: generated tests = 2
 #endif
 
 #ifdef InitNull3
-  a = maybeInitNull3();
+  a = maybeInitNull1();
   // CHECK-INITNULL3: ASSERTION FAIL: a != 0 && "A is Null"
   // CHECK-INITNULL3: partially completed paths = 1
   // CHECK-INITNULL3: generated tests = 2
 #endif
 
 #ifdef InitNull4
-  a = *maybeInitNull4();
+  a = *maybeInitNull2();
   // CHECK-INITNULL4: ASSERTION FAIL: a != 0 && "A is Null"
   // CHECK-INITNULL4: partially completed paths = 3
 #endif
 
-#ifdef MustInitNull
-  a = mustInitNull();
-  // CHECK-MUSTINITNULL: partially completed paths = 0
-  // CHECK-MUSTINITNULL: generated tests = 2
+#ifdef MustInitNull5
+  a = mustInitNull3();
+  // CHECK-INITNULL5: partially completed paths = 0
+  // CHECK-INITNULL5: generated tests = 2
 #else
   assert(a != 0 && "A is Null");
 #endif

@@ -15,7 +15,7 @@
     "name": "ptrRet",
     "annotation": [
       [
-        "InitNull",
+        "MaybeInitNull",
         "AllocSource::1"
       ]
     ],
