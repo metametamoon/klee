@@ -136,13 +136,27 @@ Free::Free(const std::string &str) : Unknown(str) {
 
 Kind Free::getKind() const { return Kind::Free; }
 
+TaintOutput::TaintOutput(const std::string &str) : Unknown(str) {
+  if (!rawValue.empty()) {
+    klee_error("Annotation: Incorrect value format \"%s\", must be empty", rawValue.c_str());
+  }
+}
+
+Kind TaintOutput::getKind() const { return Kind::TaintOutput; }
+
+FormatString::FormatString(const std::string &str) : Unknown(str) {}
+
+Kind FormatString::getKind() const { return Kind::FormatString; }
+
 const std::map<std::string, Statement::Kind> StringToKindMap = {
     {"deref", Statement::Kind::Deref},
     {"initnull", Statement::Kind::InitNull},
     {"maybeinitnull", Statement::Kind::MaybeInitNull},
     {"allocsource", Statement::Kind::AllocSource},
     {"freesource", Statement::Kind::Free},
-    {"freesink", Statement::Kind::Free}};
+    {"freesink", Statement::Kind::Free},
+    {"taintoutput", Statement::Kind::TaintOutput},
+    {"formatstring", Statement::Kind::FormatString}};
 
 inline Statement::Kind stringToKind(const std::string &str) {
   auto it = StringToKindMap.find(toLower(str));
@@ -167,6 +181,10 @@ Ptr stringToKindPtr(const std::string &str) {
     return std::make_shared<Alloc>(str);
   case Statement::Kind::Free:
     return std::make_shared<Free>(str);
+  case Statement::Kind::TaintOutput:
+    return std::make_shared<TaintOutput>(str);
+  case Statement::Kind::FormatString:
+    return std::make_shared<FormatString>(str);
   }
 }
 
