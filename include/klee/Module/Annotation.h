@@ -34,7 +34,20 @@ enum class Kind {
   MaybeInitNull,
   // TODO: rename to alloc
   AllocSource,
-  Free
+  Free,
+
+  // TODO: perhaps separate TaintSources and TaintSinks
+  // taint sources
+  TaintInput,
+  TaintPropagation,
+  TaintOutput,
+//  UntrustedSource,
+  SensitiveDataSource,
+
+  // taint sinks
+  Execute,
+  FormatString,
+  SensitiveDataLeak
 };
 
 enum class Property {
@@ -113,6 +126,18 @@ public:
   Type value = Free::Type::FREE;
 
   explicit Free(const std::string &str = "FreeSource::1");
+
+  [[nodiscard]] Kind getKind() const override;
+};
+
+struct TaintOutput final : public Unknown {
+  explicit TaintOutput(const std::string &str = "TaintOutput");
+
+  [[nodiscard]] Kind getKind() const override;
+};
+
+struct FormatString final : public Unknown {
+  explicit FormatString(const std::string &str = "FormatString");
 
   [[nodiscard]] Kind getKind() const override;
 };
