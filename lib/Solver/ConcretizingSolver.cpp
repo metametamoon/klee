@@ -168,13 +168,10 @@ bool ConcretizingSolver::relaxSymcreteConstraints(const Query &query,
    * symcretes break (i.e. can not have current value) with given array. */
   std::unordered_map<const Array *, std::vector<ref<Symcrete>>>
       symcretesDependentFromArrays;
-  std::unordered_map<const Array *, std::unordered_set<Symcrete::SymcreteKind>>
-      kindsOfSymcretesForArrays;
 
   for (const ref<Symcrete> &symcrete : query.constraints.symcretes()) {
     for (const Array *array : symcrete->dependentArrays()) {
       symcretesDependentFromArrays[array].push_back(symcrete);
-      kindsOfSymcretesForArrays[array].insert(symcrete->getKind());
     }
   }
 
@@ -220,13 +217,8 @@ bool ConcretizingSolver::relaxSymcreteConstraints(const Query &query,
           continue;
         }
 
-        if (isa<SizeSymcrete>(symcrete)) {
-          currentlyBrokenSymcretes.insert(symcrete);
+        currentlyBrokenSymcretes.insert(symcrete);
 
-          for (Symcrete &dependentSymcrete : symcrete->dependentSymcretes()) {
-            currentlyBrokenSymcretes.insert(ref<Symcrete>(&dependentSymcrete));
-          }
-        }
       }
 
       for (const ref<Symcrete> &symcrete : currentlyBrokenSymcretes) {
