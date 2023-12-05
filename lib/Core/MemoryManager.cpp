@@ -118,8 +118,12 @@ MemoryManager::MemoryManager(ArrayCache *_arrayCache)
 MemoryManager::~MemoryManager() {
   while (!objects.empty()) {
     MemoryObject *mo = *objects.begin();
-    if (!mo->isFixed && !DeterministicAllocation)
-      free((void *)mo->address);
+    if (!mo->isFixed && !DeterministicAllocation) {
+      if (ref<ConstantExpr> arrayConstantAddress =
+              dyn_cast<ConstantExpr>(mo->getBaseExpr())) {
+        free((void *)arrayConstantAddress->getZExtValue());
+      }
+    }
     objects.erase(mo);
     delete mo;
   }
@@ -150,41 +154,46 @@ MemoryObject *MemoryManager::allocate(uint64_t size, bool isLocal,
   }
 
   uint64_t address = 0;
-  if (DeterministicAllocation) {
-    address = llvm::alignTo((uint64_t)nextFreeSlot + alignment - 1, alignment);
+  if (!addressExpr) {
+    if (DeterministicAllocation) {
+      address =
+          llvm::alignTo((uint64_t)nextFreeSlot + alignment - 1, alignment);
 
-    // Handle the case of 0-sized allocations as 1-byte allocations.
-    // This way, we make sure we have this allocation between its own red zones
-    size_t alloc_size = std::max(size, (uint64_t)1);
-    if ((char *)address + alloc_size < deterministicSpace + spaceSize) {
-      nextFreeSlot = (char *)address + alloc_size + RedzoneSize;
-    } else {
-      klee_warning_once(0,
-                        "Couldn't allocate %" PRIu64
-                        " bytes. Not enough deterministic space left.",
-                        size);
-      address = 0;
-    }
-  } else {
-    // Use malloc for the standard case
-    if (alignment <= 8)
-      address = (uint64_t)malloc(size);
-    else {
-      int res = posix_memalign((void **)&address, alignment, size);
-      if (res < 0) {
-        klee_warning("Allocating aligned memory failed.");
+      // Handle the case of 0-sized allocations as 1-byte allocations.
+      // This way, we make sure we have this allocation between its own red
+      // zones
+      size_t alloc_size = std::max(size, (uint64_t)1);
+      if ((char *)address + alloc_size < deterministicSpace + spaceSize) {
+        nextFreeSlot = (char *)address + alloc_size + RedzoneSize;
+      } else {
+        klee_warning_once(0,
+                          "Couldn't allocate %" PRIu64
+                          " bytes. Not enough deterministic space left.",
+                          size);
         address = 0;
       }
+    } else {
+      // Use malloc for the standard case
+      if (alignment <= 8)
+        address = (uint64_t)malloc(size);
+      else {
+        int res = posix_memalign((void **)&address, alignment, size);
+        if (res < 0) {
+          klee_warning("Allocating aligned memory failed.");
+          address = 0;
+        }
+      }
     }
+
+    if (!address)
+      return 0;
+    addressExpr = Expr::createPointer(address);
   }
 
-  if (!address)
-    return 0;
-
   ++stats::allocations;
-  MemoryObject *res = new MemoryObject(
-      address, size, alignment, isLocal, isGlobal, false, isLazyInitialiazed,
-      allocSite, this, addressExpr, sizeExpr, timestamp);
+  MemoryObject *res = new MemoryObject(addressExpr, size, alignment, isLocal,
+                                       isGlobal, false, isLazyInitialiazed,
+                                       allocSite, this, sizeExpr, timestamp);
   if (id) {
     res->id = id;
   }
@@ -206,7 +215,8 @@ MemoryObject *MemoryManager::allocateFixed(uint64_t address, uint64_t size,
 #endif
 
   ++stats::allocations;
-  MemoryObject *res = new MemoryObject(address, size, 8, false, true, true,
+  ref<Expr> addressExpr = Expr::createPointer(address);
+  MemoryObject *res = new MemoryObject(addressExpr, size, 8, false, true, true,
                                        false, allocSite, this);
   objects.insert(res);
   return res;
@@ -220,8 +230,12 @@ void MemoryManager::markFreed(MemoryObject *mo) {
     if (allocatedSizes[mo->id].empty()) {
       am->bindingsAdressesToObjects.erase(mo->getBaseExpr());
     }
-    if (!mo->isFixed && !DeterministicAllocation)
-      free((void *)mo->address);
+    if (!mo->isFixed && !DeterministicAllocation) {
+      if (ref<ConstantExpr> arrayConstantAddress =
+              dyn_cast<ConstantExpr>(mo->getBaseExpr())) {
+        free((void *)arrayConstantAddress->getZExtValue());
+      }
+    }
     objects.erase(mo);
   }
 }

@@ -856,8 +856,8 @@ void Executor::allocateGlobalObjects(ExecutionState &state) {
       // its address can be used for function pointers.
       // TODO: Check whether the object is accessed?
       auto mo = allocate(state, Expr::createPointer(8), false, true, &f, 8);
-      addr = Expr::createPointer(mo->address);
-      legalFunctions.emplace(mo->address, &f);
+      addr = cast<ConstantExpr>(mo->getBaseExpr());
+      legalFunctions.emplace(addr->getZExtValue(), &f);
     }
 
     globalAddresses.emplace(&f, addr);
@@ -878,7 +878,8 @@ void Executor::allocateGlobalObjects(ExecutionState &state) {
     bindObjectInState(state, errnoObj,
                       typeSystemManager->getWrappedType(pointerErrnoAddr),
                       false);
-    errno_addr = reinterpret_cast<int *>(errnoObj->address);
+    errno_addr = reinterpret_cast<int *>(
+        cast<ConstantExpr>(errnoObj->getBaseExpr())->getZExtValue());
   } else {
     errno_addr = getErrnoLocation(state);
     errnoObj =
@@ -980,7 +981,7 @@ void Executor::allocateGlobalObjects(ExecutionState &state) {
       klee_error("out of memory");
 
     globalObjects.emplace(&v, mo);
-    globalAddresses.emplace(&v, mo->getBaseConstantExpr());
+    globalAddresses.emplace(&v, mo->getBaseExpr());
   }
 }
 
@@ -2484,7 +2485,8 @@ void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f,
       }
 
       if (mo) {
-        if ((WordSize == Expr::Int64) && (mo->address & 15) &&
+        if ((WordSize == Expr::Int64) &&
+            (cast<ConstantExpr>(mo->getBaseExpr())->getZExtValue() & 15) &&
             requires16ByteAlignment) {
           // Both 64bit Linux/Glibc and 64bit MacOSX should align to 16 bytes.
           klee_warning_once(
@@ -4664,8 +4666,8 @@ ref<Expr> Executor::fillSizeAddressSymcretes(ExecutionState &state,
       addressManager->addAllocation(newAddress, mo->id);
     }
     assert(addressSymcrete->dependentArrays().size() == 1);
-    assignment.bindings.replace({addressSymcrete->dependentArrays().back(),
-                                 sparseBytesFromValue(mo->address)});
+    assignment.bindings.replace(
+        {addressSymcrete->dependentArrays().back(), sparseBytesFromValue(1)});
 
     state.constraints.addSymcrete(sizeSymcrete, assignment);
     state.constraints.addSymcrete(addressSymcrete, assignment);
@@ -5379,7 +5381,9 @@ std::string Executor::getAddressInfo(ExecutionState &state, ref<Expr> address,
     const MemoryObject *mo = lower->first;
     std::string alloc_info;
     mo->getAllocInfo(alloc_info);
-    info << "object at " << mo->address << " of size " << mo->size << "\n"
+    info << "object at ";
+    mo->getBaseExpr()->print(info);
+    info << " of size " << mo->size << "\n"
          << "\t\t" << alloc_info << "\n";
   }
   if (lower != state.addressSpace.objects.begin()) {
@@ -5391,7 +5395,9 @@ std::string Executor::getAddressInfo(ExecutionState &state, ref<Expr> address,
       const MemoryObject *mo = lower->first;
       std::string alloc_info;
       mo->getAllocInfo(alloc_info);
-      info << "object at " << mo->address << " of size " << mo->size << "\n"
+      info << "object at ";
+      mo->getBaseExpr()->print(info);
+      info << " of size " << mo->size << "\n"
            << "\t\t" << alloc_info << "\n";
     }
   }
@@ -6412,8 +6418,7 @@ MemoryObject *Executor::allocate(ExecutionState &state, ref<Expr> size,
     state.addPointerResolution(addressExpr, mo);
   }
 
-  assignment.bindings.replace(
-      {addressArray, sparseBytesFromValue(mo->address)});
+  assignment.bindings.replace({addressArray, sparseBytesFromValue(1)});
 
   state.constraints.addSymcrete(sizeSymcrete, assignment);
   state.constraints.addSymcrete(addressSymcrete, assignment);
@@ -7551,9 +7556,11 @@ ExecutionState *Executor::formState(Function *f, int argc, char **argv,
         klee_error("Could not allocate memory for function arguments");
 
       arguments.push_back(argvMO->getBaseExpr());
+      size_t argvMOAddress =
+          cast<ConstantExpr>(argvMO->getBaseExpr())->getZExtValue();
 
       if (++ai != ae) {
-        uint64_t envp_start = argvMO->address + (argc + 1) * NumPtrBytes;
+        uint64_t envp_start = argvMOAddress + (argc + 1) * NumPtrBytes;
         arguments.push_back(Expr::createPointer(envp_start));
 
         if (++ai != ae)
@@ -7949,7 +7956,9 @@ void Executor::logState(const ExecutionState &state, int id,
   *f << "State number " << state.id << ". Test number: " << id << "\n\n";
   for (auto &object : state.addressSpace.objects) {
     *f << "ID memory object: " << object.first->id << "\n";
-    *f << "Address memory object: " << object.first->address << "\n";
+    *f << "Address memory object: ";
+    object.first->getBaseExpr()->print(*f);
+    *f << "\n";
     *f << "Memory object size: " << object.first->size << "\n";
   }
   *f << state.symbolics.size() << " symbolics total. "
@@ -7978,10 +7987,12 @@ bool resolveOnSymbolics(const std::vector<klee::Symbolic> &symbolics,
     const auto &mo = res.memoryObject;
     // Check if the provided address is between start and end of the object
     // [mo->address, mo->address + mo->size) or the object is a 0-sized object.
-    ref<klee::ConstantExpr> size =
+    ref<klee::ConstantExpr> moSize =
         cast<klee::ConstantExpr>(assn.evaluate(mo->getSizeExpr()));
-    if ((size->getZExtValue() == 0 && address == mo->address) ||
-        (address - mo->address < size->getZExtValue())) {
+    ref<klee::ConstantExpr> moAddress =
+        cast<klee::ConstantExpr>(assn.evaluate(mo->getBaseExpr()));
+    if ((moSize->getZExtValue() == 0 && address == moAddress->getZExtValue()) ||
+        (address - moAddress->getZExtValue() < moSize->getZExtValue())) {
       result = mo->id;
       return true;
     }
@@ -8234,6 +8245,11 @@ bool Executor::getSymbolicSolution(const ExecutionState &state, KTest &res) {
   res.objects = new KTestObject[res.numObjects];
   res.uninitCoeff = uninitObjects.size() * UninitMemoryTestMultiplier;
 
+  Assignment model = Assignment(objects, values);
+  for (auto binding : state.constraints.cs().concretization().bindings) {
+    model.bindings.insert(binding);
+  }
+
   {
     size_t i = 0;
     // Remove mo->size, evaluate size expr in array
@@ -8241,7 +8257,8 @@ bool Executor::getSymbolicSolution(const ExecutionState &state, KTest &res) {
       auto mo = symbolic.memoryObject;
       KTestObject *o = &res.objects[i];
       o->name = const_cast<char *>(mo->name.c_str());
-      o->address = mo->address;
+      o->address =
+          cast<ConstantExpr>(model.evaluate(mo->getBaseExpr()))->getZExtValue();
       o->numBytes = mo->size;
       o->bytes = new unsigned char[o->numBytes];
       for (size_t j = 0; j < mo->size; j++) {
@@ -8251,11 +8268,6 @@ bool Executor::getSymbolicSolution(const ExecutionState &state, KTest &res) {
       o->pointers = nullptr;
       i++;
     }
-  }
-
-  Assignment model = Assignment(objects, values);
-  for (auto binding : state.constraints.cs().concretization().bindings) {
-    model.bindings.insert(binding);
   }
 
   setInitializationGraph(state, symbolics, model, res);

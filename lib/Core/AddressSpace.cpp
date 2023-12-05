@@ -105,16 +105,20 @@ bool AddressSpace::resolveOne(const ref<ConstantExpr> &addr, KType *objectType,
 
   if (const auto res = objects.lookup_previous(&hack)) {
     const auto &mo = res->first;
-    if (ref<ConstantExpr> arrayConstantSize =
-            dyn_cast<ConstantExpr>(mo->getSizeExpr())) {
-      // Check if the provided address is between start and end of the object
-      // [mo->address, mo->address + mo->size) or the object is a 0-sized
-      // object.
-      uint64_t size = arrayConstantSize->getZExtValue();
-      if ((size == 0 && address == mo->address) ||
-          (address - mo->address < size)) {
-        result = mo->id;
-        return true;
+    if (ref<ConstantExpr> arrayConstantAddress =
+            dyn_cast<ConstantExpr>(mo->getBaseExpr())) {
+      if (ref<ConstantExpr> arrayConstantSize =
+              dyn_cast<ConstantExpr>(mo->getSizeExpr())) {
+        // Check if the provided address is between start and end of the object
+        // [mo->address, mo->address + mo->size) or the object is a 0-sized
+        // object.
+        uint64_t moSize = arrayConstantSize->getZExtValue();
+        uint64_t moAddress = arrayConstantAddress->getZExtValue();
+        if ((moSize == 0 && address == moAddress) ||
+            (address - moAddress < moSize)) {
+          result = mo->id;
+          return true;
+        }
       }
     }
   }
@@ -232,13 +236,17 @@ bool AddressSpace::resolveOne(ExecutionState &state, TimingSolver *solver,
 
   if (res && predicate(res->first, res->second.get())) {
     const MemoryObject *mo = res->first;
-    if (ref<ConstantExpr> arrayConstantSize =
-            dyn_cast<ConstantExpr>(mo->getSizeExpr())) {
-      if (example - mo->address < arrayConstantSize->getZExtValue() &&
-          res->second->isAccessableFrom(objectType)) {
-        result = mo->id;
-        success = true;
-        return true;
+    if (ref<ConstantExpr> arrayConstantAddress =
+            dyn_cast<ConstantExpr>(mo->getBaseExpr())) {
+      if (ref<ConstantExpr> arrayConstantSize =
+              dyn_cast<ConstantExpr>(mo->getSizeExpr())) {
+        if (example - arrayConstantAddress->getZExtValue() <
+                arrayConstantSize->getZExtValue() &&
+            res->second->isAccessableFrom(objectType)) {
+          result = mo->id;
+          success = true;
+          return true;
+        }
       }
     }
   }
@@ -387,14 +395,18 @@ void AddressSpace::copyOutConcretes(const Assignment &assignment) {
 void AddressSpace::copyOutConcrete(const MemoryObject *mo,
                                    const ObjectState *os,
                                    const Assignment &assignment) const {
-  auto address = reinterpret_cast<std::uint8_t *>(mo->address);
-  AssignmentEvaluator ae(assignment, false);
-  std::vector<uint8_t> concreteStore(mo->size);
-  for (size_t i = 0; i < mo->size; i++) {
-    auto byte = ae.visit(os->read8(i));
-    concreteStore[i] = cast<ConstantExpr>(byte)->getZExtValue(8);
+  if (ref<ConstantExpr> addressExpr =
+          dyn_cast<ConstantExpr>(mo->getBaseExpr())) {
+    auto address =
+        reinterpret_cast<std::uint8_t *>(addressExpr->getZExtValue());
+    AssignmentEvaluator ae(assignment, false);
+    std::vector<uint8_t> concreteStore(mo->size);
+    for (size_t i = 0; i < mo->size; i++) {
+      auto byte = ae.visit(os->read8(i));
+      concreteStore[i] = cast<ConstantExpr>(byte)->getZExtValue(8);
+    }
+    std::memcpy(address, concreteStore.data(), mo->size);
   }
-  std::memcpy(address, concreteStore.data(), mo->size);
 }
 
 bool AddressSpace::copyInConcretes(const Assignment &assignment) {
@@ -404,8 +416,12 @@ bool AddressSpace::copyInConcretes(const Assignment &assignment) {
     if (!mo->isUserSpecified) {
       const auto &os = obj.second;
 
-      if (!copyInConcrete(mo, os.get(), mo->address, assignment))
-        return false;
+      if (ref<ConstantExpr> arrayConstantAddress =
+              dyn_cast<ConstantExpr>(mo->getBaseExpr())) {
+        if (!copyInConcrete(mo, os.get(), arrayConstantAddress->getZExtValue(),
+                            assignment))
+          return false;
+      }
     }
   }
 
@@ -439,5 +455,14 @@ bool AddressSpace::copyInConcrete(const MemoryObject *mo, const ObjectState *os,
 
 bool MemoryObjectLT::operator()(const MemoryObject *a,
                                 const MemoryObject *b) const {
-  return a->address < b->address;
+  if (isa<ConstantExpr>(a->getBaseExpr()) &&
+      isa<ConstantExpr>(b->getBaseExpr())) {
+    return cast<ConstantExpr>(a->getBaseExpr())->getZExtValue() <
+           cast<ConstantExpr>(b->getBaseExpr())->getZExtValue();
+  } else if (isa<ConstantExpr>(a->getBaseExpr())) {
+    return true;
+  } else if (isa<ConstantExpr>(b->getBaseExpr())) {
+    return false;
+  }
+  return a->getBaseExpr() < b->getBaseExpr();
 }

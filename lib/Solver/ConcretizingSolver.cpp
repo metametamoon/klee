@@ -218,7 +218,6 @@ bool ConcretizingSolver::relaxSymcreteConstraints(const Query &query,
         }
 
         currentlyBrokenSymcretes.insert(symcrete);
-
       }
 
       for (const ref<Symcrete> &symcrete : currentlyBrokenSymcretes) {

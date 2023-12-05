@@ -46,7 +46,8 @@ void *AddressManager::allocate(ref<Expr> address, uint64_t size) {
   }
   if (newMO) {
     assert(size <= newMO->size);
-    return reinterpret_cast<void *>(newMO->address);
+    // return reinterpret_cast<void *>(newMO->address);
+    return reinterpret_cast<void *>(0);
   } else {
     return nullptr;
   }

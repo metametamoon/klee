@@ -67,7 +67,6 @@ public:
   IDType id;
   mutable unsigned timestamp;
 
-  uint64_t address;
   ref<Expr> addressExpr;
 
   /// size in bytes
@@ -99,20 +98,19 @@ public:
 public:
   // XXX this is just a temp hack, should be removed
   explicit MemoryObject(uint64_t _address)
-      : id(0), timestamp(0), address(_address), addressExpr(nullptr), size(0),
-        sizeExpr(nullptr), alignment(0), isFixed(true),
+      : id(0), timestamp(0), addressExpr(Expr::createPointer(_address)),
+        size(0), sizeExpr(nullptr), alignment(0), isFixed(true),
         isLazyInitialized(false), parent(NULL), allocSite(0) {}
 
   MemoryObject(
-      uint64_t _address, unsigned _size, uint64_t alignment, bool _isLocal,
+      ref<Expr> _address, unsigned _size, uint64_t alignment, bool _isLocal,
       bool _isGlobal, bool _isFixed, bool _isLazyInitialized,
       const llvm::Value *_allocSite, MemoryManager *_parent,
-      ref<Expr> _addressExpr = nullptr, ref<Expr> _sizeExpr = nullptr,
+      ref<Expr> _sizeExpr = nullptr,
       unsigned _timestamp = 0 /* unused if _isLazyInitialized is false*/)
-      : id(counter++), timestamp(_timestamp), address(_address),
-        addressExpr(_addressExpr), size(_size), sizeExpr(_sizeExpr),
-        alignment(alignment), name("unnamed"), isLocal(_isLocal),
-        isGlobal(_isGlobal), isFixed(_isFixed),
+      : id(counter++), timestamp(_timestamp), addressExpr(_address),
+        size(_size), sizeExpr(_sizeExpr), alignment(alignment), name("unnamed"),
+        isLocal(_isLocal), isGlobal(_isGlobal), isFixed(_isFixed),
         isLazyInitialized(_isLazyInitialized), isUserSpecified(false),
         parent(_parent), allocSite(_allocSite) {
     if (isLazyInitialized) {
@@ -132,15 +130,7 @@ public:
   void updateTimestamp() const { this->timestamp = time++; }
 
   bool hasSymbolicSize() const { return !isa<ConstantExpr>(getSizeExpr()); }
-  ref<ConstantExpr> getBaseConstantExpr() const {
-    return ConstantExpr::create(address, Context::get().getPointerWidth());
-  }
-  ref<Expr> getBaseExpr() const {
-    if (addressExpr) {
-      return addressExpr;
-    }
-    return getBaseConstantExpr();
-  }
+  ref<Expr> getBaseExpr() const { return addressExpr; }
   ref<Expr> getSizeExpr() const {
     if (sizeExpr) {
       return sizeExpr;
@@ -182,8 +172,8 @@ public:
     // Short-cut with id
     if (id == b.id)
       return 0;
-    if (address != b.address)
-      return (address < b.address ? -1 : 1);
+    if (addressExpr != b.addressExpr)
+      return (addressExpr < b.addressExpr ? -1 : 1);
 
     if (size != b.size)
       return (size < b.size ? -1 : 1);
