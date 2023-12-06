@@ -311,7 +311,10 @@ std::string SpecialFunctionHandler::readStringAtAddress(ExecutionState &state,
 
   std::ostringstream buf;
   char c = 0;
-  for (size_t i = offset; i < mo->size; ++i) {
+  ref<ConstantExpr> sizeExpr = dyn_cast<ConstantExpr>(mo->getSizeExpr());
+  assert(sizeExpr);
+  size_t moSize = sizeExpr->getZExtValue();
+  for (size_t i = offset; i < moSize; ++i) {
     ref<Expr> cur = os->read8(i);
     cur = executor.toUnique(state, cur);
     assert(isa<ConstantExpr>(cur) &&
@@ -688,11 +691,7 @@ void SpecialFunctionHandler::handleGetObjSize(
        it != ie; ++it) {
     const MemoryObject *mo =
         it->second->addressSpace.findObject(it->first).first;
-    executor.bindLocal(
-        target, *it->second,
-        ConstantExpr::create(mo->size,
-                             executor.kmodule->targetData->getTypeSizeInBits(
-                                 target->inst->getType())));
+    executor.bindLocal(target, *it->second, mo->getSizeExpr());
   }
 }
 

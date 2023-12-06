@@ -26,8 +26,8 @@ public:
   AddressManager(MemoryManager *memory, uint64_t maxSize)
       : memory(memory), maxSize(maxSize) {}
   void addAllocation(ref<Expr> address, IDType id);
-  void *allocate(ref<Expr> address, uint64_t size) override;
-  MemoryObject *allocateMemoryObject(ref<Expr> address, uint64_t size);
+  void *allocate(ref<Expr> address, ref<Expr> size) override;
+  MemoryObject *allocateMemoryObject(ref<Expr> address, ref<Expr> size);
   bool isAllocated(ref<Expr>);
 };
 

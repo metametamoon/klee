@@ -203,9 +203,9 @@ public:
 
   ref<Expr> fillSizeAddressSymcretes(ExecutionState &state,
                                      ref<Expr> oldAddress, ref<Expr> newAddress,
-                                     ref<Expr> size) {
+                                     ref<Expr> oldSize, ref<Expr> size) {
     return executor->fillSizeAddressSymcretes(state, oldAddress, newAddress,
-                                              size);
+                                              oldSize, size);
   }
 
   std::pair<ref<Expr>, ref<Expr>>

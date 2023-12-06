@@ -35,7 +35,8 @@ class MemoryManager {
 private:
   typedef std::set<MemoryObject *> objects_ty;
   objects_ty objects;
-  std::unordered_map<IDType, std::map<uint64_t, MemoryObject *>> allocatedSizes;
+  std::unordered_map<IDType, std::map<ref<Expr>, MemoryObject *>>
+      allocatedSizes;
 
   ArrayCache *const arrayCache;
 
@@ -52,17 +53,16 @@ public:
    * Returns memory object which contains a handle to real virtual process
    * memory.
    */
-  MemoryObject *allocate(uint64_t size, bool isLocal, bool isGlobal,
+  MemoryObject *allocate(ref<Expr> size, bool isLocal, bool isGlobal,
                          bool isLazyInitialiazed, const llvm::Value *allocSite,
                          size_t alignment, ref<Expr> addressExpr = ref<Expr>(),
-                         ref<Expr> sizeExpr = ref<Expr>(),
                          unsigned timestamp = 0, IDType id = 0);
   MemoryObject *allocateFixed(uint64_t address, uint64_t size,
                               const llvm::Value *allocSite);
   void deallocate(const MemoryObject *mo);
   void markFreed(MemoryObject *mo);
   ArrayCache *getArrayCache() const { return arrayCache; }
-  const std::map<uint64_t, MemoryObject *> &
+  const std::map<ref<Expr>, MemoryObject *> &
   getAllocatedObjects(IDType idObject);
   /*
    * Returns the size used by deterministic allocation in bytes

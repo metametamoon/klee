@@ -751,7 +751,7 @@ private:
       ref<Expr> size, Expr::Width width);
   ref<Expr> fillSizeAddressSymcretes(ExecutionState &state,
                                      ref<Expr> oldAddress, ref<Expr> newAddress,
-                                     ref<Expr> size);
+                                     ref<Expr> oldSize, ref<Expr> size);
 
   ComposeResult compose(const ExecutionState &state, const PathConstraints &pob,
                         ref<Expr> nullPointerExpr,

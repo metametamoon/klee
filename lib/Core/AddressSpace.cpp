@@ -386,8 +386,12 @@ void AddressSpace::copyOutConcretes(const Assignment &assignment) {
   for (const auto &object : objects) {
     auto &mo = object.first;
     auto &os = object.second;
-    if (!mo->isUserSpecified && !os->readOnly && mo->size != 0) {
-      copyOutConcrete(mo, os.get(), assignment);
+    if (ref<ConstantExpr> sizeExpr =
+            dyn_cast<ConstantExpr>(mo->getSizeExpr())) {
+      if (!mo->isUserSpecified && !os->readOnly &&
+          sizeExpr->getZExtValue() != 0) {
+        copyOutConcrete(mo, os.get(), assignment);
+      }
     }
   }
 }
@@ -400,12 +404,16 @@ void AddressSpace::copyOutConcrete(const MemoryObject *mo,
     auto address =
         reinterpret_cast<std::uint8_t *>(addressExpr->getZExtValue());
     AssignmentEvaluator ae(assignment, false);
-    std::vector<uint8_t> concreteStore(mo->size);
-    for (size_t i = 0; i < mo->size; i++) {
-      auto byte = ae.visit(os->read8(i));
-      concreteStore[i] = cast<ConstantExpr>(byte)->getZExtValue(8);
+    if (ref<ConstantExpr> sizeExpr =
+            dyn_cast<ConstantExpr>(mo->getSizeExpr())) {
+      size_t moSize = sizeExpr->getZExtValue();
+      std::vector<uint8_t> concreteStore(moSize);
+      for (size_t i = 0; i < moSize; i++) {
+        auto byte = ae.visit(os->read8(i));
+        concreteStore[i] = cast<ConstantExpr>(byte)->getZExtValue(8);
+      }
+      std::memcpy(address, concreteStore.data(), moSize);
     }
-    std::memcpy(address, concreteStore.data(), mo->size);
   }
 }
 
@@ -433,17 +441,19 @@ bool AddressSpace::copyInConcrete(const MemoryObject *mo, const ObjectState *os,
                                   const Assignment &assignment) {
   auto address = reinterpret_cast<std::uint8_t *>(src_address);
   AssignmentEvaluator ae(assignment, false);
-  std::vector<uint8_t> concreteStore(mo->size);
-  for (size_t i = 0; i < mo->size; i++) {
+  size_t moSize = cast<ConstantExpr>(assignment.evaluate(mo->getSizeExpr()))
+                      ->getZExtValue();
+  std::vector<uint8_t> concreteStore(moSize);
+  for (size_t i = 0; i < moSize; i++) {
     auto byte = ae.visit(os->read8(i));
     concreteStore[i] = cast<ConstantExpr>(byte)->getZExtValue(8);
   }
-  if (memcmp(address, concreteStore.data(), mo->size) != 0) {
+  if (memcmp(address, concreteStore.data(), moSize) != 0) {
     if (os->readOnly) {
       return false;
     } else {
       ObjectState *wos = getWriteable(mo, os);
-      for (size_t i = 0; i < mo->size; i++) {
+      for (size_t i = 0; i < moSize; i++) {
         wos->write(i, ConstantExpr::create(address[i], Expr::Int8));
       }
     }

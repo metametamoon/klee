@@ -331,8 +331,8 @@ ref<Expr> ComposeVisitor::processRead(const Array *root,
       assert(!state.constraints.isSymcretized(address));
       auto oldAddress =
           Expr::createTempRead(root, Context::get().getPointerWidth());
-      address =
-          helper.fillSizeAddressSymcretes(state, oldAddress, address, size);
+      address = helper.fillSizeAddressSymcretes(state, oldAddress, address,
+                                                source->size, size);
       composedArray = address;
       break;
     }

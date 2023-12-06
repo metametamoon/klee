@@ -10,51 +10,30 @@ void AddressManager::addAllocation(ref<Expr> address, IDType id) {
   bindingsAdressesToObjects[address] = id;
 }
 
-void *AddressManager::allocate(ref<Expr> address, uint64_t size) {
+void *AddressManager::allocate(ref<Expr> address, ref<Expr> size) {
   IDType id = bindingsAdressesToObjects.at(address);
 
   auto &objects = memory->allocatedSizes.at(id);
   auto sizeLocation = objects.lower_bound(size);
   MemoryObject *newMO;
-  if (size > maxSize) {
-    if (sizeLocation != objects.end()) {
-      newMO = sizeLocation->second;
-    } else {
-      newMO = nullptr;
-      objects[size] = newMO;
-    }
-  } else {
-    if (sizeLocation == objects.end() || !sizeLocation->second) {
-      uint64_t newSize = std::max((uint64_t)1, size);
-      int clz = __builtin_clzll(std::max((uint64_t)1, newSize));
-      int popcount = __builtin_popcountll(std::max((uint64_t)1, newSize));
-      if (popcount > 1) {
-        newSize = (uint64_t)1 << (sizeof(newSize) * CHAR_BIT - clz);
-      }
-      if (newSize > maxSize) {
-        newSize = std::max((uint64_t)1, size);
-      }
-      assert(!objects.empty());
-      MemoryObject *mo = objects.begin()->second;
-      newMO = memory->allocate(newSize, mo->isLocal, mo->isGlobal,
-                               mo->isLazyInitialized, mo->allocSite,
-                               mo->alignment, mo->addressExpr, mo->sizeExpr,
-                               mo->timestamp, mo->id);
-    } else {
-      newMO = sizeLocation->second;
-    }
-  }
+  assert(sizeLocation != objects.end());
+  newMO = sizeLocation->second;
   if (newMO) {
-    assert(size <= newMO->size);
+    // assert(size <= newMO->size);
     // return reinterpret_cast<void *>(newMO->address);
-    return reinterpret_cast<void *>(0);
+    if (ref<ConstantExpr> addressExpr =
+            dyn_cast<ConstantExpr>(newMO->getBaseExpr())) {
+      return reinterpret_cast<void *>(addressExpr->getZExtValue());
+    } else {
+      return reinterpret_cast<void *>(0);
+    }
   } else {
     return nullptr;
   }
 }
 
 MemoryObject *AddressManager::allocateMemoryObject(ref<Expr> address,
-                                                   uint64_t size) {
+                                                   ref<Expr> size) {
   IDType id = bindingsAdressesToObjects.at(address);
   const auto &objects = memory->getAllocatedObjects(id);
   auto resultIterator = objects.lower_bound(size);

@@ -362,7 +362,7 @@ bool ConcretizingSolver::relaxSymcreteConstraints(const Query &query,
     uint64_t newSize = cast<ConstantExpr>(concretized)->getZExtValue();
 
     void *address = addressGenerator->allocate(
-        sizeSymcrete->addressSymcrete.symcretized, newSize);
+        sizeSymcrete->addressSymcrete.symcretized, symcrete->symcretized);
     unsigned char *charAddressIterator =
         reinterpret_cast<unsigned char *>(&address);
     SparseStorage<unsigned char> storage(0);

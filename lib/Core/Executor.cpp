@@ -974,7 +974,7 @@ void Executor::allocateGlobalObjects(ExecutionState &state) {
     }
 
     MemoryObject *mo =
-        memory->allocate(size, /*isLocal=*/false,
+        memory->allocate(Expr::createPointer(size), /*isLocal=*/false,
                          /*isGlobal=*/true, false, /*allocSite=*/&v,
                          /*alignment=*/globalObjectAlignment);
     if (!mo)
@@ -1034,7 +1034,10 @@ void Executor::initializeGlobalObjects(ExecutionState &state) {
         state, mo, typeSystemManager->getWrappedType(v.getType()), false,
         nullptr);
 
-    if (v.isDeclaration() && mo->size) {
+    ref<ConstantExpr> sizeExpr = dyn_cast<ConstantExpr>(mo->getSizeExpr());
+    assert(sizeExpr);
+    size_t moSize = sizeExpr->getZExtValue();
+    if (v.isDeclaration() && moSize) {
       // Program already running -> object already initialized.
       // Read concrete value and write it to our copy.
       void *addr;
@@ -1054,7 +1057,10 @@ void Executor::initializeGlobalObjects(ExecutionState &state) {
         klee_error("Unable to load symbol(%.*s) while initializing globals",
                    static_cast<int>(v.getName().size()), v.getName().data());
       } else {
-        for (unsigned offset = 0; offset < mo->size; offset++) {
+        ref<ConstantExpr> sizeExpr = dyn_cast<ConstantExpr>(mo->getSizeExpr());
+        assert(sizeExpr);
+        size_t moSize = sizeExpr->getZExtValue();
+        for (unsigned offset = 0; offset < moSize; offset++) {
           os->write8(offset, static_cast<unsigned char *>(addr)[offset]);
         }
       }
@@ -2476,9 +2482,9 @@ void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f,
       }
 
       StackFrame &sf = state.stack.valueStack().back();
-      MemoryObject *mo = sf.varargs =
-          memory->allocate(size, true, false, false, state.prevPC->inst,
-                           (requires16ByteAlignment ? 16 : 8));
+      MemoryObject *mo = sf.varargs = memory->allocate(
+          Expr::createPointer(size), true, false, false, state.prevPC->inst,
+          (requires16ByteAlignment ? 16 : 8));
       if (!mo && size) {
         terminateStateOnExecError(state, "out of memory (varargs)");
         return;
@@ -2512,7 +2518,11 @@ void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f,
             const ObjectState *osarg =
                 state.addressSpace.findObject(idObject).second;
             assert(osarg);
-            for (unsigned i = 0; i < osarg->getObject()->size; i++)
+            ref<ConstantExpr> sizeExpr =
+                dyn_cast<ConstantExpr>(osarg->getObject()->getSizeExpr());
+            assert(sizeExpr);
+            size_t moSize = sizeExpr->getZExtValue();
+            for (unsigned i = 0; i < moSize; i++)
               os->write(offsets[k] + i, osarg->read8(i));
           }
           if (ati != f->arg_end()) {
@@ -4430,7 +4440,7 @@ void Executor::doDumpObjects() {
 ref<Expr> Executor::fillValue(ExecutionState &state,
                               ref<ValueSource> valueSource, ref<Expr> size) {
   assert(isa<ConstantExpr>(size));
-  auto concreteSize = dyn_cast<ConstantExpr>(size)->getZExtValue();
+  auto concreteSize = cast<ConstantExpr>(size)->getZExtValue();
   int diffLevel = -state.stack.stackBalance();
   if ((valueSource->index >= 0 && diffLevel > 0) ||
       (valueSource->index > 0 && valueSource->index + diffLevel > 0)) {
@@ -4604,6 +4614,7 @@ ref<Expr> Executor::fillSymbolicSizeConstantAddress(
 ref<Expr> Executor::fillSizeAddressSymcretes(ExecutionState &state,
                                              ref<Expr> oldAddress,
                                              ref<Expr> newAddress,
+                                             ref<Expr> oldSize,
                                              ref<Expr> size) {
   ref<Expr> uniqueSize = toUnique(state, size);
 
@@ -4612,13 +4623,14 @@ ref<Expr> Executor::fillSizeAddressSymcretes(ExecutionState &state,
 
   MemoryObject *mo = nullptr;
   assert(addressManager->isAllocated(oldAddress));
-  MemoryObject *oldMO = addressManager->allocateMemoryObject(oldAddress, 0);
+  MemoryObject *oldMO =
+      addressManager->allocateMemoryObject(oldAddress, oldSize);
 
   /* Constant solution exists. Just return it. */
   if (arrayConstantSize) {
-    mo = memory->allocate(arrayConstantSize->getZExtValue(), oldMO->isLocal,
-                          oldMO->isGlobal, oldMO->isLazyInitialized,
-                          oldMO->allocSite, oldMO->alignment);
+    mo = memory->allocate(arrayConstantSize, oldMO->isLocal, oldMO->isGlobal,
+                          oldMO->isLazyInitialized, oldMO->allocSite,
+                          oldMO->alignment);
   } else {
     ref<AddressSymcrete> addressSymcrete =
         cast<AddressSymcrete>(new AllocAddressSymcrete(newAddress));
@@ -4650,17 +4662,15 @@ ref<Expr> Executor::fillSizeAddressSymcretes(ExecutionState &state,
     assert(success);
 
     Assignment assignment(objects, values);
-    uint64_t sizeMemoryObject =
-        cast<ConstantExpr>(assignment.evaluate(size))->getZExtValue();
+    ref<ConstantExpr> sizeExpr = cast<ConstantExpr>(assignment.evaluate(size));
+    uint64_t sizeMemoryObject = sizeExpr->getZExtValue();
 
     if (addressManager->isAllocated(newAddress)) {
-      mo = addressManager->allocateMemoryObject(newAddress, sizeMemoryObject);
+      mo = addressManager->allocateMemoryObject(newAddress, size);
     } else {
-      mo = memory->allocate(sizeMemoryObject, oldMO->isLocal, oldMO->isGlobal,
+      mo = memory->allocate(sizeExpr, oldMO->isLocal, oldMO->isGlobal,
                             oldMO->isLazyInitialized, oldMO->allocSite,
-                            oldMO->alignment, newAddress,
-                            ZExtExpr::create(size, pointerWidthInBits),
-                            oldMO->timestamp);
+                            oldMO->alignment, newAddress, oldMO->timestamp);
 
       assert(mo);
       addressManager->addAllocation(newAddress, mo->id);
@@ -4684,8 +4694,9 @@ Executor::getSymbolicSizeConstantSizeAddressPair(
   const Array *array = makeArray(size, symbolicSizeConstantAddressSource);
   ref<Expr> address = Expr::createTempRead(array, width);
   assert(addressManager->isAllocated(address));
-  addressManager->allocate(address, 0);
-  MemoryObject *mo = addressManager->allocateMemoryObject(address, 0);
+  addressManager->allocate(address, symbolicSizeConstantAddressSource->size);
+  MemoryObject *mo = addressManager->allocateMemoryObject(
+      address, symbolicSizeConstantAddressSource->size);
   return std::make_pair(address, mo->getSizeExpr());
 }
 
@@ -5383,7 +5394,9 @@ std::string Executor::getAddressInfo(ExecutionState &state, ref<Expr> address,
     mo->getAllocInfo(alloc_info);
     info << "object at ";
     mo->getBaseExpr()->print(info);
-    info << " of size " << mo->size << "\n"
+    info << " of size ";
+    mo->getSizeExpr()->print(info);
+    info << "\n"
          << "\t\t" << alloc_info << "\n";
   }
   if (lower != state.addressSpace.objects.begin()) {
@@ -5397,7 +5410,9 @@ std::string Executor::getAddressInfo(ExecutionState &state, ref<Expr> address,
       mo->getAllocInfo(alloc_info);
       info << "object at ";
       mo->getBaseExpr()->print(info);
-      info << " of size " << mo->size << "\n"
+      info << " of size ";
+      mo->getSizeExpr()->print(info);
+      info << "\n"
            << "\t\t" << alloc_info << "\n";
     }
   }
@@ -6320,8 +6335,8 @@ MemoryObject *Executor::allocate(ExecutionState &state, ref<Expr> size,
 
   /* Constant solution exists. Just return it. */
   if (arrayConstantSize && lazyInitializationSource.isNull()) {
-    return memory->allocate(arrayConstantSize->getZExtValue(), isLocal,
-                            isGlobal, false, allocSite, allocationAlignment);
+    return memory->allocate(arrayConstantSize, isLocal, isGlobal, false,
+                            allocSite, allocationAlignment);
   }
 
   Expr::Width pointerWidthInBits = Context::get().getPointerWidth();
@@ -6389,21 +6404,19 @@ MemoryObject *Executor::allocate(ExecutionState &state, ref<Expr> size,
   }
 
   Assignment assignment(objects, values);
-  uint64_t sizeMemoryObject =
-      cast<ConstantExpr>(assignment.evaluate(size))->getZExtValue();
-
+  ref<ConstantExpr> sizeExpr = cast<ConstantExpr>(assignment.evaluate(size));
+  auto sizeMemoryObject = sizeExpr->getZExtValue();
   MemoryObject *mo = nullptr;
 
   if (addressManager->isAllocated(addressExpr)) {
-    addressManager->allocate(addressExpr, sizeMemoryObject);
-    mo = addressManager->allocateMemoryObject(addressExpr, sizeMemoryObject);
+    addressManager->allocate(addressExpr, size);
+    mo = addressManager->allocateMemoryObject(addressExpr, size);
   } else {
 
     /* Allocate corresponding memory object. */
-    mo = memory->allocate(
-        sizeMemoryObject, isLocal, isGlobal, !lazyInitializationSource.isNull(),
-        allocSite, allocationAlignment, addressExpr,
-        ZExtExpr::create(size, pointerWidthInBits), timestamp);
+    mo = memory->allocate(size, isLocal, isGlobal,
+                          !lazyInitializationSource.isNull(), allocSite,
+                          allocationAlignment, addressExpr, timestamp);
 
     if (mo) {
       addressManager->addAllocation(addressExpr, mo->id);
@@ -6979,7 +6992,9 @@ void Executor::executeMemoryOperation(
     ObjectPair op = state->addressSpace.findObject(idFastResult);
     const MemoryObject *mo = op.first;
 
-    if (MaxSymArraySize && mo->size >= MaxSymArraySize) {
+    ref<ConstantExpr> sizeExpr = dyn_cast<ConstantExpr>(mo->getSizeExpr());
+    if (MaxSymArraySize && sizeExpr &&
+        sizeExpr->getZExtValue() >= MaxSymArraySize) {
       address = toConstant(*state, address, "max-sym-array-size");
     }
 
@@ -7391,7 +7406,7 @@ void Executor::updateStateWithSymcretes(ExecutionState &state,
             ->getZExtValue();
 
     MemoryObject *newMO = addressManager->allocateMemoryObject(
-        sizeSymcrete->addressSymcrete.symcretized, newSize);
+        sizeSymcrete->addressSymcrete.symcretized, sizeSymcrete->symcretized);
 
     if (!newMO || state.addressSpace.findObject(newMO).second) {
       continue;
@@ -7441,9 +7456,11 @@ void Executor::executeMakeSymbolic(ExecutionState &state,
     const Array *array = makeArray(mo->getSizeExpr(), source);
     ObjectState *os = bindObjectInState(state, mo, type, isLocal, array);
 
-    if (AlignSymbolicPointers) {
+    ref<ConstantExpr> sizeExpr =
+        dyn_cast<ConstantExpr>(os->getObject()->getSizeExpr());
+    if (AlignSymbolicPointers && sizeExpr) {
       if (ref<Expr> alignmentRestrictions = type->getContentRestrictions(
-              os->read(0, os->getObject()->size * CHAR_BIT))) {
+              os->read(0, sizeExpr->getZExtValue() * CHAR_BIT))) {
         addConstraint(state, alignmentRestrictions);
       }
     }
@@ -7469,27 +7486,32 @@ void Executor::executeMakeSymbolic(ExecutionState &state,
             break;
           }
         } else {
-          if (obj->numBytes != mo->size &&
-              ((!(AllowSeedExtension || ZeroSeedExtension) &&
-                obj->numBytes < mo->size) ||
-               (!AllowSeedTruncation && obj->numBytes > mo->size))) {
-            std::stringstream msg;
-            msg << "replace size mismatch: " << mo->name << "[" << mo->size
-                << "]"
-                << " vs " << obj->name << "[" << obj->numBytes << "]"
-                << " in test\n";
+          ref<ConstantExpr> sizeExpr =
+              dyn_cast<ConstantExpr>(mo->getSizeExpr());
+          if (sizeExpr) {
+            unsigned moSize = sizeExpr->getZExtValue();
+            if (obj->numBytes != moSize &&
+                ((!(AllowSeedExtension || ZeroSeedExtension) &&
+                  obj->numBytes < moSize) ||
+                 (!AllowSeedTruncation && obj->numBytes > moSize))) {
+              std::stringstream msg;
+              msg << "replace size mismatch: " << mo->name << "[" << moSize
+                  << "]"
+                  << " vs " << obj->name << "[" << obj->numBytes << "]"
+                  << " in test\n";
 
-            terminateStateOnUserError(state, msg.str());
-            break;
-          } else {
-            SparseStorage<unsigned char> values;
-            if (si.assignment.bindings.find(array) !=
-                si.assignment.bindings.end()) {
-              values = si.assignment.bindings.at(array);
+              terminateStateOnUserError(state, msg.str());
+              break;
+            } else {
+              SparseStorage<unsigned char> values;
+              if (si.assignment.bindings.find(array) !=
+                  si.assignment.bindings.end()) {
+                values = si.assignment.bindings.at(array);
+              }
+              values.store(0, obj->bytes,
+                           obj->bytes + std::min(obj->numBytes, moSize));
+              si.assignment.bindings.replace({array, values});
             }
-            values.store(0, obj->bytes,
-                         obj->bytes + std::min(obj->numBytes, mo->size));
-            si.assignment.bindings.replace({array, values});
           }
         }
       }
@@ -7500,11 +7522,12 @@ void Executor::executeMakeSymbolic(ExecutionState &state,
       terminateStateOnUserError(state, "replay count mismatch");
     } else {
       KTestObject *obj = &replayKTest->objects[replayPosition++];
-      if (obj->numBytes != mo->size) {
-        terminateStateOnUserError(state, "replay size mismatch");
-      } else {
-        for (unsigned i = 0; i < mo->size; i++)
+      ref<ConstantExpr> sizeExpr = dyn_cast<ConstantExpr>(mo->getSizeExpr());
+      if (sizeExpr && obj->numBytes != sizeExpr->getZExtValue()) {
+        for (unsigned i = 0; i < sizeExpr->getZExtValue(); i++)
           os->write8(i, obj->bytes[i]);
+      } else {
+        terminateStateOnUserError(state, "replay size mismatch");
       }
     }
   }
@@ -7645,9 +7668,7 @@ void Executor::runFunctionAsMain(Function *f, int argc, char **argv,
       continue;
     }
     auto mo = globalObjects[&v];
-    assert(!mo->sizeExpr);
-    auto array =
-        makeArray(Expr::createPointer(mo->size), SourceBuilder::global(v));
+    auto array = makeArray(mo->getSizeExpr(), SourceBuilder::global(v));
     auto type = typeSystemManager->getWrappedType(v.getType());
     bindObjectInState(*emptyState, mo, type, false, array);
   }
@@ -7959,7 +7980,9 @@ void Executor::logState(const ExecutionState &state, int id,
     *f << "Address memory object: ";
     object.first->getBaseExpr()->print(*f);
     *f << "\n";
-    *f << "Memory object size: " << object.first->size << "\n";
+    *f << "Memory object size: ";
+    object.first->getSizeExpr()->print(*f);
+    *f << "\n";
   }
   *f << state.symbolics.size() << " symbolics total. "
      << "Symbolics:\n";
@@ -7968,7 +7991,9 @@ void Executor::logState(const ExecutionState &state, int id,
     *f << "Symbolic number " << sc++ << "\n";
     *f << "Associated memory object: " << symbolic.memoryObject.get()->id
        << "\n";
-    *f << "Memory object size: " << symbolic.memoryObject.get()->size << "\n";
+    *f << "Memory object size: ";
+    symbolic.memoryObject.get()->getSizeExpr()->print(*f);
+    *f << "\n";
   }
   *f << "\n";
   *f << "State constraints:\n";
@@ -8259,9 +8284,11 @@ bool Executor::getSymbolicSolution(const ExecutionState &state, KTest &res) {
       o->name = const_cast<char *>(mo->name.c_str());
       o->address =
           cast<ConstantExpr>(model.evaluate(mo->getBaseExpr()))->getZExtValue();
-      o->numBytes = mo->size;
+      o->numBytes =
+          cast<ConstantExpr>(model.evaluate(mo->getSizeExpr()))->getZExtValue();
+      ;
       o->bytes = new unsigned char[o->numBytes];
-      for (size_t j = 0; j < mo->size; j++) {
+      for (size_t j = 0; j < o->numBytes; j++) {
         o->bytes[j] = values[i].load(j);
       }
       o->numPointers = 0;

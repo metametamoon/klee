@@ -10,7 +10,7 @@ class Expr;
 
 class AddressGenerator {
 public:
-  virtual void *allocate(ref<Expr>, uint64_t size) = 0;
+  virtual void *allocate(ref<Expr>, ref<Expr> size) = 0;
   virtual ~AddressGenerator() = default;
 };
 }; // namespace klee

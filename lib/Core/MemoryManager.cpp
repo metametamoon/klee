@@ -132,21 +132,24 @@ MemoryManager::~MemoryManager() {
     munmap(deterministicSpace, spaceSize);
 }
 
-MemoryObject *MemoryManager::allocate(uint64_t size, bool isLocal,
+MemoryObject *MemoryManager::allocate(ref<Expr> size, bool isLocal,
                                       bool isGlobal, bool isLazyInitialiazed,
                                       const llvm::Value *allocSite,
                                       size_t alignment, ref<Expr> addressExpr,
-                                      ref<Expr> sizeExpr, unsigned timestamp,
-                                      IDType id) {
-  if (size > MaxConstantAllocationSize) {
-    klee_warning_once(
-        0, "Large alloc: %" PRIu64 " bytes.  KLEE models out of memory.", size);
-    return 0;
-  }
+                                      unsigned timestamp, IDType id) {
+  if (ref<ConstantExpr> sizeExpr = dyn_cast<ConstantExpr>(size)) {
+    auto moSize = sizeExpr->getZExtValue();
+    if (moSize > MaxConstantAllocationSize) {
+      klee_warning_once(
+          0, "Large alloc: %" PRIu64 " bytes.  KLEE models out of memory.",
+          moSize);
+      return 0;
+    }
 
-  // Return NULL if size is zero, this is equal to error during allocation
-  if (NullOnZeroMalloc && size == 0)
-    return 0;
+    // Return NULL if size is zero, this is equal to error during allocation
+    if (NullOnZeroMalloc && moSize == 0)
+      return 0;
+  }
 
   if (!llvm::isPowerOf2_64(alignment)) {
     klee_warning("Only alignment of power of two is supported");
@@ -155,6 +158,9 @@ MemoryObject *MemoryManager::allocate(uint64_t size, bool isLocal,
 
   uint64_t address = 0;
   if (!addressExpr) {
+    ref<ConstantExpr> sizeExpr = dyn_cast<ConstantExpr>(size);
+    assert(sizeExpr);
+    auto moSize = sizeExpr->getZExtValue();
     if (DeterministicAllocation) {
       address =
           llvm::alignTo((uint64_t)nextFreeSlot + alignment - 1, alignment);
@@ -162,22 +168,22 @@ MemoryObject *MemoryManager::allocate(uint64_t size, bool isLocal,
       // Handle the case of 0-sized allocations as 1-byte allocations.
       // This way, we make sure we have this allocation between its own red
       // zones
-      size_t alloc_size = std::max(size, (uint64_t)1);
+      size_t alloc_size = std::max(moSize, (uint64_t)1);
       if ((char *)address + alloc_size < deterministicSpace + spaceSize) {
         nextFreeSlot = (char *)address + alloc_size + RedzoneSize;
       } else {
         klee_warning_once(0,
                           "Couldn't allocate %" PRIu64
                           " bytes. Not enough deterministic space left.",
-                          size);
+                          moSize);
         address = 0;
       }
     } else {
       // Use malloc for the standard case
       if (alignment <= 8)
-        address = (uint64_t)malloc(size);
+        address = (uint64_t)malloc(moSize);
       else {
-        int res = posix_memalign((void **)&address, alignment, size);
+        int res = posix_memalign((void **)&address, alignment, moSize);
         if (res < 0) {
           klee_warning("Allocating aligned memory failed.");
           address = 0;
@@ -191,9 +197,9 @@ MemoryObject *MemoryManager::allocate(uint64_t size, bool isLocal,
   }
 
   ++stats::allocations;
-  MemoryObject *res = new MemoryObject(addressExpr, size, alignment, isLocal,
-                                       isGlobal, false, isLazyInitialiazed,
-                                       allocSite, this, sizeExpr, timestamp);
+  MemoryObject *res =
+      new MemoryObject(addressExpr, size, alignment, isLocal, isGlobal, false,
+                       isLazyInitialiazed, allocSite, this, timestamp);
   if (id) {
     res->id = id;
   }
@@ -209,15 +215,24 @@ MemoryObject *MemoryManager::allocateFixed(uint64_t address, uint64_t size,
   for (objects_ty::iterator it = objects.begin(), ie = objects.end(); it != ie;
        ++it) {
     MemoryObject *mo = *it;
-    if (address + size > mo->address && address < mo->address + mo->size)
-      klee_error("Trying to allocate an overlapping object");
+    if (ref<ConstantExpr> addressExpr =
+            dyn_cast<ConstantExpr>(mo->getBaseExpr())) {
+      if (ref<ConstantExpr> sizeExpr =
+              dyn_cast<ConstantExpr>(mo->getSizeExpr())) {
+        auto moAddress = addressExpr->getZExtValue();
+        auto moSize = sizeExpr->getZExtValue();
+        if (address + size > moAddress && address < moAddress + moSize)
+          klee_error("Trying to allocate an overlapping object");
+      }
+    }
   }
 #endif
 
   ++stats::allocations;
   ref<Expr> addressExpr = Expr::createPointer(address);
-  MemoryObject *res = new MemoryObject(addressExpr, size, 8, false, true, true,
-                                       false, allocSite, this);
+  MemoryObject *res =
+      new MemoryObject(addressExpr, Expr::createPointer(size), 8, false, true,
+                       true, false, allocSite, this);
   objects.insert(res);
   return res;
 }
@@ -226,7 +241,7 @@ void MemoryManager::deallocate(const MemoryObject *mo) { assert(0); }
 
 void MemoryManager::markFreed(MemoryObject *mo) {
   if (objects.find(mo) != objects.end()) {
-    allocatedSizes[mo->id].erase(mo->size);
+    allocatedSizes[mo->id].erase(mo->getSizeExpr());
     if (allocatedSizes[mo->id].empty()) {
       am->bindingsAdressesToObjects.erase(mo->getBaseExpr());
     }
@@ -240,7 +255,7 @@ void MemoryManager::markFreed(MemoryObject *mo) {
   }
 }
 
-const std::map<uint64_t, MemoryObject *> &
+const std::map<ref<Expr>, MemoryObject *> &
 MemoryManager::getAllocatedObjects(IDType idObject) {
   return allocatedSizes[idObject];
 }

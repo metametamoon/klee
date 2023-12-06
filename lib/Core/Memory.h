@@ -70,7 +70,6 @@ public:
   ref<Expr> addressExpr;
 
   /// size in bytes
-  unsigned size;
   ref<Expr> sizeExpr;
 
   uint64_t alignment;
@@ -99,17 +98,16 @@ public:
   // XXX this is just a temp hack, should be removed
   explicit MemoryObject(uint64_t _address)
       : id(0), timestamp(0), addressExpr(Expr::createPointer(_address)),
-        size(0), sizeExpr(nullptr), alignment(0), isFixed(true),
+        sizeExpr(Expr::createPointer(0)), alignment(0), isFixed(true),
         isLazyInitialized(false), parent(NULL), allocSite(0) {}
 
   MemoryObject(
-      ref<Expr> _address, unsigned _size, uint64_t alignment, bool _isLocal,
+      ref<Expr> _address, ref<Expr> _size, uint64_t alignment, bool _isLocal,
       bool _isGlobal, bool _isFixed, bool _isLazyInitialized,
       const llvm::Value *_allocSite, MemoryManager *_parent,
-      ref<Expr> _sizeExpr = nullptr,
       unsigned _timestamp = 0 /* unused if _isLazyInitialized is false*/)
       : id(counter++), timestamp(_timestamp), addressExpr(_address),
-        size(_size), sizeExpr(_sizeExpr), alignment(alignment), name("unnamed"),
+        sizeExpr(_size), alignment(alignment), name("unnamed"),
         isLocal(_isLocal), isGlobal(_isGlobal), isFixed(_isFixed),
         isLazyInitialized(_isLazyInitialized), isUserSpecified(false),
         parent(_parent), allocSite(_allocSite) {
@@ -131,12 +129,7 @@ public:
 
   bool hasSymbolicSize() const { return !isa<ConstantExpr>(getSizeExpr()); }
   ref<Expr> getBaseExpr() const { return addressExpr; }
-  ref<Expr> getSizeExpr() const {
-    if (sizeExpr) {
-      return sizeExpr;
-    }
-    return Expr::createPointer(size);
-  }
+  ref<Expr> getSizeExpr() const { return sizeExpr; }
   ref<Expr> getOffsetExpr(ref<Expr> pointer) const {
     return SubExpr::create(pointer, getBaseExpr());
   }
@@ -175,8 +168,8 @@ public:
     if (addressExpr != b.addressExpr)
       return (addressExpr < b.addressExpr ? -1 : 1);
 
-    if (size != b.size)
-      return (size < b.size ? -1 : 1);
+    if (sizeExpr != b.sizeExpr)
+      return (sizeExpr < b.sizeExpr ? -1 : 1);
 
     if (allocSite != b.allocSite)
       return (allocSite < b.allocSite ? -1 : 1);
