@@ -319,8 +319,7 @@ private:
                       const ObjectState *reallocFrom,
                       size_t allocationAlignment, bool checkOutOfMemory);
 
-  bool computeSizes(ExecutionState &state, ref<Expr> size,
-                    ref<Expr> symbolicSizesSum,
+  bool computeSizes(const ExecutionState &state, ref<Expr> symbolicSizesSum,
                     std::vector<const Array *> &objects,
                     std::vector<SparseStorage<unsigned char>> &values);
 

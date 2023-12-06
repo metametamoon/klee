@@ -62,10 +62,6 @@ bool ComposeHelper::tryResolveAddress(ExecutionState &state, ref<Expr> address,
         state.constraints.withAssumtions(state.assumptions), guard,
         state.queryMetaData);
 
-    if (!concretization.isEmpty()) {
-      // Update memory objects if arrays have affected them.
-      executor->updateStateWithSymcretes(state, concretization);
-    }
     state.assumptions.insert(guard);
     ref<Expr> resultAddress =
         state.addressSpace
@@ -106,10 +102,6 @@ bool ComposeHelper::tryResolveSize(ExecutionState &state, ref<Expr> address,
         state.constraints.withAssumtions(state.assumptions), guard,
         state.queryMetaData);
 
-    if (!concretization.isEmpty()) {
-      // Update memory objects if arrays have affected them.
-      executor->updateStateWithSymcretes(state, concretization);
-    }
     state.assumptions.insert(guard);
     ref<Expr> resultSize =
         state.addressSpace
@@ -183,10 +175,6 @@ bool ComposeHelper::tryResolveContent(
         state.constraints.withAssumtions(state.assumptions), guard,
         state.queryMetaData);
 
-    if (!concretization.isEmpty()) {
-      // Update memory objects if arrays have affected them.
-      executor->updateStateWithSymcretes(state, concretization);
-    }
     state.assumptions.insert(guard);
   }
 
@@ -449,7 +437,6 @@ ref<Expr> ComposeVisitor::processSelect(ref<Expr> cond, ref<Expr> trueExpr,
         // Update memory objects if arrays have affected them.
         Assignment delta =
             state.constraints.cs().concretization().diffWith(concretization);
-        helper.updateStateWithSymcretes(state, delta);
         state.constraints.rewriteConcretization(delta);
       }
     }
@@ -476,7 +463,6 @@ ref<Expr> ComposeVisitor::processSelect(ref<Expr> cond, ref<Expr> trueExpr,
         // Update memory objects if arrays have affected them.
         Assignment delta =
             state.constraints.cs().concretization().diffWith(concretization);
-        helper.updateStateWithSymcretes(state, delta);
         state.constraints.rewriteConcretization(delta);
       }
     }

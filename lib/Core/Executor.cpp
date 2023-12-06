@@ -588,7 +588,7 @@ Executor::Executor(LLVMContext &ctx, const InterpreterOptions &opts,
       interpreterHandler->getOutputFilename(SOLVER_QUERIES_SMT2_FILE_NAME),
       interpreterHandler->getOutputFilename(ALL_QUERIES_KQUERY_FILE_NAME),
       interpreterHandler->getOutputFilename(SOLVER_QUERIES_KQUERY_FILE_NAME),
-      addressManager.get(), arrayCache);
+      arrayCache);
 
   this->solver = std::make_unique<TimingSolver>(std::move(solver), optimizer,
                                                 EqualitySubstitution);
@@ -1601,7 +1601,6 @@ void Executor::addConstraint(ExecutionState &state, ref<Expr> condition) {
 
   if (!concretization.isEmpty()) {
     // Update memory objects if arrays have affected them.
-    updateStateWithSymcretes(state, concretization);
     Assignment delta =
         state.constraints.cs().concretization().diffWith(concretization);
     state.addConstraint(condition, delta);
@@ -4658,7 +4657,7 @@ ref<Expr> Executor::fillSizeAddressSymcretes(ExecutionState &state,
 
     std::vector<const Array *> objects;
     std::vector<SparseStorage<unsigned char>> values;
-    bool success = computeSizes(state, size, symbolicSizesSum, objects, values);
+    bool success = computeSizes(state, symbolicSizesSum, objects, values);
     assert(success);
 
     Assignment assignment(objects, values);
@@ -4770,7 +4769,6 @@ Executor::compose(const ExecutionState &state, const PathConstraints &pob,
       if (!symcretization.isEmpty()) {
         delta = composer.state.constraints.cs().concretization().diffWith(
             symcretization);
-        updateStateWithSymcretes(composer.state, symcretization);
       }
       auto added =
           composer.state.constraints.addConstraint(condition, delta, index);
@@ -6273,7 +6271,7 @@ void Executor::concretizeSize(ExecutionState &state, ref<Expr> size,
                  reallocFrom, allocationAlignment, checkOutOfMemory);
 }
 
-bool Executor::computeSizes(ExecutionState &state, ref<Expr> size,
+bool Executor::computeSizes(const ExecutionState &state,
                             ref<Expr> symbolicSizesSum,
                             std::vector<const Array *> &objects,
                             std::vector<SparseStorage<unsigned char>> &values) {
@@ -6282,7 +6280,7 @@ bool Executor::computeSizes(ExecutionState &state, ref<Expr> size,
 
   /* Compute assignment for symcretes. */
   objects = state.constraints.cs().gatherSymcretizedArrays();
-  findObjects(size, objects);
+  findObjects(symbolicSizesSum, objects);
 
   solver->setTimeout(coreSolverTimeout);
   bool success = solver->getResponse(
@@ -6397,7 +6395,7 @@ MemoryObject *Executor::allocate(ExecutionState &state, ref<Expr> size,
 
   std::vector<const Array *> objects;
   std::vector<SparseStorage<unsigned char>> values;
-  bool success = computeSizes(state, size, symbolicSizesSum, objects, values);
+  bool success = computeSizes(state, symbolicSizesSum, objects, values);
 
   if (!success) {
     return nullptr;
@@ -6850,7 +6848,6 @@ void Executor::collectReads(
   }
 
   for (unsigned int i = 0; i < resolvedMemoryObjects.size(); ++i) {
-    updateStateWithSymcretes(state, resolveConcretizations.at(i));
     state.constraints.rewriteConcretization(resolveConcretizations.at(i));
 
     ObjectPair op = state.addressSpace.findObject(resolvedMemoryObjects.at(i));
@@ -6883,7 +6880,6 @@ void Executor::collectObjectStates(
     const std::vector<Assignment> &resolveConcretizations,
     std::vector<ref<ObjectState>> &results) {
   for (unsigned int i = 0; i < resolvedMemoryObjects.size(); ++i) {
-    updateStateWithSymcretes(state, resolveConcretizations[i]);
     state.constraints.rewriteConcretization(resolveConcretizations[i]);
 
     ObjectPair op = state.addressSpace.findObject(resolvedMemoryObjects[i]);
@@ -7146,7 +7142,6 @@ void Executor::executeMemoryOperation(
 
       if (isWrite) {
         for (unsigned int i = 0; i < resolvedMemoryObjects.size(); ++i) {
-          updateStateWithSymcretes(*state, resolveConcretizations[i]);
           state->constraints.rewriteConcretization(resolveConcretizations[i]);
 
           ObjectPair op =
@@ -8266,11 +8261,40 @@ bool Executor::getSymbolicSolution(const ExecutionState &state, KTest &res) {
     return false;
   }
 
+  Assignment model = Assignment(objects, values);
+
+  Expr::Width pointerWidthInBits = Context::get().getPointerWidth();
+
+  std::vector<ref<Expr>> symbolicSizesTerms;
+
+  /* Collect all size symcretes. */
+  for (ref<Symcrete> symcrete : state.constraints.cs().symcretes()) {
+    if (isa<SizeSymcrete>(symcrete)) {
+      symbolicSizesTerms.push_back(
+          ZExtExpr::create(symcrete->symcretized, pointerWidthInBits));
+    }
+  }
+
+  if (symbolicSizesTerms.size() > 0) {
+    ref<Expr> symbolicSizesSum =
+        createNonOverflowingSumExpr(symbolicSizesTerms);
+
+    std::vector<const Array *> symcreteObjects;
+    std::vector<SparseStorage<unsigned char>> symcreteValues;
+    bool success = computeSizes(state, symbolicSizesSum, objects, values);
+    if (success) {
+      Assignment symcreteModel = Assignment(symcreteObjects, symcreteValues);
+
+      for (auto &i : model.diffWith(symcreteModel).bindings) {
+        model.bindings.replace({i.first, i.second});
+      }
+    }
+  }
+
   res.numObjects = symbolics.size();
   res.objects = new KTestObject[res.numObjects];
   res.uninitCoeff = uninitObjects.size() * UninitMemoryTestMultiplier;
 
-  Assignment model = Assignment(objects, values);
   for (auto binding : state.constraints.cs().concretization().bindings) {
     model.bindings.insert(binding);
   }

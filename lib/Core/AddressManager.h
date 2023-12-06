@@ -4,7 +4,6 @@
 #include "Memory.h"
 
 #include "klee/Expr/ExprHashMap.h"
-#include "klee/Solver/AddressGenerator.h"
 
 #include <cstdint>
 #include <map>
@@ -14,7 +13,7 @@ namespace klee {
 class MemoryManager;
 class Array;
 
-class AddressManager : public AddressGenerator {
+class AddressManager {
   friend MemoryManager;
 
 private:
@@ -26,7 +25,7 @@ public:
   AddressManager(MemoryManager *memory, uint64_t maxSize)
       : memory(memory), maxSize(maxSize) {}
   void addAllocation(ref<Expr> address, IDType id);
-  void *allocate(ref<Expr> address, ref<Expr> size) override;
+  void *allocate(ref<Expr> address, ref<Expr> size);
   MemoryObject *allocateMemoryObject(ref<Expr> address, ref<Expr> size);
   bool isAllocated(ref<Expr>);
 };
