@@ -76,8 +76,6 @@ def klee_options(
         cmd += [
             "--optimize=true",
             "--use-alpha-equivalence=true",
-            "--initialize-in-join-blocks",
-            # "--debug-log=rootpob,backward,conflict,closepob,reached,init",
             "--function-call-reproduce=reach_error",
             # "--max-cycles=0",
             # "--tc-type=bug",
@@ -131,8 +129,13 @@ def klee_options(
             ]
 
     if bd:
-        cmd += ["--execution-mode=bidirectional"]
-        cmd += ["--forward-ticks=0"]
+        cmd += [
+            "--execution-mode=bidirectional",
+            "--forward-ticks=0",
+            "--initialize-in-join-blocks",
+            "--tmp-skip-fns-in-init=false",
+            # "--debug-log=rootpob,backward,conflict,closepob,reached,init",
+        ]
 
     cmd += [compiled_file]  # Finally add the file to be tested
     return cmd

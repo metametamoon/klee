@@ -4657,7 +4657,13 @@ ref<Expr> Executor::fillSizeAddressSymcretes(ExecutionState &state,
 
     std::vector<const Array *> objects;
     std::vector<SparseStorage<unsigned char>> values;
-    bool success = computeSizes(state, symbolicSizesSum, objects, values);
+    objects = state.constraints.cs().gatherSymcretizedArrays();
+    findObjects(symbolicSizesSum, objects);
+
+    solver->setTimeout(coreSolverTimeout);
+    bool success = solver->getInitialValues(state.constraints.cs(), objects, values,
+                                       state.queryMetaData);
+    solver->setTimeout(time::Span());
     assert(success);
 
     Assignment assignment(objects, values);
@@ -6395,7 +6401,13 @@ MemoryObject *Executor::allocate(ExecutionState &state, ref<Expr> size,
 
   std::vector<const Array *> objects;
   std::vector<SparseStorage<unsigned char>> values;
-  bool success = computeSizes(state, symbolicSizesSum, objects, values);
+  objects = state.constraints.cs().gatherSymcretizedArrays();
+  findObjects(symbolicSizesSum, objects);
+
+  solver->setTimeout(coreSolverTimeout);
+  bool success = solver->getInitialValues(state.constraints.cs(), objects,
+                                          values, state.queryMetaData);
+  solver->setTimeout(time::Span());
 
   if (!success) {
     return nullptr;
