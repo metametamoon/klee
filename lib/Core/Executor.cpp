@@ -4667,7 +4667,7 @@ ref<Expr> Executor::fillSizeAddressSymcretes(ExecutionState &state,
     if (addressManager->isAllocated(newAddress)) {
       mo = addressManager->allocateMemoryObject(newAddress, size);
     } else {
-      mo = memory->allocate(sizeExpr, oldMO->isLocal, oldMO->isGlobal,
+      mo = memory->allocate(size, oldMO->isLocal, oldMO->isGlobal,
                             oldMO->isLazyInitialized, oldMO->allocSite,
                             oldMO->alignment, newAddress, oldMO->timestamp);
 
