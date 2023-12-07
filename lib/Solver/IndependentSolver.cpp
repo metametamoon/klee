@@ -255,7 +255,7 @@ bool IndependentSolver::check(const Query &query, ref<SolverResponse> &result) {
   std::vector<ref<const IndependentConstraintSet>> independentFactors;
   query.getAllIndependentConstraintsSets(independentFactors);
 
-  if (independentFactors.size() == 0 && dependentFactors.size() == 1) {
+  if (independentFactors.size() == 0 && dependentFactors.size() <= 1) {
     return solver->impl->check(query, result);
   }
 

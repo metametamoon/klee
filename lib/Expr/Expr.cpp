@@ -72,7 +72,7 @@ ref<Expr> Expr::createTempRead(const Array *array, Expr::Width w,
         ReadExpr::create(ul, ConstantExpr::alloc(off, Expr::Int32)),
         Expr::Bool);
   case Expr::Int8:
-    return ReadExpr::create(ul, ConstantExpr::alloc(0, Expr::Int32));
+    return ReadExpr::create(ul, ConstantExpr::alloc(off, Expr::Int32));
   case Expr::Int16:
     return ConcatExpr::create(
         ReadExpr::create(ul, ConstantExpr::alloc(off + 1, Expr::Int32)),
