@@ -132,6 +132,7 @@ def klee_options(
 
     if bd:
         cmd += ["--execution-mode=bidirectional"]
+        cmd += ["--forward-ticks=0"]
 
     cmd += [compiled_file]  # Finally add the file to be tested
     return cmd
