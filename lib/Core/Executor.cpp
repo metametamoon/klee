@@ -6323,7 +6323,7 @@ MemoryObject *Executor::allocate(ExecutionState &state, ref<Expr> size,
                                  ref<Expr> lazyInitializationSource,
                                  unsigned timestamp) {
 
-  size = ZExtExpr::create(size, Expr::Int64);
+  size = ZExtExpr::create(size, Context::get().getPointerWidth());
 
   /* Try to find existing solution. */
   ref<Expr> uniqueSize = toUnique(state, size);
