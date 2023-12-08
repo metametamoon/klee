@@ -49,7 +49,7 @@ public:
   void addSymcrete(ref<Symcrete> s, const Assignment &concretization);
   bool isSymcretized(ref<Expr> expr) const;
 
-  void rewriteConcretization(const Assignment &a);
+  void rewriteConcretization(const Assignment &a) const;
   ConstraintSet withExpr(ref<Expr> e) const {
     ConstraintSet copy = ConstraintSet(*this);
     copy.addConstraint(e, Assignment());
@@ -90,7 +90,7 @@ public:
 private:
   constraints_ty _constraints;
   symcretes_ty _symcretes;
-  Assignment _concretization;
+  mutable std::shared_ptr<Assignment> _concretization;
   std::shared_ptr<IndependentConstraintSetUnion> _independentElements;
 };
 

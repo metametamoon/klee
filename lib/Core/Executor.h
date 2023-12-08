@@ -396,25 +396,13 @@ private:
                  ref<Expr> checkOutOfBounds, bool hasLazyInitialized,
                  ref<Expr> &guard, bool &mayBeInBounds);
 
-  bool collectConcretizations(ExecutionState &state,
-                              const std::vector<ref<Expr>> &resolveConditions,
-                              const std::vector<ref<Expr>> &unboundConditions,
-                              const std::vector<IDType> &resolvedMemoryObjects,
-                              ref<Expr> checkOutOfBounds,
-                              bool hasLazyInitialized, ref<Expr> &guard,
-                              std::vector<Assignment> &resolveConcretizations,
-                              bool &mayBeInBounds);
-
-  void
-  collectObjectStates(ExecutionState &state,
-                      const std::vector<IDType> &resolvedMemoryObjects,
-                      const std::vector<Assignment> &resolveConcretizations,
-                      std::vector<ref<ObjectState>> &results);
+  void collectObjectStates(ExecutionState &state,
+                           const std::vector<IDType> &resolvedMemoryObjects,
+                           std::vector<ref<ObjectState>> &results);
 
   void collectReads(ExecutionState &state, ref<Expr> address, KType *targetType,
                     Expr::Width type, unsigned bytes,
                     const std::vector<IDType> &resolvedMemoryObjects,
-                    const std::vector<Assignment> &resolveConcretizations,
                     std::vector<ref<Expr>> &results);
 
   // do address resolution / object binding / out of bounds checking
@@ -439,9 +427,6 @@ private:
   void executeMakeSymbolic(ExecutionState &state, const MemoryObject *mo,
                            KType *type, const ref<SymbolicSource> source,
                            bool isLocal);
-
-  void updateStateWithSymcretes(ExecutionState &state,
-                                const Assignment &assignment);
 
   /// Assume that `current` state stepped to `block`.
   /// Can we reach at least one target of `current` from there?

@@ -139,8 +139,8 @@ void SeedInfo::patchSeed(const ExecutionState &state, ref<Expr> condition,
                                          ie = assignment.bindings.end();
        it != ie; ++it) {
     const Array *array = it->first;
-    ref<ConstantExpr> arrayConstantSize = cast<ConstantExpr>(
-        state.constraints.cs().concretization().evaluate(array->size));
+    ref<ConstantExpr> arrayConstantSize =
+        cast<ConstantExpr>(assignment.evaluate(array->size));
     for (unsigned i = 0; i < arrayConstantSize->getZExtValue(); ++i) {
       ref<Expr> read = ReadExpr::create(UpdateList(array, 0),
                                         ConstantExpr::alloc(i, Expr::Int32));

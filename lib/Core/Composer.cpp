@@ -154,19 +154,15 @@ bool ComposeHelper::tryResolveContent(
   }
 
   ref<Expr> guard;
-  std::vector<Assignment> resolveConcretizations;
   bool mayBeInBounds;
 
-  if (!collectConcretizations(state, resolveConditions, unboundConditions,
-                              resolvedMemoryObjects, checkOutOfBounds,
-                              hasLazyInitialized, guard, resolveConcretizations,
-                              mayBeInBounds)) {
+  if (!makeGuard(state, resolveConditions, unboundConditions, checkOutOfBounds,
+                 hasLazyInitialized, guard, mayBeInBounds)) {
     return false;
   }
 
   std::vector<ref<ObjectState>> resolvedObjectStates;
-  collectObjectStates(state, resolvedMemoryObjects, resolveConcretizations,
-                      resolvedObjectStates);
+  collectObjectStates(state, resolvedMemoryObjects, resolvedObjectStates);
 
   result.first = guard;
 
@@ -428,19 +424,6 @@ ref<Expr> ComposeVisitor::processSelect(ref<Expr> cond, ref<Expr> trueExpr,
     ExprOrderedSet savedSafetyConstraints = safetyConstraints;
     safetyConstraints.clear();
 
-    {
-      Assignment concretization = helper.computeConcretization(
-          state.constraints.withAssumtions(state.assumptions), cond,
-          state.queryMetaData);
-
-      if (!concretization.isEmpty()) {
-        // Update memory objects if arrays have affected them.
-        Assignment delta =
-            state.constraints.cs().concretization().diffWith(concretization);
-        state.constraints.rewriteConcretization(delta);
-      }
-    }
-
     state.assumptions.insert(cond);
     visited.pushFrame();
     trueExpr = visit(trueExpr);
@@ -452,19 +435,6 @@ ref<Expr> ComposeVisitor::processSelect(ref<Expr> cond, ref<Expr> trueExpr,
     ref<Expr> trueSafe = Expr::createTrue();
     for (auto sc : trueSafetyConstraints) {
       trueSafe = AndExpr::create(trueSafe, sc);
-    }
-
-    {
-      Assignment concretization = helper.computeConcretization(
-          state.constraints.withAssumtions(state.assumptions),
-          Expr::createIsZero(cond), state.queryMetaData);
-
-      if (!concretization.isEmpty()) {
-        // Update memory objects if arrays have affected them.
-        Assignment delta =
-            state.constraints.cs().concretization().diffWith(concretization);
-        state.constraints.rewriteConcretization(delta);
-      }
     }
 
     state.assumptions.insert(Expr::createIsZero(cond));

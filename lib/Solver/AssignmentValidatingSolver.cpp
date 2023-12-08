@@ -38,9 +38,9 @@ public:
   bool check(const Query &query, ref<SolverResponse> &result);
   bool computeValidityCore(const Query &query, ValidityCore &validityCore,
                            bool &isValid);
-  void validateAssigment(const Query &query,
-                         const std::vector<const Array *> &objects,
-                         std::vector<SparseStorage<unsigned char>> &values);
+  void validateAssignment(const Query &query,
+                          const std::vector<const Array *> &objects,
+                          std::vector<SparseStorage<unsigned char>> &values);
   SolverRunStatus getOperationStatusCode();
   char *getConstraintLog(const Query &);
   void setCoreSolverTimeout(time::Span timeout);
@@ -61,7 +61,7 @@ bool AssignmentValidatingSolver::computeValue(const Query &query,
   return solver->impl->computeValue(query, result);
 }
 
-void AssignmentValidatingSolver::validateAssigment(
+void AssignmentValidatingSolver::validateAssignment(
     const Query &query, const std::vector<const Array *> &objects,
     std::vector<SparseStorage<unsigned char>> &values) {
   // Use `_allowFreeValues` so that if we are missing an assignment
@@ -130,7 +130,7 @@ bool AssignmentValidatingSolver::computeInitialValues(
   if (!hasSolution)
     return success;
 
-  validateAssigment(query, objects, values);
+  validateAssignment(query, objects, values);
 
   return success;
 }
@@ -151,7 +151,7 @@ bool AssignmentValidatingSolver::check(const Query &query,
   assert(isa<InvalidResponse>(result));
   cast<InvalidResponse>(result)->tryGetInitialValuesFor(objects, values);
 
-  validateAssigment(query, objects, values);
+  validateAssignment(query, objects, values);
 
   return true;
 }

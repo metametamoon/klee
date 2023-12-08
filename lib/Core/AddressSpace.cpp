@@ -132,9 +132,8 @@ bool AddressSpace::resolveOneIfUnique(ExecutionState &state,
                                       bool &success) const {
   ref<Expr> base =
       state.isGEPExpr(address) ? state.gepExprBases.at(address).first : address;
-  ref<Expr> uniqueAddress =
-      state.constraints.cs().concretization().evaluate(base);
-  if (!isa<ConstantExpr>(uniqueAddress) &&
+  ref<Expr> uniqueAddress = base;
+  if (!isa<ConstantExpr>(base) &&
       !solver->tryGetUnique(state.constraints.withAssumtions(state.assumptions),
                             base, uniqueAddress, state.queryMetaData)) {
     return false;

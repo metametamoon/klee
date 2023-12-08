@@ -87,30 +87,11 @@ public:
                                mayBeInBounds);
   }
 
-  bool collectConcretizations(ExecutionState &state,
-                              const std::vector<ref<Expr>> &resolveConditions,
-                              const std::vector<ref<Expr>> &unboundConditions,
-                              const std::vector<IDType> &resolvedMemoryObjects,
-                              ref<Expr> checkOutOfBounds,
-                              bool hasLazyInitialized, ref<Expr> &guard,
-                              std::vector<Assignment> &resolveConcretizations,
-                              bool &mayBeInBounds) {
-    return executor->collectConcretizations(
-        state, resolveConditions, unboundConditions, resolvedMemoryObjects,
-        checkOutOfBounds, hasLazyInitialized, guard, resolveConcretizations,
-        mayBeInBounds);
-  }
-
   Assignment computeConcretization(const ConstraintSet &constraints,
                                    ref<Expr> condition,
                                    SolverQueryMetaData &queryMetaData) {
     return executor->computeConcretization(constraints, condition,
                                            queryMetaData);
-  }
-
-  void updateStateWithSymcretes(ExecutionState &state,
-                                const Assignment &assignment) {
-    return executor->updateStateWithSymcretes(state, assignment);
   }
 
   bool collectMemoryObjects(ExecutionState &state, ref<Expr> address,
@@ -123,20 +104,15 @@ public:
   void collectReads(ExecutionState &state, ref<Expr> address, KType *targetType,
                     Expr::Width type, unsigned bytes,
                     const std::vector<IDType> &resolvedMemoryObjects,
-                    const std::vector<Assignment> &resolveConcretizations,
                     std::vector<ref<Expr>> &results) {
     executor->collectReads(state, address, targetType, type, bytes,
-                           resolvedMemoryObjects, resolveConcretizations,
-                           results);
+                           resolvedMemoryObjects, results);
   }
 
-  void
-  collectObjectStates(ExecutionState &state,
-                      const std::vector<IDType> &resolvedMemoryObjects,
-                      const std::vector<Assignment> &resolveConcretizations,
-                      std::vector<ref<ObjectState>> &results) {
-    executor->collectObjectStates(state, resolvedMemoryObjects,
-                                  resolveConcretizations, results);
+  void collectObjectStates(ExecutionState &state,
+                           const std::vector<IDType> &resolvedMemoryObjects,
+                           std::vector<ref<ObjectState>> &results) {
+    executor->collectObjectStates(state, resolvedMemoryObjects, results);
   }
 
   bool tryResolveAddress(ExecutionState &state, ref<Expr> address,

@@ -1596,17 +1596,7 @@ void Executor::addConstraint(ExecutionState &state, ref<Expr> condition) {
       klee_warning("seeds patched for violating constraint");
   }
 
-  Assignment concretization = computeConcretization(
-      state.constraints.cs(), condition, state.queryMetaData);
-
-  if (!concretization.isEmpty()) {
-    // Update memory objects if arrays have affected them.
-    Assignment delta =
-        state.constraints.cs().concretization().diffWith(concretization);
-    state.addConstraint(condition, delta);
-  } else {
-    state.addConstraint(condition, {});
-  }
+  state.addConstraint(condition, {});
 
   if (ivcEnabled)
     doImpliedValueConcretization(state, condition,
@@ -4661,8 +4651,8 @@ ref<Expr> Executor::fillSizeAddressSymcretes(ExecutionState &state,
     findObjects(symbolicSizesSum, objects);
 
     solver->setTimeout(coreSolverTimeout);
-    bool success = solver->getInitialValues(state.constraints.cs(), objects, values,
-                                       state.queryMetaData);
+    bool success = solver->getInitialValues(state.constraints.cs(), objects,
+                                            values, state.queryMetaData);
     solver->setTimeout(time::Span());
     assert(success);
 
@@ -4768,16 +4758,8 @@ Executor::compose(const ExecutionState &state, const PathConstraints &pob,
         return result;
       }
 
-      auto symcretization =
-          computeConcretization(composer.state.constraints.cs(), condition,
-                                composer.state.queryMetaData);
-      Assignment delta;
-      if (!symcretization.isEmpty()) {
-        delta = composer.state.constraints.cs().concretization().diffWith(
-            symcretization);
-      }
       auto added =
-          composer.state.constraints.addConstraint(condition, delta, index);
+          composer.state.constraints.addConstraint(condition, {}, index);
       for (auto expr : added) {
         rebuildMap.insert({expr, constraint});
       }
@@ -6824,33 +6806,10 @@ bool Executor::makeGuard(ExecutionState &state,
   return true;
 }
 
-bool Executor::collectConcretizations(
-    ExecutionState &state, const std::vector<ref<Expr>> &resolveConditions,
-    const std::vector<ref<Expr>> &unboundConditions,
-    const std::vector<IDType> &resolvedMemoryObjects,
-    ref<Expr> checkOutOfBounds, bool hasLazyInitialized, ref<Expr> &guard,
-    std::vector<Assignment> &resolveConcretizations, bool &mayBeInBounds) {
-  if (!makeGuard(state, resolveConditions, unboundConditions, checkOutOfBounds,
-                 hasLazyInitialized, guard, mayBeInBounds)) {
-    return false;
-  }
-
-  for (unsigned int i = 0; i < resolvedMemoryObjects.size(); ++i) {
-    Assignment concretization = computeConcretization(
-        state.constraints.withAssumtions(state.assumptions),
-        resolveConditions.at(i), state.queryMetaData);
-    resolveConcretizations.push_back(concretization);
-  }
-
-  return true;
-}
-
-void Executor::collectReads(
-    ExecutionState &state, ref<Expr> address, KType *targetType,
-    Expr::Width type, unsigned bytes,
-    const std::vector<IDType> &resolvedMemoryObjects,
-    const std::vector<Assignment> &resolveConcretizations,
-    std::vector<ref<Expr>> &results) {
+void Executor::collectReads(ExecutionState &state, ref<Expr> address,
+                            KType *targetType, Expr::Width type, unsigned bytes,
+                            const std::vector<IDType> &resolvedMemoryObjects,
+                            std::vector<ref<Expr>> &results) {
   ref<Expr> base = address; // TODO: unused
   unsigned size = bytes;
   if (state.isGEPExpr(address)) {
@@ -6860,8 +6819,6 @@ void Executor::collectReads(
   }
 
   for (unsigned int i = 0; i < resolvedMemoryObjects.size(); ++i) {
-    state.constraints.rewriteConcretization(resolveConcretizations.at(i));
-
     ObjectPair op = state.addressSpace.findObject(resolvedMemoryObjects.at(i));
     const MemoryObject *mo = op.first;
     const ObjectState *os = op.second;
@@ -6889,11 +6846,8 @@ void Executor::collectReads(
 
 void Executor::collectObjectStates(
     ExecutionState &state, const std::vector<IDType> &resolvedMemoryObjects,
-    const std::vector<Assignment> &resolveConcretizations,
     std::vector<ref<ObjectState>> &results) {
   for (unsigned int i = 0; i < resolvedMemoryObjects.size(); ++i) {
-    state.constraints.rewriteConcretization(resolveConcretizations[i]);
-
     ObjectPair op = state.addressSpace.findObject(resolvedMemoryObjects[i]);
     const ObjectState *os = op.second;
 
@@ -7121,13 +7075,11 @@ void Executor::executeMemoryOperation(
   ExecutionState *unbound = nullptr;
   if (state->isolated || MergedPointerDereference) {
     ref<Expr> guard;
-    std::vector<Assignment> resolveConcretizations;
     bool mayBeInBounds;
 
-    if (!collectConcretizations(*state, resolveConditions, unboundConditions,
-                                resolvedMemoryObjects, checkOutOfBounds,
-                                hasLazyInitialized, guard,
-                                resolveConcretizations, mayBeInBounds)) {
+    if (!makeGuard(*state, resolveConditions, unboundConditions,
+                   checkOutOfBounds, hasLazyInitialized, guard,
+                   mayBeInBounds)) {
       terminateStateOnSolverError(*state, "Query timed out (resolve)");
       return;
     }
@@ -7150,12 +7102,10 @@ void Executor::executeMemoryOperation(
     if (state) {
       std::vector<ref<Expr>> results;
       collectReads(*state, address, targetType, type, bytes,
-                   resolvedMemoryObjects, resolveConcretizations, results);
+                   resolvedMemoryObjects, results);
 
       if (isWrite) {
         for (unsigned int i = 0; i < resolvedMemoryObjects.size(); ++i) {
-          state->constraints.rewriteConcretization(resolveConcretizations[i]);
-
           ObjectPair op =
               state->addressSpace.findObject(resolvedMemoryObjects[i]);
           const MemoryObject *mo = op.first;
@@ -7383,60 +7333,6 @@ IDType Executor::lazyInitializeLocalObject(ExecutionState &state,
                                            const KInstruction *target) {
   return lazyInitializeLocalObject(state, state.stack.valueStack().back(),
                                    address, target);
-}
-
-void Executor::updateStateWithSymcretes(ExecutionState &state,
-                                        const Assignment &assignment) {
-  /* Try to update memory objects in this state with the bindings from
-   * recevied
-   * assign. We want to update only objects, whose size were changed. */
-
-  std::vector<ref<SizeSymcrete>> updatedSizeSymcretes;
-  Assignment diffAssignment =
-      state.constraints.cs().concretization().diffWith(assignment);
-
-  for (const ref<Symcrete> &symcrete : state.constraints.cs().symcretes()) {
-    for (const Array *array : symcrete->dependentArrays()) {
-      if (!diffAssignment.bindings.count(array)) {
-        continue;
-      }
-      if (ref<SizeSymcrete> sizeSymcrete = dyn_cast<SizeSymcrete>(symcrete)) {
-        updatedSizeSymcretes.push_back(sizeSymcrete);
-        break;
-      }
-    }
-  }
-
-  for (const ref<SizeSymcrete> &sizeSymcrete : updatedSizeSymcretes) {
-    uint64_t newSize =
-        cast<ConstantExpr>(assignment.evaluate(sizeSymcrete->symcretized))
-            ->getZExtValue();
-
-    MemoryObject *newMO = addressManager->allocateMemoryObject(
-        sizeSymcrete->addressSymcrete.symcretized, sizeSymcrete->symcretized);
-
-    if (!newMO || state.addressSpace.findObject(newMO).second) {
-      continue;
-    }
-
-    ObjectPair op = state.addressSpace.findObject(newMO->id);
-
-    if (!op.second) {
-      continue;
-    }
-
-    /* Create a new ObjectState with the new size and new owning memory
-     * object.
-     */
-
-    auto wos = new ObjectState(
-        *(state.addressSpace.getWriteable(op.first, op.second)));
-    maxNewWriteableOSSize =
-        std::max(maxNewWriteableOSSize, wos->getSparseStorageEntries());
-    wos->swapObjectHack(newMO);
-    state.addressSpace.unbindObject(op.first);
-    state.addressSpace.bindObject(newMO, wos);
-  }
 }
 
 uint64_t Executor::updateNameVersion(ExecutionState &state,
@@ -8046,8 +7942,6 @@ void Executor::setInitializationGraph(
     idToSymbolics[mo->id] = mo;
   }
 
-  const klee::Assignment &assn = state.constraints.cs().concretization();
-
   for (const auto &symbolic : symbolics) {
     KType *symbolicType = symbolic.type;
     if (!symbolicType->getRawType()) {
@@ -8076,7 +7970,7 @@ void Executor::setInitializationGraph(
         ref<ConstantExpr> constantAddress = cast<ConstantExpr>(addressInModel);
         IDType idResult;
 
-        if (resolveOnSymbolics(symbolics, assn, constantAddress, idResult)) {
+        if (resolveOnSymbolics(symbolics, model, constantAddress, idResult)) {
           ref<const MemoryObject> mo = idToSymbolics[idResult];
           resolvedPointers[address] =
               std::make_pair(idResult, mo->getOffsetExpr(address));
@@ -8226,14 +8120,7 @@ bool Executor::getSymbolicSolution(const ExecutionState &state, KTest &res) {
       // If the particular constraint operated on in this iteration through
       // the loop isn't implied then add it to the list of constraints.
       if (!mustBeTrue) {
-        Assignment concretization = computeConcretization(
-            extendedConstraints.cs(), pi, state.queryMetaData);
-
-        if (!concretization.isEmpty()) {
-          extendedConstraints.addConstraint(pi, concretization);
-        } else {
-          extendedConstraints.addConstraint(pi, {});
-        }
+        extendedConstraints.addConstraint(pi, {});
       }
     }
   }
@@ -8306,10 +8193,6 @@ bool Executor::getSymbolicSolution(const ExecutionState &state, KTest &res) {
   res.numObjects = symbolics.size();
   res.objects = new KTestObject[res.numObjects];
   res.uninitCoeff = uninitObjects.size() * UninitMemoryTestMultiplier;
-
-  for (auto binding : state.constraints.cs().concretization().bindings) {
-    model.bindings.insert(binding);
-  }
 
   {
     size_t i = 0;
