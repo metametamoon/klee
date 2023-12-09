@@ -50,7 +50,6 @@ public:
       bindings.insert(std::make_pair(os, arr));
     }
   }
-  Assignment(const Assignment &assignment) : bindings(assignment.bindings) {}
 
   void addIndependentAssignment(const Assignment &b);
 

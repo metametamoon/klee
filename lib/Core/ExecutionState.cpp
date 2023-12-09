@@ -182,7 +182,6 @@ ExecutionState::ExecutionState(const ExecutionState &state)
       prevHistory_(state.prevHistory_), history_(state.history_),
       isTargeted_(state.isTargeted_) {
   queryMetaData.id = state.id;
-  constraints.fork();
 }
 
 ExecutionState *ExecutionState::branch() {

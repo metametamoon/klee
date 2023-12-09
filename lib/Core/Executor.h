@@ -319,9 +319,11 @@ private:
                       const ObjectState *reallocFrom,
                       size_t allocationAlignment, bool checkOutOfMemory);
 
-  bool computeSizes(const ExecutionState &state, ref<Expr> symbolicSizesSum,
+  bool computeSizes(const ConstraintSet &constraints,
+                    ref<Expr> symbolicSizesSum,
                     std::vector<const Array *> &objects,
-                    std::vector<SparseStorage<unsigned char>> &values);
+                    std::vector<SparseStorage<unsigned char>> &values,
+                    SolverQueryMetaData &metaData);
 
   MemoryObject *allocate(ExecutionState &state, ref<Expr> size, bool isLocal,
                          bool isGlobal, const llvm::Value *allocSite,

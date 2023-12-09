@@ -71,7 +71,7 @@ void IndependentConstraintSetUnion::removeConcretization(
   }
 }
 
-void IndependentConstraintSetUnion::calculateUpdateConcretizationQueue() {
+void IndependentConstraintSetUnion::flushConcretization() {
   for (auto &e : roots) {
     ref<const IndependentConstraintSet> ics = disjointSets.at(e);
     Assignment part = updateQueue.part(ics->getSymcretes());
@@ -81,9 +81,6 @@ void IndependentConstraintSetUnion::calculateUpdateConcretizationQueue() {
   for (auto &it : updateQueue.bindings) {
     concretization.bindings.replace({it.first, it.second});
   }
-}
-
-void IndependentConstraintSetUnion::calculateRemoveConcretizationQueue() {
   for (auto &e : roots) {
     ref<const IndependentConstraintSet> ics = disjointSets.at(e);
     Assignment part = removeQueue.part(ics->getSymcretes());
@@ -93,6 +90,8 @@ void IndependentConstraintSetUnion::calculateRemoveConcretizationQueue() {
   for (auto &it : removeQueue.bindings) {
     concretization.bindings.remove(it.first);
   }
+  removeQueue.bindings = Assignment::bindings_ty();
+  updateQueue.bindings = Assignment::bindings_ty();
 }
 
 void IndependentConstraintSetUnion::reEvaluateConcretization(
@@ -112,7 +111,7 @@ void IndependentConstraintSetUnion::reEvaluateConcretization(
 
 void IndependentConstraintSetUnion::getAllIndependentConstraintSets(
     ref<Expr> e, std::vector<ref<const IndependentConstraintSet>> &result) {
-  calculateQueue();
+  flushConstraints();
   ref<const IndependentConstraintSet> compare =
       new IndependentConstraintSet(new ExprOrSymcrete::left(e));
   for (auto &r : roots) {
@@ -125,7 +124,7 @@ void IndependentConstraintSetUnion::getAllIndependentConstraintSets(
 
 void IndependentConstraintSetUnion::getAllDependentConstraintSets(
     ref<Expr> e, std::vector<ref<const IndependentConstraintSet>> &result) {
-  calculateQueue();
+  flushConstraints();
   ref<const IndependentConstraintSet> compare =
       new IndependentConstraintSet(new ExprOrSymcrete::left(e));
   for (auto &r : roots) {
@@ -146,7 +145,8 @@ void IndependentConstraintSetUnion::addSymcrete(ref<Symcrete> s) {
 
 IndependentConstraintSetUnion
 IndependentConstraintSetUnion::getConcretizedVersion() {
-  calculateQueue();
+  flushConcretization();
+  flushConstraints();
   IndependentConstraintSetUnion icsu;
   for (auto &i : roots) {
     ref<const IndependentConstraintSet> root = disjointSets.at(i);
@@ -160,34 +160,25 @@ IndependentConstraintSetUnion::getConcretizedVersion() {
     icsu.concretization.addIndependentAssignment(root->concretization);
   }
   icsu.concretizedExprs = concretizedExprs;
-  icsu.calculateQueue();
+  icsu.flushConcretization();
+  icsu.flushConstraints();
   return icsu;
 }
 
 IndependentConstraintSetUnion
 IndependentConstraintSetUnion::getConcretizedVersion(
     const Assignment &newConcretization) {
-  calculateQueue();
+  flushConcretization();
+  flushConstraints();
   IndependentConstraintSetUnion icsu = *this;
   icsu.reEvaluateConcretization(newConcretization);
-  icsu.calculateQueue();
   return icsu.getConcretizedVersion();
 }
 
-void IndependentConstraintSetUnion::calculateQueue() {
-  calculateUpdateConcretizationQueue();
-  calculateRemoveConcretizationQueue();
+void IndependentConstraintSetUnion::flushConstraints() {
   while (!constraintQueue.empty()) {
     addValue(constraintQueue[constraintQueue.size() - 1]);
     constraintQueue.pop_back();
   }
-  calculateUpdateConcretizationQueue();
-  calculateRemoveConcretizationQueue();
-  // Calculations are done twice for constraints already in dsu and for newly
-  // added constraints. Because IndependentSet update and remove concretization
-  // functions work only with difference between new and old concretization, no
-  // extra work is done
-  removeQueue.bindings = Assignment::bindings_ty();
-  updateQueue.bindings = Assignment::bindings_ty();
 }
 } // namespace klee

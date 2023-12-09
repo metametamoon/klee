@@ -346,37 +346,7 @@ IndependentConstraintSet::merge(ref<const IndependentConstraintSet> A,
   b->addValuesToAssignment(b->concretization.keys(), b->concretization.values(),
                            a->concretization);
 
-  if (!a->concretization.bindings.empty()) {
-    InnerSetUnion DSU;
-    for (ref<Expr> i : a->exprs) {
-      ref<Expr> e = a->concretization.evaluate(i);
-      if (auto ce = dyn_cast<ConstantExpr>(e)) {
-        assert(ce->isTrue() && "Attempt to add invalid constraint");
-        continue;
-      }
-      DSU.addValue(new ExprOrSymcrete::left(e));
-    }
-    for (ref<Symcrete> s : a->symcretes) {
-      ref<Expr> e = EqExpr::create(a->concretization.evaluate(s->symcretized),
-                                   s->symcretized);
-      if (auto ce = dyn_cast<ConstantExpr>(e)) {
-        assert(ce->isTrue() && "Attempt to add invalid constraint");
-        continue;
-      }
-      DSU.addValue(new ExprOrSymcrete::left(e));
-    }
-    auto concretizationConstraints =
-        a->concretization.createConstraintsFromAssignment();
-    for (ref<Expr> e : concretizationConstraints) {
-      if (auto ce = dyn_cast<ConstantExpr>(e)) {
-        assert(ce->isTrue() && "Attempt to add invalid constraint");
-        continue;
-      }
-      DSU.addValue(new ExprOrSymcrete::left(e));
-    }
-
-    a->concretizedSets = DSU;
-  }
+  a->concretizedSets.add(b->concretizedSets);
 
   return a;
 }

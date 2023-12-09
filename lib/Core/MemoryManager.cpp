@@ -73,17 +73,17 @@ llvm::cl::opt<unsigned long long> DeterministicStartAddress(
     llvm::cl::init(0x7ff30000000), llvm::cl::cat(MemoryCat));
 } // namespace
 
-llvm::cl::opt<uint64_t> MaxConstantAllocationSize(
-    "max-constant-alloc",
+llvm::cl::opt<unsigned long> MaxConstantAllocationSize(
+    "max-constant-size-alloc",
     llvm::cl::desc(
         "Maximum available size for single allocation (default 10Mb)"),
     llvm::cl::init(10ll << 20), llvm::cl::cat(MemoryCat));
 
-llvm::cl::opt<uint64_t> MaxSymbolicAllocationSize(
-    "max-sym-alloc",
+llvm::cl::opt<unsigned long> MaxSymbolicAllocationSize(
+    "max-sym-size-alloc",
     llvm::cl::desc(
         "Maximum available size for single allocation (default 10Mb)"),
-    llvm::cl::init(10ll << 20), llvm::cl::cat(MemoryCat));
+    llvm::cl::init(10ll << 10), llvm::cl::cat(MemoryCat));
 
 llvm::cl::opt<bool> UseSymbolicSizeAllocation(
     "use-sym-size-alloc",

@@ -507,8 +507,8 @@ bool allLeafsAreConstant(const ref<Expr> &expr) {
 
 } // namespace
 
-extern llvm::cl::opt<uint64_t> MaxConstantAllocationSize;
-extern llvm::cl::opt<uint64_t> MaxSymbolicAllocationSize;
+extern llvm::cl::opt<unsigned long> MaxConstantAllocationSize;
+extern llvm::cl::opt<unsigned long> MaxSymbolicAllocationSize;
 extern llvm::cl::opt<bool> UseSymbolicSizeAllocation;
 extern llvm::cl::opt<TrackCoverageBy> TrackCoverage;
 
@@ -6259,32 +6259,32 @@ void Executor::concretizeSize(ExecutionState &state, ref<Expr> size,
                  reallocFrom, allocationAlignment, checkOutOfMemory);
 }
 
-bool Executor::computeSizes(const ExecutionState &state,
+bool Executor::computeSizes(const ConstraintSet &constraints,
                             ref<Expr> symbolicSizesSum,
                             std::vector<const Array *> &objects,
-                            std::vector<SparseStorage<unsigned char>> &values) {
+                            std::vector<SparseStorage<unsigned char>> &values,
+                            SolverQueryMetaData &metaData) {
   ref<ConstantExpr> minimalSumValue;
   ref<SolverResponse> response;
 
   /* Compute assignment for symcretes. */
-  objects = state.constraints.cs().gatherSymcretizedArrays();
+  objects = constraints.gatherSymcretizedArrays();
   findObjects(symbolicSizesSum, objects);
 
   solver->setTimeout(coreSolverTimeout);
   bool success = solver->getResponse(
-      state.constraints.cs(),
+      constraints,
       UgtExpr::create(symbolicSizesSum,
                       ConstantExpr::create(SymbolicAllocationThreshold,
                                            symbolicSizesSum->getWidth())),
-      response, state.queryMetaData);
+      response, metaData);
   solver->setTimeout(time::Span());
 
   if (!response->tryGetInitialValuesFor(objects, values)) {
     /* Receive model with a smallest sum as possible. */
     solver->setTimeout(coreSolverTimeout);
-    success = solver->getMinimalUnsignedValue(state.constraints.cs(),
-                                              symbolicSizesSum, minimalSumValue,
-                                              state.queryMetaData);
+    success = solver->getMinimalUnsignedValue(constraints, symbolicSizesSum,
+                                              minimalSumValue, metaData);
     solver->setTimeout(time::Span());
     assert(success);
 
@@ -6292,13 +6292,12 @@ bool Executor::computeSizes(const ExecutionState &state,
     to optimize the number of queries we will ask it one time with assignment
     for symcretes. */
 
-    ConstraintSet minimized = state.constraints.cs();
+    ConstraintSet minimized = constraints;
     minimized.addConstraint(EqExpr::create(symbolicSizesSum, minimalSumValue),
                             {});
 
     solver->setTimeout(coreSolverTimeout);
-    success = solver->getInitialValues(minimized, objects, values,
-                                       state.queryMetaData);
+    success = solver->getInitialValues(minimized, objects, values, metaData);
     solver->setTimeout(time::Span());
   }
   return success;
@@ -8150,8 +8149,10 @@ bool Executor::getSymbolicSolution(const ExecutionState &state, KTest &res) {
   for (auto &symbolic : symbolics) {
     objects.push_back(symbolic.array);
   }
-  bool success = solver->getInitialValues(extendedConstraints.cs(), objects,
-                                          values, state.queryMetaData);
+  ref<SolverResponse> response;
+  bool success =
+      solver->getResponse(extendedConstraints.cs(), Expr::createFalse(),
+                          response, state.queryMetaData);
   solver->setTimeout(time::Span());
   if (!success) {
     klee_warning("unable to compute initial values (invalid constraints?)!");
@@ -8159,6 +8160,11 @@ bool Executor::getSymbolicSolution(const ExecutionState &state, KTest &res) {
                              ConstantExpr::alloc(0, Expr::Bool));
     return false;
   }
+  assert(isa<InvalidResponse>(response));
+  Assignment fullModel = cast<InvalidResponse>(response)->initialValues();
+  success =
+      cast<InvalidResponse>(response)->tryGetInitialValuesFor(objects, values);
+  assert(success);
 
   Assignment model = Assignment(objects, values);
 
@@ -8167,7 +8173,7 @@ bool Executor::getSymbolicSolution(const ExecutionState &state, KTest &res) {
   std::vector<ref<Expr>> symbolicSizesTerms;
 
   /* Collect all size symcretes. */
-  for (ref<Symcrete> symcrete : state.constraints.cs().symcretes()) {
+  for (ref<Symcrete> symcrete : extendedConstraints.cs().symcretes()) {
     if (isa<SizeSymcrete>(symcrete)) {
       symbolicSizesTerms.push_back(
           ZExtExpr::create(symcrete->symcretized, pointerWidthInBits));
@@ -8180,12 +8186,14 @@ bool Executor::getSymbolicSolution(const ExecutionState &state, KTest &res) {
 
     std::vector<const Array *> symcreteObjects;
     std::vector<SparseStorage<unsigned char>> symcreteValues;
-    bool success = computeSizes(state, symbolicSizesSum, objects, values);
+    bool success = computeSizes(extendedConstraints.cs(), symbolicSizesSum,
+                                objects, values, state.queryMetaData);
     if (success) {
       Assignment symcreteModel = Assignment(symcreteObjects, symcreteValues);
 
       for (auto &i : model.diffWith(symcreteModel).bindings) {
         model.bindings.replace({i.first, i.second});
+        fullModel.bindings.replace({i.first, i.second});
       }
     }
   }
@@ -8201,10 +8209,10 @@ bool Executor::getSymbolicSolution(const ExecutionState &state, KTest &res) {
       auto mo = symbolic.memoryObject;
       KTestObject *o = &res.objects[i];
       o->name = const_cast<char *>(mo->name.c_str());
-      o->address =
-          cast<ConstantExpr>(model.evaluate(mo->getBaseExpr()))->getZExtValue();
-      o->numBytes =
-          cast<ConstantExpr>(model.evaluate(mo->getSizeExpr()))->getZExtValue();
+      o->address = cast<ConstantExpr>(fullModel.evaluate(mo->getBaseExpr()))
+                       ->getZExtValue();
+      o->numBytes = cast<ConstantExpr>(fullModel.evaluate(mo->getSizeExpr()))
+                        ->getZExtValue();
       ;
       o->bytes = new unsigned char[o->numBytes];
       for (size_t j = 0; j < o->numBytes; j++) {
@@ -8216,7 +8224,7 @@ bool Executor::getSymbolicSolution(const ExecutionState &state, KTest &res) {
     }
   }
 
-  setInitializationGraph(state, symbolics, model, res);
+  setInitializationGraph(state, symbolics, fullModel, res);
 
   return true;
 }

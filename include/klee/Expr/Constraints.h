@@ -34,6 +34,16 @@ struct KInstruction;
 /// Resembles a set of constraints that can be passed around
 ///
 class ConstraintSet {
+private:
+  /// Epoch counter used to control ownership of objects.
+  mutable unsigned cowKey;
+
+  constraints_ty _constraints;
+  symcretes_ty _symcretes;
+  mutable std::shared_ptr<Assignment> _concretization;
+  std::shared_ptr<IndependentConstraintSetUnion> _independentElements;
+  unsigned copyOnWriteOwner;
+
 public:
   ConstraintSet(constraints_ty cs, symcretes_ty symcretes,
                 Assignment concretization);
@@ -43,8 +53,22 @@ public:
       const ExprHashMap<ref<Expr>> &concretizedExprs);
   explicit ConstraintSet(constraints_ty cs);
   explicit ConstraintSet();
-  void fork();
+  ConstraintSet(const ConstraintSet &b)
+      : cowKey(++b.cowKey), _constraints(b._constraints),
+        _symcretes(b._symcretes), _concretization(b._concretization),
+        _independentElements(b._independentElements),
+        copyOnWriteOwner(b.copyOnWriteOwner) {}
+  ConstraintSet &operator=(const ConstraintSet &b) {
+    cowKey = ++b.cowKey;
+    _constraints = b._constraints;
+    _symcretes = b._symcretes;
+    _concretization = b._concretization;
+    _independentElements = b._independentElements;
+    copyOnWriteOwner = b.copyOnWriteOwner;
+    return *this;
+  }
 
+  void checkCopyOnWriteOwner();
   void addConstraint(ref<Expr> e, const Assignment &delta);
   void addSymcrete(ref<Symcrete> s, const Assignment &concretization);
   bool isSymcretized(ref<Expr> expr) const;
@@ -86,12 +110,6 @@ public:
   void getAllDependentConstraintsSets(
       ref<Expr> queryExpr,
       std::vector<ref<const IndependentConstraintSet>> &result) const;
-
-private:
-  constraints_ty _constraints;
-  symcretes_ty _symcretes;
-  mutable std::shared_ptr<Assignment> _concretization;
-  std::shared_ptr<IndependentConstraintSetUnion> _independentElements;
 };
 
 class PathConstraints {
@@ -103,7 +121,6 @@ public:
   void advancePath(KInstruction *prevPC, KInstruction *pc);
   void retractPath();
   void advancePath(const Path &path);
-  void fork();
 
   ExprHashSet addConstraint(ref<Expr> e, const Assignment &delta,
                             Path::PathIndex currIndex);
