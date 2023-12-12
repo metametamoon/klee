@@ -193,19 +193,25 @@ bool IndependentSolver::computeInitialValues(
     it->calculateArrayReferences(arraysInFactor);
     // Going to use this as the "fresh" expression for the Query() invocation
     // below
-    assert(it->exprs.size() >= 1 && "No null/empty factors");
-    if (arraysInFactor.size() == 0) {
-      continue;
-    }
     ConstraintSet tmp(it);
     std::vector<SparseStorage<unsigned char>> tempValues;
-    if (!solver->impl->computeInitialValues(
-            Query(tmp, Expr::createFalse(), query.id), arraysInFactor,
-            tempValues, hasSolution)) {
-      values.clear();
+    if (arraysInFactor.size() == 0) {
+      continue;
+    } else if (it->exprs.size() == 0) {
+      ref<SolverResponse> tempResult = new InvalidResponse();
+      bool success =
+          tempResult->tryGetInitialValuesFor(arraysInFactor, tempValues);
+      assert(success && "Can not get initial values (Independent solver)!");
+    } else {
+      if (!solver->impl->computeInitialValues(
+              Query(tmp, Expr::createFalse(), query.id), arraysInFactor,
+              tempValues, hasSolution)) {
+        values.clear();
+        return false;
+      }
+    }
 
-      return false;
-    } else if (!hasSolution) {
+    if (!hasSolution) {
       values.clear();
 
       return true;
@@ -291,17 +297,21 @@ bool IndependentSolver::check(const Query &query, ref<SolverResponse> &result) {
     it->calculateArrayReferences(arraysInFactor);
     // Going to use this as the "fresh" expression for the Query() invocation
     // below
-    assert(it->exprs.size() >= 1 && "No null/empty factors");
-    if (arraysInFactor.size() == 0) {
-      continue;
-    }
     ref<SolverResponse> tempResult;
     std::vector<SparseStorage<unsigned char>> tempValues;
-    if (!solver->impl->check(
-            Query(ConstraintSet(it), Expr::createFalse(), query.id),
-            tempResult)) {
-      return false;
-    } else if (isa<ValidResponse>(tempResult)) {
+    if (arraysInFactor.size() == 0) {
+      continue;
+    } else if (it->exprs.size() == 0) {
+      tempResult = new InvalidResponse();
+    } else {
+      if (!solver->impl->check(
+              Query(ConstraintSet(it), Expr::createFalse(), query.id),
+              tempResult)) {
+        return false;
+      }
+    }
+
+    if (isa<ValidResponse>(tempResult)) {
       result = tempResult;
       return true;
     } else {

@@ -5966,7 +5966,7 @@ void Executor::executeAlloc(ExecutionState &state, ref<Expr> size, bool isLocal,
   }
 
   ref<Expr> upperBoundSizeConstraint = Expr::createTrue();
-  if (!isa<ConstantExpr>(size)) {
+  if (!isa<ConstantExpr>(size) && MaxSymbolicAllocationSize) {
     upperBoundSizeConstraint = UleExpr::create(
         ZExtExpr::create(size, Context::get().getPointerWidth()),
         Expr::createPointer(MaxSymbolicAllocationSize));
@@ -7245,13 +7245,18 @@ bool Executor::lazyInitializeObject(ExecutionState &state, ref<Expr> address,
   }
 
   ref<Expr> sizeExpr;
-  if (!isa<ConstantExpr>(size) && concreteSize < MaxSymbolicAllocationSize &&
+  if (!isa<ConstantExpr>(size) &&
+      (!MaxSymbolicAllocationSize ||
+       concreteSize < MaxSymbolicAllocationSize) &&
       isSymbolic) {
     sizeExpr = size;
     ref<Expr> lowerBound =
         UgeExpr::create(sizeExpr, Expr::createPointer(concreteSize));
-    ref<Expr> upperBound = UleExpr::create(
-        sizeExpr, Expr::createPointer(MaxSymbolicAllocationSize));
+    ref<Expr> upperBound = Expr::createTrue();
+    if (MaxSymbolicAllocationSize) {
+      upperBound = UleExpr::create(
+          sizeExpr, Expr::createPointer(MaxSymbolicAllocationSize));
+    }
     bool mayBeInBounds;
     solver->setTimeout(coreSolverTimeout);
     bool success =
@@ -8186,8 +8191,9 @@ bool Executor::getSymbolicSolution(const ExecutionState &state, KTest &res) {
 
     std::vector<const Array *> symcreteObjects;
     std::vector<SparseStorage<unsigned char>> symcreteValues;
-    bool success = computeSizes(extendedConstraints.cs(), symbolicSizesSum,
-                                objects, values, state.queryMetaData);
+    bool success =
+        computeSizes(extendedConstraints.cs(), symbolicSizesSum,
+                     symcreteObjects, symcreteValues, state.queryMetaData);
     if (success) {
       Assignment symcreteModel = Assignment(symcreteObjects, symcreteValues);
 
