@@ -231,31 +231,18 @@ void ConstraintSet::checkCopyOnWriteOwner() {
   }
 }
 
-void ConstraintSet::addConstraint(ref<Expr> e, const Assignment &delta) {
+void ConstraintSet::addConstraint(ref<Expr> e) {
   checkCopyOnWriteOwner();
   _constraints.insert(e);
-  // Update bindings
-  for (auto &i : delta.bindings) {
-    _concretization->bindings.replace({i.first, i.second});
-  }
-  _independentElements->updateConcretization(delta);
   _independentElements->addExpr(e);
 }
 
 IDType Symcrete::idCounter = 0;
 
-void ConstraintSet::addSymcrete(ref<Symcrete> s,
-                                const Assignment &concretization) {
+void ConstraintSet::addSymcrete(ref<Symcrete> s) {
   checkCopyOnWriteOwner();
   _symcretes.insert(s);
   _independentElements->addSymcrete(s);
-  Assignment dependentConcretization;
-  for (auto i : s->dependentArrays()) {
-    _concretization->bindings.replace({i, concretization.bindings.at(i)});
-    dependentConcretization.bindings.replace(
-        {i, concretization.bindings.at(i)});
-  }
-  _independentElements->updateConcretization(dependentConcretization);
 }
 
 bool ConstraintSet::isSymcretized(ref<Expr> expr) const {
@@ -359,7 +346,7 @@ PathConstraints::withAssumtions(const ExprHashSet &assumptions) const {
   }
   tmpConstraints = constraints;
   for (auto assump : assumptions) {
-    tmpConstraints.addConstraint(assump, {});
+    tmpConstraints.addConstraint(assump);
   }
   return tmpConstraints;
 }
@@ -379,7 +366,7 @@ void PathConstraints::advancePath(const Path &path) {
   _path = Path::concat(_path, path);
 }
 
-ExprHashSet PathConstraints::addConstraint(ref<Expr> e, const Assignment &delta,
+ExprHashSet PathConstraints::addConstraint(ref<Expr> e,
                                            Path::PathIndex currIndex) {
   auto expr = Simplificator::simplifyExpr(constraints, e);
   if (auto ce = dyn_cast<ConstantExpr>(expr.simplified)) {
@@ -398,7 +385,7 @@ ExprHashSet PathConstraints::addConstraint(ref<Expr> e, const Assignment &delta,
       pathIndexes.insert({expr, currIndex});
       _simplificationMap[expr].insert(expr);
       orderedConstraints[currIndex].push_back(expr);
-      constraints.addConstraint(expr, delta);
+      constraints.addConstraint(expr);
     }
   }
 
@@ -416,18 +403,16 @@ ExprHashSet PathConstraints::addConstraint(ref<Expr> e, const Assignment &delta,
   return added;
 }
 
-ExprHashSet PathConstraints::addConstraint(ref<Expr> e,
-                                           const Assignment &delta) {
-  return addConstraint(e, delta, _path.getCurrentIndex());
+ExprHashSet PathConstraints::addConstraint(ref<Expr> e) {
+  return addConstraint(e, _path.getCurrentIndex());
 }
 
 bool PathConstraints::isSymcretized(ref<Expr> expr) const {
   return constraints.isSymcretized(expr);
 }
 
-void PathConstraints::addSymcrete(ref<Symcrete> s,
-                                  const Assignment &concretization) {
-  constraints.addSymcrete(s, concretization);
+void PathConstraints::addSymcrete(ref<Symcrete> s) {
+  constraints.addSymcrete(s);
 }
 
 void PathConstraints::rewriteConcretization(const Assignment &a) {

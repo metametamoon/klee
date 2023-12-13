@@ -170,7 +170,7 @@ void AssignmentValidatingSolver::dumpAssignmentQuery(
 
   // Add Constraints from `query`
   for (const auto &constraint : query.constraints.cs())
-    constraints.addConstraint(constraint, {});
+    constraints.addConstraint(constraint);
 
   Query augmentedQuery = query.withConstraints(constraints);
 

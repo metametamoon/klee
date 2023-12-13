@@ -66,7 +66,7 @@ KTestObject *SeedInfo::getNextInput(const MemoryObject *mo, bool byName) {
 void SeedInfo::patchSeed(const ExecutionState &state, ref<Expr> condition,
                          TimingSolver *solver) {
   ConstraintSet required = state.constraints.cs();
-  required.addConstraint(condition, {});
+  required.addConstraint(condition);
 
   // Try and patch direct reads first, this is likely to resolve the
   // problem quickly and avoids long traversal of all seed
@@ -114,12 +114,10 @@ void SeedInfo::patchSeed(const ExecutionState &state, ref<Expr> condition,
         auto s = it2->second;
         s.store(i, value->getZExtValue(8));
         assignment.bindings.replace({it2->first, s});
-        required.addConstraint(
-            EqExpr::create(
-                read, ConstantExpr::alloc(it2->second.load(i), Expr::Int8)),
-            {});
+        required.addConstraint(EqExpr::create(
+            read, ConstantExpr::alloc(it2->second.load(i), Expr::Int8)));
       } else {
-        required.addConstraint(isSeed, {});
+        required.addConstraint(isSeed);
       }
     }
   }
@@ -160,12 +158,10 @@ void SeedInfo::patchSeed(const ExecutionState &state, ref<Expr> condition,
         auto s = it->second;
         s.store(i, value->getZExtValue(8));
         assignment.bindings.replace({it->first, s});
-        required.addConstraint(
-            EqExpr::create(read,
-                           ConstantExpr::alloc(it->second.load(i), Expr::Int8)),
-            {});
+        required.addConstraint(EqExpr::create(
+            read, ConstantExpr::alloc(it->second.load(i), Expr::Int8)));
       } else {
-        required.addConstraint(isSeed, {});
+        required.addConstraint(isSeed);
       }
     }
   }

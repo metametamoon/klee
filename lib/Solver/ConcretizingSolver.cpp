@@ -303,7 +303,7 @@ bool ConcretizingSolver::relaxSymcreteConstraints(const Query &query,
       constructConcretizedQuery(query.negateExpr(), assignment);
 
   ConstraintSet queryConstraints = concretizedNegatedQuery.constraints;
-  queryConstraints.addConstraint(concretizedNegatedQuery.expr, {});
+  queryConstraints.addConstraint(concretizedNegatedQuery.expr);
 
   ExprHashMap<ref<Expr>> concretizations;
   ExprHashMap<ref<Expr>> concretizationsMod;

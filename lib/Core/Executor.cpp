@@ -1596,7 +1596,7 @@ void Executor::addConstraint(ExecutionState &state, ref<Expr> condition) {
       klee_warning("seeds patched for violating constraint");
   }
 
-  state.addConstraint(condition, {});
+  state.addConstraint(condition);
 
   if (ivcEnabled)
     doImpliedValueConcretization(state, condition,
@@ -4629,37 +4629,6 @@ ref<Expr> Executor::fillSizeAddressSymcretes(ExecutionState &state,
     sizeSymcrete->addDependentSymcrete(addressSymcrete);
     addressSymcrete->addDependentSymcrete(sizeSymcrete);
 
-    Expr::Width pointerWidthInBits = Context::get().getPointerWidth();
-
-    std::vector<ref<Expr>> symbolicSizesTerms = {
-        ZExtExpr::create(size, pointerWidthInBits)};
-
-    /* Collect all size symcretes. */
-    for (ref<Symcrete> symcrete : state.constraints.cs().symcretes()) {
-      if (isa<SizeSymcrete>(symcrete)) {
-        symbolicSizesTerms.push_back(
-            ZExtExpr::create(symcrete->symcretized, pointerWidthInBits));
-      }
-    }
-
-    ref<Expr> symbolicSizesSum =
-        createNonOverflowingSumExpr(symbolicSizesTerms);
-
-    std::vector<const Array *> objects;
-    std::vector<SparseStorage<unsigned char>> values;
-    objects = state.constraints.cs().gatherSymcretizedArrays();
-    findObjects(symbolicSizesSum, objects);
-
-    solver->setTimeout(coreSolverTimeout);
-    bool success = solver->getInitialValues(state.constraints.cs(), objects,
-                                            values, state.queryMetaData);
-    solver->setTimeout(time::Span());
-    assert(success);
-
-    Assignment assignment(objects, values);
-    ref<ConstantExpr> sizeExpr = cast<ConstantExpr>(assignment.evaluate(size));
-    uint64_t sizeMemoryObject = sizeExpr->getZExtValue();
-
     if (addressManager->isAllocated(newAddress)) {
       mo = addressManager->allocateMemoryObject(newAddress, size);
     } else {
@@ -4671,12 +4640,9 @@ ref<Expr> Executor::fillSizeAddressSymcretes(ExecutionState &state,
       addressManager->addAllocation(newAddress, mo->id);
     }
     assert(addressSymcrete->dependentArrays().size() == 1);
-    assignment.bindings.replace(
-        {addressSymcrete->dependentArrays().back(), sparseBytesFromValue(1)});
 
-    state.constraints.addSymcrete(sizeSymcrete, assignment);
-    state.constraints.addSymcrete(addressSymcrete, assignment);
-    state.constraints.rewriteConcretization(assignment);
+    state.constraints.addSymcrete(sizeSymcrete);
+    state.constraints.addSymcrete(addressSymcrete);
   }
   return mo->getBaseExpr();
 }
@@ -4758,8 +4724,7 @@ Executor::compose(const ExecutionState &state, const PathConstraints &pob,
         return result;
       }
 
-      auto added =
-          composer.state.constraints.addConstraint(condition, {}, index);
+      auto added = composer.state.constraints.addConstraint(condition, index);
       for (auto expr : added) {
         rebuildMap.insert({expr, constraint});
       }
@@ -6293,8 +6258,7 @@ bool Executor::computeSizes(const ConstraintSet &constraints,
     for symcretes. */
 
     ConstraintSet minimized = constraints;
-    minimized.addConstraint(EqExpr::create(symbolicSizesSum, minimalSumValue),
-                            {});
+    minimized.addConstraint(EqExpr::create(symbolicSizesSum, minimalSumValue));
 
     solver->setTimeout(coreSolverTimeout);
     success = solver->getInitialValues(minimized, objects, values, metaData);
@@ -6358,45 +6322,6 @@ MemoryObject *Executor::allocate(ExecutionState &state, ref<Expr> size,
   sizeSymcrete->addDependentSymcrete(addressSymcrete);
   addressSymcrete->addDependentSymcrete(sizeSymcrete);
 
-  /* In order to minimize memory consumption, we will try to
-  optimize entire sum of symbolic sizes. Hence, compute the sum
-  (maybe we can memoize the sum to prevent summing) every time
-  we meet new symbolic allocation and query the solver for the model. */
-  std::vector<ref<Expr>> symbolicSizesTerms = {
-      ZExtExpr::create(size, pointerWidthInBits)};
-
-  std::vector<ref<const IndependentConstraintSet>> factors;
-  state.toQuery(ZExtExpr::create(size, pointerWidthInBits))
-      .getAllDependentConstraintsSets(factors);
-
-  /* Collect dependent size symcretes. */
-  for (ref<const IndependentConstraintSet> ics : factors) {
-    for (ref<Symcrete> symcrete : ics->symcretes) {
-      if (isa<SizeSymcrete>(symcrete)) {
-        symbolicSizesTerms.push_back(
-            ZExtExpr::create(symcrete->symcretized, pointerWidthInBits));
-      }
-    }
-  }
-  ref<Expr> symbolicSizesSum = createNonOverflowingSumExpr(symbolicSizesTerms);
-
-  std::vector<const Array *> objects;
-  std::vector<SparseStorage<unsigned char>> values;
-  objects = state.constraints.cs().gatherSymcretizedArrays();
-  findObjects(symbolicSizesSum, objects);
-
-  solver->setTimeout(coreSolverTimeout);
-  bool success = solver->getInitialValues(state.constraints.cs(), objects,
-                                          values, state.queryMetaData);
-  solver->setTimeout(time::Span());
-
-  if (!success) {
-    return nullptr;
-  }
-
-  Assignment assignment(objects, values);
-  ref<ConstantExpr> sizeExpr = cast<ConstantExpr>(assignment.evaluate(size));
-  auto sizeMemoryObject = sizeExpr->getZExtValue();
   MemoryObject *mo = nullptr;
 
   if (addressManager->isAllocated(addressExpr)) {
@@ -6422,11 +6347,8 @@ MemoryObject *Executor::allocate(ExecutionState &state, ref<Expr> size,
     state.addPointerResolution(addressExpr, mo);
   }
 
-  assignment.bindings.replace({addressArray, sparseBytesFromValue(1)});
-
-  state.constraints.addSymcrete(sizeSymcrete, assignment);
-  state.constraints.addSymcrete(addressSymcrete, assignment);
-  state.constraints.rewriteConcretization(assignment);
+  state.constraints.addSymcrete(sizeSymcrete);
+  state.constraints.addSymcrete(addressSymcrete);
   return mo;
 }
 
@@ -7323,9 +7245,9 @@ IDType Executor::lazyInitializeLocalObject(ExecutionState &state,
   auto op = state.addressSpace.findObject(id);
   assert(op.first);
   state.addPointerResolution(address, op.first);
-  state.addConstraint(EqExpr::create(address, op.first->getBaseExpr()), {});
+  state.addConstraint(EqExpr::create(address, op.first->getBaseExpr()));
   state.addConstraint(
-      Expr::createIsZero(EqExpr::create(address, Expr::createPointer(0))), {});
+      Expr::createIsZero(EqExpr::create(address, Expr::createPointer(0))));
   if (isa<ConstantExpr>(size)) {
     addConstraint(state, EqExpr::create(size, op.first->getSizeExpr()));
   }
@@ -8124,7 +8046,7 @@ bool Executor::getSymbolicSolution(const ExecutionState &state, KTest &res) {
       // If the particular constraint operated on in this iteration through
       // the loop isn't implied then add it to the list of constraints.
       if (!mustBeTrue) {
-        extendedConstraints.addConstraint(pi, {});
+        extendedConstraints.addConstraint(pi);
       }
     }
   }

@@ -44,6 +44,8 @@ private:
   std::shared_ptr<IndependentConstraintSetUnion> _independentElements;
   unsigned copyOnWriteOwner;
 
+  void checkCopyOnWriteOwner();
+
 public:
   ConstraintSet(constraints_ty cs, symcretes_ty symcretes,
                 Assignment concretization);
@@ -68,15 +70,14 @@ public:
     return *this;
   }
 
-  void checkCopyOnWriteOwner();
-  void addConstraint(ref<Expr> e, const Assignment &delta);
-  void addSymcrete(ref<Symcrete> s, const Assignment &concretization);
+  void addConstraint(ref<Expr> e);
+  void addSymcrete(ref<Symcrete> s);
   bool isSymcretized(ref<Expr> expr) const;
 
   void rewriteConcretization(const Assignment &a) const;
   ConstraintSet withExpr(ref<Expr> e) const {
     ConstraintSet copy = ConstraintSet(*this);
-    copy.addConstraint(e, Assignment());
+    copy.addConstraint(e);
     return copy;
   }
 
@@ -122,11 +123,10 @@ public:
   void retractPath();
   void advancePath(const Path &path);
 
-  ExprHashSet addConstraint(ref<Expr> e, const Assignment &delta,
-                            Path::PathIndex currIndex);
-  ExprHashSet addConstraint(ref<Expr> e, const Assignment &delta);
+  ExprHashSet addConstraint(ref<Expr> e, Path::PathIndex currIndex);
+  ExprHashSet addConstraint(ref<Expr> e);
   bool isSymcretized(ref<Expr> expr) const;
-  void addSymcrete(ref<Symcrete> s, const Assignment &concretization);
+  void addSymcrete(ref<Symcrete> s);
   void rewriteConcretization(const Assignment &a);
 
   const constraints_ty &original() const;

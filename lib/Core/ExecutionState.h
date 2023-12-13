@@ -426,7 +426,7 @@ public:
   void addUniquePointerResolution(ref<Expr> address, const MemoryObject *mo,
                                   unsigned size = 0);
 
-  void addConstraint(ref<Expr> e, const Assignment &c);
+  void addConstraint(ref<Expr> e);
   void addCexPreference(const ref<Expr> &cond);
 
   Query toQuery(ref<Expr> head) const;

@@ -423,8 +423,8 @@ void ExecutionState::dumpStack(llvm::raw_ostream &out) const {
   }
 }
 
-void ExecutionState::addConstraint(ref<Expr> e, const Assignment &delta) {
-  constraints.addConstraint(e, delta);
+void ExecutionState::addConstraint(ref<Expr> e) {
+  constraints.addConstraint(e);
 }
 
 void ExecutionState::addCexPreference(const ref<Expr> &cond) {
