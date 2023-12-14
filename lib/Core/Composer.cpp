@@ -58,10 +58,6 @@ bool ComposeHelper::tryResolveAddress(ExecutionState &state, ref<Expr> address,
 
   result.first = guard;
   if (resolvedMemoryObjects.size() > 0) {
-    Assignment concretization = computeConcretization(
-        state.constraints.withAssumtions(state.assumptions), guard,
-        state.queryMetaData);
-
     state.assumptions.insert(guard);
     ref<Expr> resultAddress =
         state.addressSpace
@@ -98,10 +94,6 @@ bool ComposeHelper::tryResolveSize(ExecutionState &state, ref<Expr> address,
 
   result.first = guard;
   if (resolvedMemoryObjects.size() > 0) {
-    Assignment concretization = computeConcretization(
-        state.constraints.withAssumtions(state.assumptions), guard,
-        state.queryMetaData);
-
     state.assumptions.insert(guard);
     ref<Expr> resultSize =
         state.addressSpace
@@ -167,10 +159,6 @@ bool ComposeHelper::tryResolveContent(
   result.first = guard;
 
   if (resolvedObjectStates.size() > 0) {
-    Assignment concretization = computeConcretization(
-        state.constraints.withAssumtions(state.assumptions), guard,
-        state.queryMetaData);
-
     state.assumptions.insert(guard);
   }
 

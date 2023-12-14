@@ -87,13 +87,6 @@ public:
                                mayBeInBounds);
   }
 
-  Assignment computeConcretization(const ConstraintSet &constraints,
-                                   ref<Expr> condition,
-                                   SolverQueryMetaData &queryMetaData) {
-    return executor->computeConcretization(constraints, condition,
-                                           queryMetaData);
-  }
-
   bool collectMemoryObjects(ExecutionState &state, ref<Expr> address,
                             KType *targetType, KInstruction *target,
                             ref<Expr> &guard,

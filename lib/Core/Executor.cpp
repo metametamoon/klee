@@ -7935,24 +7935,6 @@ void Executor::setInitializationGraph(
   return;
 }
 
-Assignment Executor::computeConcretization(const ConstraintSet &constraints,
-                                           ref<Expr> condition,
-                                           SolverQueryMetaData &queryMetaData) {
-  Assignment concretization;
-  if (Query(constraints, condition, queryMetaData.id).containsSymcretes()) {
-    ref<SolverResponse> response;
-    solver->setTimeout(coreSolverTimeout);
-    bool success = solver->getResponse(
-        constraints, Expr::createIsZero(condition), response, queryMetaData);
-    solver->setTimeout(time::Span());
-    assert(success);
-    assert(isa<InvalidResponse>(response));
-    concretization = cast<InvalidResponse>(response)->initialValuesFor(
-        constraints.gatherSymcretizedArrays());
-  }
-  return concretization;
-}
-
 bool isReproducible(const klee::Symbolic &symb) {
   auto arr = symb.array;
   bool bad = IrreproducibleSource::classof(arr->source.get());
