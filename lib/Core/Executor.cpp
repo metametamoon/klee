@@ -9,7 +9,6 @@
 
 #include "Executor.h"
 
-#include "AddressManager.h"
 #include "AddressSpace.h"
 #include "CXXTypeSystem/CXXTypeManager.h"
 #include "Composer.h"
@@ -578,9 +577,6 @@ Executor::Executor(LLVMContext &ctx, const InterpreterOptions &opts,
   }
 
   memory = std::make_unique<MemoryManager>(&arrayCache);
-  addressManager.reset(
-      new AddressManager(memory.get(), MaxSymbolicAllocationSize));
-  memory->am = addressManager.get();
 
   std::unique_ptr<Solver> solver = constructSolverChain(
       std::move(coreSolver),
@@ -4611,9 +4607,8 @@ ref<Expr> Executor::fillSizeAddressSymcretes(ExecutionState &state,
       dyn_cast<ConstantExpr>(optimizer.optimizeExpr(uniqueSize, true));
 
   MemoryObject *mo = nullptr;
-  assert(addressManager->isAllocated(oldAddress));
-  MemoryObject *oldMO =
-      addressManager->allocateMemoryObject(oldAddress, oldSize);
+  const MemoryObject *oldMO = memory->getAllocatedObject(oldAddress);
+  assert(oldMO);
 
   /* Constant solution exists. Just return it. */
   if (arrayConstantSize) {
@@ -4629,36 +4624,17 @@ ref<Expr> Executor::fillSizeAddressSymcretes(ExecutionState &state,
     sizeSymcrete->addDependentSymcrete(addressSymcrete);
     addressSymcrete->addDependentSymcrete(sizeSymcrete);
 
-    if (addressManager->isAllocated(newAddress)) {
-      mo = addressManager->allocateMemoryObject(newAddress, size);
-    } else {
-      mo = memory->allocate(size, oldMO->isLocal, oldMO->isGlobal,
-                            oldMO->isLazyInitialized, oldMO->allocSite,
-                            oldMO->alignment, newAddress, oldMO->timestamp);
+    mo = memory->allocate(size, oldMO->isLocal, oldMO->isGlobal,
+                          oldMO->isLazyInitialized, oldMO->allocSite,
+                          oldMO->alignment, newAddress, oldMO->timestamp);
 
-      assert(mo);
-      addressManager->addAllocation(newAddress, mo->id);
-    }
+    assert(mo);
     assert(addressSymcrete->dependentArrays().size() == 1);
 
     state.constraints.addSymcrete(sizeSymcrete);
     state.constraints.addSymcrete(addressSymcrete);
   }
   return mo->getBaseExpr();
-}
-
-std::pair<ref<Expr>, ref<Expr>>
-Executor::getSymbolicSizeConstantSizeAddressPair(
-    ExecutionState &state,
-    ref<SymbolicSizeConstantAddressSource> symbolicSizeConstantAddressSource,
-    ref<Expr> size, Expr::Width width) {
-  const Array *array = makeArray(size, symbolicSizeConstantAddressSource);
-  ref<Expr> address = Expr::createTempRead(array, width);
-  assert(addressManager->isAllocated(address));
-  addressManager->allocate(address, symbolicSizeConstantAddressSource->size);
-  MemoryObject *mo = addressManager->allocateMemoryObject(
-      address, symbolicSizeConstantAddressSource->size);
-  return std::make_pair(address, mo->getSizeExpr());
 }
 
 Executor::ComposeResult
@@ -6322,22 +6298,10 @@ MemoryObject *Executor::allocate(ExecutionState &state, ref<Expr> size,
   sizeSymcrete->addDependentSymcrete(addressSymcrete);
   addressSymcrete->addDependentSymcrete(sizeSymcrete);
 
-  MemoryObject *mo = nullptr;
-
-  if (addressManager->isAllocated(addressExpr)) {
-    addressManager->allocate(addressExpr, size);
-    mo = addressManager->allocateMemoryObject(addressExpr, size);
-  } else {
-
-    /* Allocate corresponding memory object. */
-    mo = memory->allocate(size, isLocal, isGlobal,
-                          !lazyInitializationSource.isNull(), allocSite,
-                          allocationAlignment, addressExpr, timestamp);
-
-    if (mo) {
-      addressManager->addAllocation(addressExpr, mo->id);
-    }
-  }
+  /* Allocate corresponding memory object. */
+  MemoryObject *mo = memory->allocate(
+      size, isLocal, isGlobal, !lazyInitializationSource.isNull(), allocSite,
+      allocationAlignment, addressExpr, timestamp);
 
   if (!mo) {
     return nullptr;
@@ -7159,7 +7123,6 @@ bool Executor::lazyInitializeObject(ExecutionState &state, ref<Expr> address,
                                     ref<Expr> size, bool isLocal, IDType &id,
                                     bool isSymbolic) {
   assert(!isa<ConstantExpr>(address));
-  const llvm::Value *allocSite = target ? target->inst : nullptr;
   std::pair<ref<const MemoryObject>, ref<Expr>> moBasePair;
   unsigned timestamp = 0;
   if (state.getBase(address, moBasePair)) {
@@ -7199,7 +7162,7 @@ bool Executor::lazyInitializeObject(ExecutionState &state, ref<Expr> address,
   ref<Expr> addressExpr = isSymbolic ? address : nullptr;
   MemoryObject *mo =
       allocate(state, sizeExpr, isLocal,
-               /*isGlobal=*/false, allocSite,
+               /*isGlobal=*/false, nullptr,
                /*allocationAlignment=*/8, addressExpr, timestamp);
   if (!mo) {
     return false;

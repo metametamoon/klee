@@ -8,7 +8,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "MemoryManager.h"
-#include "AddressManager.h"
 
 #include "CoreStats.h"
 #include "ExecutionState.h"
@@ -133,10 +132,10 @@ MemoryManager::~MemoryManager() {
 }
 
 MemoryObject *MemoryManager::allocate(ref<Expr> size, bool isLocal,
-                                      bool isGlobal, bool isLazyInitialiazed,
+                                      bool isGlobal, bool isLazyInitialized,
                                       const llvm::Value *allocSite,
                                       size_t alignment, ref<Expr> addressExpr,
-                                      unsigned timestamp, IDType id) {
+                                      unsigned timestamp) {
   if (ref<ConstantExpr> sizeExpr = dyn_cast<ConstantExpr>(size)) {
     auto moSize = sizeExpr->getZExtValue();
     if (moSize > MaxConstantAllocationSize) {
@@ -196,14 +195,24 @@ MemoryObject *MemoryManager::allocate(ref<Expr> size, bool isLocal,
     addressExpr = Expr::createPointer(address);
   }
 
-  ++stats::allocations;
-  MemoryObject *res =
-      new MemoryObject(addressExpr, size, alignment, isLocal, isGlobal, false,
-                       isLazyInitialiazed, allocSite, this, timestamp);
-  if (id) {
-    res->id = id;
+  MemoryObject *res = nullptr;
+
+  if (auto symMO = symbolicAddresses.find(addressExpr);
+      symMO != symbolicAddresses.end()) {
+    res = symMO->second;
+    assert(size == res->getSizeExpr() && isLocal == res->isLocal &&
+           isGlobal == res->isGlobal &&
+           isLazyInitialized == res->isLazyInitialized &&
+           allocSite == res->allocSite);
+  } else {
+    ++stats::allocations;
+    res =
+        new MemoryObject(addressExpr, size, alignment, isLocal, isGlobal, false,
+                         isLazyInitialized, allocSite, this, timestamp);
+    if (!isa<ConstantExpr>(addressExpr)) {
+      symbolicAddresses[addressExpr] = res;
+    }
   }
-  allocatedSizes[res->id][size] = res;
 
   objects.insert(res);
   return res;
@@ -241,10 +250,7 @@ void MemoryManager::deallocate(const MemoryObject *mo) { assert(0); }
 
 void MemoryManager::markFreed(MemoryObject *mo) {
   if (objects.find(mo) != objects.end()) {
-    allocatedSizes[mo->id].erase(mo->getSizeExpr());
-    if (allocatedSizes[mo->id].empty()) {
-      am->bindingsAdressesToObjects.erase(mo->getBaseExpr());
-    }
+    symbolicAddresses.erase(mo->getBaseExpr());
     if (!mo->isFixed && !DeterministicAllocation) {
       if (ref<ConstantExpr> arrayConstantAddress =
               dyn_cast<ConstantExpr>(mo->getBaseExpr())) {
@@ -255,9 +261,9 @@ void MemoryManager::markFreed(MemoryObject *mo) {
   }
 }
 
-const std::map<ref<Expr>, MemoryObject *> &
-MemoryManager::getAllocatedObjects(IDType idObject) {
-  return allocatedSizes[idObject];
+const MemoryObject *MemoryManager::getAllocatedObject(ref<Expr> address) {
+  auto symMO = symbolicAddresses.find(address);
+  return symMO != symbolicAddresses.end() ? symMO->second : nullptr;
 }
 
 size_t MemoryManager::getUsedDeterministicSize() {

@@ -169,14 +169,6 @@ public:
         state, symbolicSizeConstantAddressSource, arraySize, size);
   }
 
-  std::pair<ref<Expr>, ref<Expr>> getSymbolicSizeConstantSizeAddressPair(
-      ExecutionState &state,
-      ref<SymbolicSizeConstantAddressSource> symbolicSizeConstantAddressSource,
-      ref<Expr> size, Expr::Width width) {
-    return executor->getSymbolicSizeConstantSizeAddressPair(
-        state, symbolicSizeConstantAddressSource, size, width);
-  }
-
   ref<Expr> fillSizeAddressSymcretes(ExecutionState &state,
                                      ref<Expr> oldAddress, ref<Expr> newAddress,
                                      ref<Expr> oldSize, ref<Expr> size) {

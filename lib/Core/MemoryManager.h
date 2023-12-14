@@ -11,6 +11,7 @@
 #define KLEE_MEMORYMANAGER_H
 
 #include "klee/Expr/Expr.h"
+#include "klee/Expr/ExprHashMap.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -25,18 +26,14 @@ class Value;
 namespace klee {
 class MemoryObject;
 class ArrayCache;
-class AddressManager;
 
 typedef uint64_t IDType;
 
 class MemoryManager {
-  friend class AddressManager;
-
 private:
   typedef std::set<MemoryObject *> objects_ty;
   objects_ty objects;
-  std::unordered_map<IDType, std::map<ref<Expr>, MemoryObject *>>
-      allocatedSizes;
+  ExprHashMap<MemoryObject *> symbolicAddresses;
 
   ArrayCache *const arrayCache;
 
@@ -45,7 +42,6 @@ private:
   size_t spaceSize;
 
 public:
-  AddressManager *am;
   MemoryManager(ArrayCache *arrayCache);
   ~MemoryManager();
 
@@ -56,14 +52,13 @@ public:
   MemoryObject *allocate(ref<Expr> size, bool isLocal, bool isGlobal,
                          bool isLazyInitialiazed, const llvm::Value *allocSite,
                          size_t alignment, ref<Expr> addressExpr = ref<Expr>(),
-                         unsigned timestamp = 0, IDType id = 0);
+                         unsigned timestamp = 0);
   MemoryObject *allocateFixed(uint64_t address, uint64_t size,
                               const llvm::Value *allocSite);
   void deallocate(const MemoryObject *mo);
   void markFreed(MemoryObject *mo);
   ArrayCache *getArrayCache() const { return arrayCache; }
-  const std::map<ref<Expr>, MemoryObject *> &
-  getAllocatedObjects(IDType idObject);
+  const MemoryObject *getAllocatedObject(ref<Expr> address);
   /*
    * Returns the size used by deterministic allocation in bytes
    */

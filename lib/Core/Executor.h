@@ -73,7 +73,6 @@ class Value;
 } // namespace llvm
 
 namespace klee {
-class AddressManager;
 class Array;
 struct Cell;
 class CodeGraphInfo;
@@ -149,7 +148,6 @@ private:
 
   ExternalDispatcher *externalDispatcher;
   std::unique_ptr<TimingSolver> solver;
-  std::unique_ptr<AddressManager> addressManager;
   std::unique_ptr<MemoryManager> memory;
   TypeManager *typeSystemManager;
 
@@ -731,10 +729,6 @@ private:
       ref<SymbolicSizeConstantAddressSource> symbolicSizeConstantAddressSource,
       ref<Expr> arraySize, ref<Expr> size);
 
-  std::pair<ref<Expr>, ref<Expr>> getSymbolicSizeConstantSizeAddressPair(
-      ExecutionState &state,
-      ref<SymbolicSizeConstantAddressSource> symbolicSizeConstantAddressSource,
-      ref<Expr> size, Expr::Width width);
   ref<Expr> fillSizeAddressSymcretes(ExecutionState &state,
                                      ref<Expr> oldAddress, ref<Expr> newAddress,
                                      ref<Expr> oldSize, ref<Expr> size);
