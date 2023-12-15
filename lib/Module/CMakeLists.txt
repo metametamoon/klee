@@ -8,6 +8,7 @@
 #===------------------------------------------------------------------------===#
 set(KLEE_MODULE_COMPONENT_SRCS
   Annotation.cpp
+  AnnotationsData.cpp
   CallSplitter.cpp
   CallRemover.cpp
   Checks.cpp
@@ -27,6 +28,7 @@ set(KLEE_MODULE_COMPONENT_SRCS
   RaiseAsm.cpp
   ReturnSplitter.cpp
   SarifReport.cpp
+  TaintAnnotation.cpp
   Target.cpp
   TargetHash.cpp
   TargetForest.cpp

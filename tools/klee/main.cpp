@@ -421,6 +421,10 @@ cl::opt<bool> AnnotateOnlyExternal(
     cl::desc("Ignore annotations for defined function (default=false)"),
     cl::init(false), cl::cat(MockCat));
 
+cl::opt<std::string>
+    TaintAnnotationsFile("taint-annotations", cl::desc("Path to the taint annotations JSON file"),
+                         cl::value_desc("path file"), cl::cat(MockCat));
+
 } // namespace
 
 namespace klee {
@@ -1032,8 +1036,8 @@ static const char *modelledExternals[] = {
     "klee_get_valuef", "klee_get_valued", "klee_get_valuel", "klee_get_valuell",
     "klee_get_value_i32", "klee_get_value_i64", "klee_get_obj_size",
     "klee_is_symbolic", "klee_make_symbolic", "klee_make_mock",
-    "klee_add_taint", "klee_clear_taint",
-    "klee_check_taint", "klee_taint_sink_hit",
+    "klee_add_taint", "klee_clear_taint", "klee_check_taint",
+    "klee_check_taint_sink", "klee_taint_sink_hit",
     "klee_mark_global", "klee_open_merge", "klee_close_merge",
     "klee_prefer_cex", "klee_posix_prefer_cex", "klee_print_expr",
     "klee_print_range", "klee_report_error", "klee_set_forking",
@@ -1857,6 +1861,7 @@ int main(int argc, char **argv, char **envp) {
       /*MainCurrentName=*/EntryPoint,
       /*MainNameAfterMock=*/"__klee_mock_wrapped_main",
       /*AnnotationsFile=*/AnnotationsFile,
+      /*TaintAnnotationsFile=*/TaintAnnotationsFile,
       /*Optimize=*/OptimizeModule,
       /*Simplify*/ SimplifyModule,
       /*CheckDivZero=*/CheckDivZero,

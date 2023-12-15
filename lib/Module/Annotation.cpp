@@ -1,8 +1,10 @@
 #include "klee/Module/Annotation.h"
+#include "klee/Module/TaintAnnotation.h"
 #include "klee/Support/ErrorHandling.h"
 
-#include <fstream>
 #include <llvm/Support/raw_ostream.h>
+
+#include <fstream>
 
 namespace klee {
 
@@ -121,17 +123,43 @@ Free::Free(const std::string &str) : Unknown(str) {
 
 Kind Free::getKind() const { return Kind::Free; }
 
+/*
+ * Format: TaintOutput:{offset}:{type}
+ */
+
 TaintOutput::TaintOutput(const std::string &str) : Unknown(str) {
-  if (!rawValue.empty()) {
-    klee_error("Annotation: Incorrect value format \"%s\", must be empty", rawValue.c_str());
+  if (rawValue.empty()) {
+    klee_error("Annotation TaintOutput: Incorrect value format, must be not empty");
   }
+  type = rawValue;
 }
 
 Kind TaintOutput::getKind() const { return Kind::TaintOutput; }
 
-FormatString::FormatString(const std::string &str) : Unknown(str) {}
+/*
+ * Format: TaintPropagation::{type}:{data}
+ */
 
-Kind FormatString::getKind() const { return Kind::FormatString; }
+TaintPropagation::TaintPropagation(const std::string &str) : Unknown(str) {
+  if (!rawOffset.empty()) {
+      klee_error("Annotation TaintPropagation: Incorrect offset format, must be empty");
+  }
+  if (rawValue.empty()) {
+    klee_error("Annotation TaintPropagation: Incorrect value format, must be not empty");
+  }
+
+  const size_t colonPos = rawValue.find(':');
+  if (colonPos == std::string::npos) {
+    klee_error("Annotation TaintPropagation: Incorrect value %s format, must be <type>:<index>", rawValue.c_str());
+  }
+  type = rawValue.substr(0, colonPos);
+
+  if (sscanf(rawValue.substr(colonPos + 1, std::string::npos).c_str(), "%zu", &propagationParameter) != 1) {
+    klee_error("Annotation TaintPropagation: Incorrect value %s format, must be <type>:<index>", rawValue.c_str());
+  }
+}
+
+Kind TaintPropagation::getKind() const { return Kind::TaintPropagation; }
 
 const std::map<std::string, Statement::Kind> StringToKindMap = {
     {"deref", Statement::Kind::Deref},
@@ -141,7 +169,7 @@ const std::map<std::string, Statement::Kind> StringToKindMap = {
     {"freesource", Statement::Kind::Free},
     {"freesink", Statement::Kind::Free},
     {"taintoutput", Statement::Kind::TaintOutput},
-    {"formatstring", Statement::Kind::FormatString}};
+    {"taintpropagation", Statement::Kind::TaintPropagation}};
 
 inline Statement::Kind stringToKind(const std::string &str) {
   auto it = StringToKindMap.find(toLower(str));
@@ -168,8 +196,8 @@ Ptr stringToKindPtr(const std::string &str) {
     return std::make_shared<Free>(str);
   case Statement::Kind::TaintOutput:
     return std::make_shared<TaintOutput>(str);
-  case Statement::Kind::FormatString:
-    return std::make_shared<FormatString>(str);
+  case Statement::Kind::TaintPropagation:
+    return std::make_shared<TaintPropagation>(str);
   }
 }
 
