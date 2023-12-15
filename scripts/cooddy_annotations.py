@@ -41,6 +41,18 @@ def transform_annotation_with_taint_statements(annotation, funcName):
                 if (st_len != 1):
                     print("For SensitiveDataSource in {} annotation elem #{} ignore offset and data from cooddy annotations file".format(funcName, i))
                 transformed_statement = "TaintOutput::SensitiveDataSource"
+            elif (statement[0] == "Execute"):
+                if (st_len != 1):
+                    print("For Execute in {} annotation elem #{} ignore offset and data from cooddy annotations file".format(funcName, i))
+                transformed_statement = "TaintSink::Execute"
+            elif (statement[0] == "FormatString"):
+                if (st_len != 1):
+                    print("For FormatString in {} annotation elem #{} ignore offset and data from cooddy annotations file".format(funcName, i))
+                transformed_statement = "TaintSink::FormatString"
+            elif (statement[0] == "SensitiveDataLeak"):
+                if (st_len != 1):
+                    print("For SensitiveDataLeak in {} annotation elem #{} ignore offset and data from cooddy annotations file".format(funcName, i))
+                transformed_statement = "TaintSink::SensitiveDataLeak"        
 
             transformed_annotation_for_param.append(transformed_statement)
         transformed_annotation.append(transformed_annotation_for_param)

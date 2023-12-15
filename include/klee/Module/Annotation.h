@@ -34,7 +34,8 @@ enum class Kind {
   Free,
 
   TaintOutput,
-  TaintPropagation
+  TaintPropagation,
+  TaintSink
 };
 
 enum class Property {
@@ -117,6 +118,8 @@ public:
   [[nodiscard]] Kind getKind() const override;
 };
 
+//TODO: maybe separate class Taint
+
 struct TaintOutput final : public Unknown {
   std::string type;
 
@@ -130,6 +133,14 @@ struct TaintPropagation final : public Unknown {
   size_t propagationParameter;
 
   explicit TaintPropagation(const std::string &str = "TaintPropagation");
+
+  [[nodiscard]] Kind getKind() const override;
+};
+
+struct TaintSink final : public Unknown {
+  std::string type;
+
+  explicit TaintSink(const std::string &str = "TaintSink");
 
   [[nodiscard]] Kind getKind() const override;
 };
