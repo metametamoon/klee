@@ -1,0 +1,11 @@
+{
+  "SensitiveDataLeak": [
+    "SensitiveDataSource"
+  ],
+  "FormatString": [
+    "UntrustedSource"
+  ],
+  "Execute": [
+    "UntrustedSource"
+  ]
+}
