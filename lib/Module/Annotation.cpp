@@ -161,6 +161,23 @@ TaintPropagation::TaintPropagation(const std::string &str) : Unknown(str) {
 
 Kind TaintPropagation::getKind() const { return Kind::TaintPropagation; }
 
+/*
+ * Format: TaintSink::{type}
+ */
+
+TaintSink::TaintSink(const std::string &str) : Unknown(str) {
+  if (!rawOffset.empty()) {
+    klee_error("Annotation TaintSink: Incorrect offset format, must be empty");
+  }
+  if (rawValue.empty()) {
+    klee_error("Annotation TaintSink: Incorrect value format, must be not empty");
+  }
+
+  type = rawValue;
+}
+
+Kind TaintSink::getKind() const { return Kind::TaintSink; }
+
 const std::map<std::string, Statement::Kind> StringToKindMap = {
     {"deref", Statement::Kind::Deref},
     {"initnull", Statement::Kind::InitNull},
@@ -169,7 +186,8 @@ const std::map<std::string, Statement::Kind> StringToKindMap = {
     {"freesource", Statement::Kind::Free},
     {"freesink", Statement::Kind::Free},
     {"taintoutput", Statement::Kind::TaintOutput},
-    {"taintpropagation", Statement::Kind::TaintPropagation}};
+    {"taintpropagation", Statement::Kind::TaintPropagation},
+    {"taintsink", Statement::Kind::TaintSink}};
 
 inline Statement::Kind stringToKind(const std::string &str) {
   auto it = StringToKindMap.find(toLower(str));
@@ -198,6 +216,8 @@ Ptr stringToKindPtr(const std::string &str) {
     return std::make_shared<TaintOutput>(str);
   case Statement::Kind::TaintPropagation:
     return std::make_shared<TaintPropagation>(str);
+  case Statement::Kind::TaintSink:
+    return std::make_shared<TaintSink>(str);
   }
 }
 
