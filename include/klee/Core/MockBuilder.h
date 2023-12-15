@@ -10,7 +10,7 @@
 #define KLEE_MOCKBUILDER_H
 
 #include "klee/Core/Interpreter.h"
-#include "klee/Module/Annotation.h"
+#include "klee/Module/AnnotationsData.h"
 
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Module.h"
@@ -38,7 +38,7 @@ private:
   std::set<std::string> &mainModuleFunctions;
   std::set<std::string> &mainModuleGlobals;
 
-  AnnotationsMap annotations;
+  AnnotationsData annotationsData;
 
   void initMockModule();
   void buildMockMain();

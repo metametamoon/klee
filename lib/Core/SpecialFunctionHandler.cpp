@@ -133,6 +133,7 @@ static SpecialFunctionHandler::HandlerInfo handlerInfo[] = {
     add("klee_add_taint", handleAddTaint, false),
     add("klee_clear_taint", handleClearTaint, false),
     add("klee_check_taint", handleCheckTaint, true),
+    add("klee_check_taint_sink", handleCheckTaintSink, true),
     add("klee_taint_sink_hit", handleTaintSinkHit, false),
 #ifdef SUPPORT_KLEE_EH_CXX
     add("_klee_eh_Unwind_RaiseException_impl", handleEhUnwindRaiseExceptionImpl,
@@ -1265,6 +1266,22 @@ void SpecialFunctionHandler::handleCheckTaint(
   executor.bindLocal(target, state, result);
 }
 
+void SpecialFunctionHandler::handleCheckTaintSink(
+        klee::ExecutionState &state,
+        klee::KInstruction *target,
+        std::vector<ref<Expr>> &arguments) {
+  if (arguments.size() != 3) {
+    executor.terminateStateOnUserError(
+            state, "Incorrect number of arguments to "
+                   "klee_check_taint_sink(void*, size_t, size_t)");
+    return;
+  }
+
+  // FIXME: this is a test version right now
+  ref<Expr> result = ConstantExpr::create(true, Expr::Bool);
+  executor.bindLocal(target, state, result);
+}
+
 void SpecialFunctionHandler::handleTaintSinkHit(
     klee::ExecutionState &state,
     klee::KInstruction *target,
@@ -1274,7 +1291,6 @@ void SpecialFunctionHandler::handleTaintSinkHit(
         state, "Incorrect number of arguments to klee_taint_sink_hit(size_t)");
     return;
   }
-
 
   executor.terminateStateOnError(state, "FormatString", StateTerminationType::User);
 }

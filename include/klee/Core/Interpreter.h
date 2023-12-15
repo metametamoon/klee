@@ -110,6 +110,7 @@ public:
     std::string MainCurrentName;
     std::string MainNameAfterMock;
     std::string AnnotationsFile;
+    std::string TaintAnnotationsFile;
     bool Optimize;
     bool Simplify;
     bool CheckDivZero;
@@ -122,16 +123,19 @@ public:
                   const std::string &_EntryPoint, const std::string &_OptSuffix,
                   const std::string &_MainCurrentName,
                   const std::string &_MainNameAfterMock,
-                  const std::string &_AnnotationsFile, bool _Optimize,
-                  bool _Simplify, bool _CheckDivZero, bool _CheckOvershift,
+                  const std::string &_AnnotationsFile,
+                  const std::string &_TaintAnnotationsFile,
+                  bool _Optimize, bool _Simplify,
+                  bool _CheckDivZero, bool _CheckOvershift,
                   bool _AnnotateOnlyExternal, bool _WithFPRuntime,
                   bool _WithPOSIXRuntime)
         : LibraryDir(_LibraryDir), EntryPoint(_EntryPoint),
           OptSuffix(_OptSuffix), MainCurrentName(_MainCurrentName),
           MainNameAfterMock(_MainNameAfterMock),
-          AnnotationsFile(_AnnotationsFile), Optimize(_Optimize),
-          Simplify(_Simplify), CheckDivZero(_CheckDivZero),
-          CheckOvershift(_CheckOvershift),
+          AnnotationsFile(_AnnotationsFile),
+          TaintAnnotationsFile(_TaintAnnotationsFile),
+          Optimize(_Optimize), Simplify(_Simplify),
+          CheckDivZero(_CheckDivZero), CheckOvershift(_CheckOvershift),
           AnnotateOnlyExternal(_AnnotateOnlyExternal),
           WithFPRuntime(_WithFPRuntime), WithPOSIXRuntime(_WithPOSIXRuntime) {}
   };

@@ -15,6 +15,12 @@
 #include <set>
 #include <string>
 #include <vector>
+#include "klee/Config/config.h"
+#include "klee/Config/config.h"
+
+#include "llvm/IR/Module.h"
+
+#include <optional>
 
 using json = nlohmann::json;
 
@@ -31,18 +37,8 @@ enum class Kind {
   AllocSource,
   Free,
 
-  // TODO: perhaps separate TaintSources and TaintSinks
-  // taint sources
-  TaintInput,
-  TaintPropagation,
   TaintOutput,
-//  UntrustedSource,
-  SensitiveDataSource,
-
-  // taint sinks
-  Execute,
-  FormatString,
-  SensitiveDataLeak
+  TaintPropagation
 };
 
 enum class Property {
@@ -126,13 +122,18 @@ public:
 };
 
 struct TaintOutput final : public Unknown {
+  std::string type;
+
   explicit TaintOutput(const std::string &str = "TaintOutput");
 
   [[nodiscard]] Kind getKind() const override;
 };
 
-struct FormatString final : public Unknown {
-  explicit FormatString(const std::string &str = "FormatString");
+struct TaintPropagation final : public Unknown {
+  std::string type;
+  size_t propagationParameter;
+
+  explicit TaintPropagation(const std::string &str = "TaintPropagation");
 
   [[nodiscard]] Kind getKind() const override;
 };
