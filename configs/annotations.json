@@ -91,13 +91,13 @@
     "annotation": [
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -107,13 +107,13 @@
     "annotation": [
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -123,13 +123,13 @@
     "annotation": [
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -139,13 +139,13 @@
     "annotation": [
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -155,10 +155,10 @@
     "annotation": [
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -168,13 +168,13 @@
     "annotation": [
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -184,10 +184,10 @@
     "annotation": [
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -197,13 +197,13 @@
     "annotation": [
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -257,7 +257,7 @@
     "annotation": [
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       []
     ],
@@ -269,13 +269,13 @@
       [],
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -286,13 +286,13 @@
       [],
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -303,13 +303,13 @@
       [],
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -320,13 +320,13 @@
       [],
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -337,10 +337,10 @@
       [],
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -351,13 +351,13 @@
       [],
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -368,10 +368,10 @@
       [],
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -382,13 +382,13 @@
       [],
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -423,13 +423,13 @@
     "annotation": [
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -439,16 +439,16 @@
     "annotation": [
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -458,13 +458,13 @@
     "annotation": [
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -474,16 +474,16 @@
     "annotation": [
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -493,10 +493,10 @@
     "annotation": [
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -506,13 +506,13 @@
     "annotation": [
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -522,10 +522,10 @@
     "annotation": [
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -535,13 +535,13 @@
     "annotation": [
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -571,7 +571,7 @@
     "annotation": [
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       []
     ],
@@ -583,13 +583,13 @@
       [],
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -600,13 +600,13 @@
       [],
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -617,13 +617,13 @@
       [],
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -634,13 +634,13 @@
       [],
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -651,10 +651,10 @@
       [],
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -675,13 +675,13 @@
       [],
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -692,10 +692,10 @@
       [],
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -706,13 +706,13 @@
       [],
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -722,7 +722,7 @@
     "annotation": [
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -732,13 +732,13 @@
     "annotation": [
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -748,16 +748,16 @@
     "annotation": [
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -767,13 +767,13 @@
     "annotation": [
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -783,16 +783,16 @@
     "annotation": [
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -802,10 +802,10 @@
     "annotation": [
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -815,13 +815,13 @@
     "annotation": [
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -831,10 +831,10 @@
     "annotation": [
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -844,13 +844,13 @@
     "annotation": [
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -860,7 +860,7 @@
     "annotation": [
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       []
     ],
@@ -872,13 +872,13 @@
       [],
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -889,13 +889,13 @@
       [],
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -906,13 +906,13 @@
       [],
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -923,13 +923,13 @@
       [],
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -940,10 +940,10 @@
       [],
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -954,13 +954,13 @@
       [],
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -971,10 +971,10 @@
       [],
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -985,13 +985,13 @@
       [],
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -1001,7 +1001,7 @@
     "annotation": [
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -2919,20 +2919,20 @@
     "annotation": [
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [],
       [],
       [],
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [],
       []
@@ -2945,20 +2945,20 @@
       [],
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [],
       [],
       [],
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [],
       []
@@ -2971,20 +2971,20 @@
       [],
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [],
       [],
       [],
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [],
       []
@@ -2996,20 +2996,20 @@
     "annotation": [
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [],
       [],
       [],
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [],
       []
@@ -3025,17 +3025,17 @@
       [],
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [],
       []
@@ -3049,17 +3049,17 @@
       [],
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [],
       []
@@ -3583,10 +3583,10 @@
     "annotation": [
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       []
     ],
@@ -3597,7 +3597,7 @@
     "annotation": [
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       []
     ],
@@ -3900,13 +3900,13 @@
     "annotation": [
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -3916,13 +3916,13 @@
     "annotation": [
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -3932,13 +3932,13 @@
     "annotation": [
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -3948,13 +3948,13 @@
     "annotation": [
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -3964,10 +3964,10 @@
     "annotation": [
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -3977,13 +3977,13 @@
     "annotation": [
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -3993,10 +3993,10 @@
     "annotation": [
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -4006,13 +4006,13 @@
     "annotation": [
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -5049,11 +5049,11 @@
         "Deref"
       ],
       [
-        "FormatString::Printf",
-        "SensitiveDataLeak"
+        "TaintSink::FormatString",
+        "TaintSink::SensitiveDataLeak"
       ],
       [
-        "SensitiveDataLeak"
+        "TaintSink::SensitiveDataLeak"
       ]
     ],
     "properties": []
@@ -5066,11 +5066,11 @@
         "Deref"
       ],
       [
-        "FormatString::Printf",
-        "SensitiveDataLeak"
+        "TaintSink::FormatString",
+        "TaintSink::SensitiveDataLeak"
       ],
       [
-        "SensitiveDataLeak"
+        "TaintSink::SensitiveDataLeak"
       ]
     ],
     "properties": []
@@ -5081,11 +5081,11 @@
       [],
       [],
       [
-        "FormatString::Printf",
-        "SensitiveDataLeak"
+        "TaintSink::FormatString",
+        "TaintSink::SensitiveDataLeak"
       ],
       [
-        "SensitiveDataLeak"
+        "TaintSink::SensitiveDataLeak"
       ]
     ],
     "properties": []
@@ -5318,7 +5318,7 @@
         "Deref"
       ],
       [
-        "FormatString::Scanf"
+        "TaintSink::FormatString"
       ],
       [
         "TaintOutput:*:UntrustedSource",
@@ -5338,7 +5338,7 @@
         "Deref"
       ],
       [
-        "FormatString::Scanfs"
+        "TaintSink::FormatString"
       ],
       [
         "TaintOutput:*:UntrustedSource",
@@ -5515,11 +5515,11 @@
         "Deref"
       ],
       [
-        "FormatString",
-        "SensitiveDataLeak"
+        "TaintSink::FormatString",
+        "TaintSink::SensitiveDataLeak"
       ],
       [
-        "SensitiveDataLeak"
+        "TaintSink::SensitiveDataLeak"
       ]
     ],
     "properties": []
@@ -5530,11 +5530,11 @@
       [],
       [],
       [
-        "FormatString",
-        "SensitiveDataLeak"
+        "TaintSink::FormatString",
+        "TaintSink::SensitiveDataLeak"
       ],
       [
-        "SensitiveDataLeak"
+        "TaintSink::SensitiveDataLeak"
       ]
     ],
     "properties": []
@@ -5545,7 +5545,7 @@
       [],
       [
         "Deref",
-        "SensitiveDataLeak"
+        "TaintSink::SensitiveDataLeak"
       ],
       [],
       [],
@@ -5565,7 +5565,7 @@
         "Deref"
       ],
       [
-        "FormatString"
+        "TaintSink::FormatString"
       ],
       [
         "TaintOutput::UntrustedSource"
@@ -5578,13 +5578,13 @@
     "annotation": [
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [],
       [],
@@ -5599,7 +5599,7 @@
     "annotation": [
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       []
     ],
@@ -5610,7 +5610,7 @@
     "annotation": [
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       []
     ],
@@ -5621,13 +5621,13 @@
     "annotation": [
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [],
       [],
@@ -8573,7 +8573,7 @@
     "annotation": [
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       []
     ],
@@ -8584,10 +8584,10 @@
     "annotation": [
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       []
     ],
@@ -8598,15 +8598,15 @@
     "annotation": [
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [],
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -8616,15 +8616,15 @@
     "annotation": [
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [],
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -8670,12 +8670,12 @@
     "annotation": [
       [],
       [
-        "FormatString::Printf",
-        "SensitiveDataLeak"
+        "TaintSink::FormatString",
+        "TaintSink::SensitiveDataLeak"
       ],
       [
         "CheckOverflow",
-        "SensitiveDataLeak"
+        "TaintSink::SensitiveDataLeak"
       ]
     ],
     "properties": []
@@ -8685,11 +8685,11 @@
     "annotation": [
       [],
       [
-        "FormatString::Printf",
-        "SensitiveDataLeak"
+        "TaintSink::FormatString",
+        "TaintSink::SensitiveDataLeak"
       ],
       [
-        "SensitiveDataLeak"
+        "TaintSink::SensitiveDataLeak"
       ]
     ],
     "properties": []
@@ -9941,7 +9941,7 @@
         "TaintOutput::UntrustedSource"
       ],
       [
-        "FormatString::Scanf"
+        "TaintSink::FormatString"
       ],
       [
         "TaintOutput:*:UntrustedSource",
@@ -9959,7 +9959,7 @@
         "TaintOutput::UntrustedSource"
       ],
       [
-        "FormatString::Scanfs"
+        "TaintSink::FormatString"
       ],
       [
         "TaintOutput::UntrustedSource",
@@ -10087,13 +10087,13 @@
       [],
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       []
     ],
@@ -10104,7 +10104,7 @@
     "annotation": [
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -10114,7 +10114,7 @@
     "annotation": [
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -10126,13 +10126,13 @@
       [],
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       []
     ],
@@ -10220,7 +10220,7 @@
       ],
       [],
       [
-        "FormatString::Printf"
+        "TaintSink::FormatString"
       ]
     ],
     "properties": []
@@ -10235,7 +10235,7 @@
       ],
       [],
       [
-        "FormatString::Printf"
+        "TaintSink::FormatString"
       ]
     ],
     "properties": []
@@ -10250,7 +10250,7 @@
       ],
       [],
       [
-        "FormatString::Printf"
+        "TaintSink::FormatString"
       ]
     ],
     "properties": []
@@ -10264,7 +10264,7 @@
       ],
       [],
       [
-        "FormatString"
+        "TaintSink::FormatString"
       ]
     ],
     "properties": []
@@ -10275,13 +10275,13 @@
       [],
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -10292,13 +10292,13 @@
       [],
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -10309,13 +10309,13 @@
       [],
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -10326,13 +10326,13 @@
       [],
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -10343,10 +10343,10 @@
       [],
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -10357,13 +10357,13 @@
       [],
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -10374,10 +10374,10 @@
       [],
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -10388,13 +10388,13 @@
       [],
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -10412,7 +10412,7 @@
         "OutputString"
       ],
       [
-        "FormatString::Printf"
+        "TaintSink::FormatString"
       ]
     ],
     "properties": []
@@ -10432,7 +10432,7 @@
         "MemorySize::1"
       ],
       [
-        "FormatString::Printf"
+        "TaintSink::FormatString"
       ]
     ],
     "properties": []
@@ -10485,7 +10485,7 @@
         "Deref"
       ],
       [
-        "FormatString::Scanf"
+        "TaintSink::FormatString"
       ],
       [
         "Write:*",
@@ -10506,7 +10506,7 @@
         "Deref"
       ],
       [
-        "FormatString::Scanfs"
+        "TaintSink::FormatString"
       ],
       [
         "Write:*",
@@ -10594,7 +10594,7 @@
       [],
       [],
       [
-        "SensitiveDataLeak"
+        "TaintSink::SensitiveDataLeak"
       ]
     ],
     "properties": []
@@ -11842,7 +11842,7 @@
         "TaintPropagation::UntrustedSource:3"
       ],
       [
-        "FormatString"
+        "TaintSink::FormatString"
       ]
     ],
     "properties": []
@@ -11856,7 +11856,7 @@
         "TaintPropagation::UntrustedSource:3"
       ],
       [
-        "FormatString"
+        "TaintSink::FormatString"
       ]
     ],
     "properties": []
@@ -11870,7 +11870,7 @@
         "TaintPropagation::UntrustedSource:3"
       ],
       [
-        "FormatString"
+        "TaintSink::FormatString"
       ]
     ],
     "properties": []
@@ -11887,7 +11887,7 @@
         "MemorySize::1"
       ],
       [
-        "FormatString"
+        "TaintSink::FormatString"
       ]
     ],
     "properties": []
@@ -11902,7 +11902,7 @@
         "Deref"
       ],
       [
-        "FormatString"
+        "TaintSink::FormatString"
       ],
       [
         "Write:*",
@@ -11921,7 +11921,7 @@
         "Deref"
       ],
       [
-        "FormatString"
+        "TaintSink::FormatString"
       ],
       [
         "Write:*",
@@ -11936,7 +11936,7 @@
     "annotation": [
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ]
     ],
     "properties": []
@@ -11960,7 +11960,7 @@
     "annotation": [
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       []
     ],
@@ -12515,7 +12515,7 @@
         "Deref"
       ],
       [
-        "FormatString"
+        "TaintSink::FormatString"
       ]
     ],
     "properties": []
@@ -12531,7 +12531,7 @@
         "MemorySize::1"
       ],
       [
-        "FormatString"
+        "TaintSink::FormatString"
       ]
     ],
     "properties": []
@@ -12546,7 +12546,7 @@
         "Deref"
       ],
       [
-        "FormatString"
+        "TaintSink::FormatString"
       ],
       [
         "TaintOutput::UntrustedSource",
@@ -12565,7 +12565,7 @@
         "Deref"
       ],
       [
-        "FormatString"
+        "TaintSink::FormatString"
       ],
       [
         "TaintOutput::UntrustedSource",
@@ -12582,7 +12582,7 @@
       ],
       [],
       [
-        "FormatString"
+        "TaintSink::FormatString"
       ],
       [
         "TaintOutput::UntrustedSource",
@@ -12601,7 +12601,7 @@
         "Deref"
       ],
       [
-        "FormatString"
+        "TaintSink::FormatString"
       ]
     ],
     "properties": []
@@ -12617,7 +12617,7 @@
         "MemorySize::1"
       ],
       [
-        "FormatString"
+        "TaintSink::FormatString"
       ]
     ],
     "properties": []
@@ -12632,7 +12632,7 @@
         "Deref"
       ],
       [
-        "FormatString"
+        "TaintSink::FormatString"
       ],
       [
         "TaintOutput::UntrustedSource",
@@ -12648,7 +12648,7 @@
       [],
       [],
       [
-        "FormatString"
+        "TaintSink::FormatString"
       ]
     ],
     "properties": []
@@ -12659,7 +12659,7 @@
       [],
       [],
       [
-        "FormatString"
+        "TaintSink::FormatString"
       ]
     ],
     "properties": []
@@ -12671,7 +12671,7 @@
         "TaintOutput::UntrustedSource"
       ],
       [
-        "FormatString"
+        "TaintSink::FormatString"
       ],
       [
         "TaintOutput::UntrustedSource",
@@ -12688,7 +12688,7 @@
         "TaintOutput::UntrustedSource"
       ],
       [
-        "FormatString"
+        "TaintSink::FormatString"
       ],
       [
         "TaintOutput::UntrustedSource",
@@ -12713,7 +12713,7 @@
         "MemorySize::1"
       ],
       [
-        "FormatString"
+        "TaintSink::FormatString"
       ]
     ],
     "properties": []
@@ -12735,7 +12735,7 @@
         "BuffSize::>2"
       ],
       [
-        "FormatString"
+        "TaintSink::FormatString"
       ]
     ],
     "properties": []
@@ -12754,7 +12754,7 @@
         "MemorySize::1"
       ],
       [
-        "FormatString"
+        "TaintSink::FormatString"
       ]
     ],
     "properties": []
@@ -12771,7 +12771,7 @@
         "TaintPropagation::UntrustedSource:3"
       ],
       [
-        "FormatString"
+        "TaintSink::FormatString"
       ]
     ],
     "properties": []
@@ -12788,7 +12788,7 @@
         "TaintPropagation::UntrustedSource:3"
       ],
       [
-        "FormatString"
+        "TaintSink::FormatString"
       ]
     ],
     "properties": []
@@ -12808,7 +12808,7 @@
         "MemorySize::1"
       ],
       [
-        "FormatString"
+        "TaintSink::FormatString"
       ]
     ],
     "properties": []
@@ -12823,7 +12823,7 @@
         "Deref"
       ],
       [
-        "FormatString"
+        "TaintSink::FormatString"
       ],
       [
         "Deref",
@@ -12842,7 +12842,7 @@
       ],
       [],
       [
-        "FormatString"
+        "TaintSink::FormatString"
       ],
       [
         "TaintOutput::UntrustedSource",
@@ -12862,7 +12862,7 @@
       ],
       [],
       [
-        "FormatString"
+        "TaintSink::FormatString"
       ]
     ],
     "properties": []
@@ -12875,7 +12875,7 @@
       [],
       [],
       [
-        "FormatString"
+        "TaintSink::FormatString"
       ]
     ],
     "properties": []
@@ -12889,7 +12889,7 @@
       ],
       [],
       [
-        "FormatString"
+        "TaintSink::FormatString"
       ]
     ],
     "properties": []
@@ -12904,7 +12904,7 @@
         "Deref"
       ],
       [
-        "FormatString"
+        "TaintSink::FormatString"
       ],
       [
         "Write:*",
@@ -12921,7 +12921,7 @@
       [],
       [],
       [
-        "FormatString"
+        "TaintSink::FormatString"
       ]
     ],
     "properties": []
@@ -12932,7 +12932,7 @@
       [],
       [],
       [
-        "FormatString"
+        "TaintSink::FormatString"
       ]
     ],
     "properties": []
@@ -12944,7 +12944,7 @@
         "TaintOutput::UntrustedSource"
       ],
       [
-        "FormatString"
+        "TaintSink::FormatString"
       ],
       [
         "TaintOutput::UntrustedSource",
@@ -13737,7 +13737,7 @@
     "annotation": [
       [],
       [
-        "Execute"
+        "TaintSink::Execute"
       ],
       []
     ],
@@ -13896,11 +13896,11 @@
     "annotation": [
       [],
       [
-        "FormatString",
-        "SensitiveDataLeak"
+        "TaintSink::FormatString",
+        "TaintSink::SensitiveDataLeak"
       ],
       [
-        "SensitiveDataLeak"
+        "TaintSink::SensitiveDataLeak"
       ]
     ],
     "properties": []
@@ -13910,11 +13910,11 @@
     "annotation": [
       [],
       [
-        "FormatString",
-        "SensitiveDataLeak"
+        "TaintSink::FormatString",
+        "TaintSink::SensitiveDataLeak"
       ],
       [
-        "SensitiveDataLeak"
+        "TaintSink::SensitiveDataLeak"
       ]
     ],
     "properties": []
@@ -13926,7 +13926,7 @@
         "TaintOutput::UntrustedSource"
       ],
       [
-        "FormatString"
+        "TaintSink::FormatString"
       ],
       [
         "TaintOutput::UntrustedSource",
