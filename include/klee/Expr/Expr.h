@@ -1493,14 +1493,14 @@ public:
     ref<ConstantExpr> r(new ConstantExpr(v));
     r->computeHash();
     r->computeHeight();
-    return r;
+    return createCachedExpr(r);
   }
 
   static ref<ConstantExpr> alloc(const llvm::APFloat &f) {
     ref<ConstantExpr> r(new ConstantExpr(f));
     r->computeHash();
     r->computeHeight();
-    return r;
+    return createCachedExpr(r);
   }
 
   static ref<ConstantExpr> alloc(uint64_t v, Width w) {
