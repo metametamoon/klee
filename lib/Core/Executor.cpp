@@ -747,8 +747,12 @@ void Executor::initializeGlobalObject(ExecutionState &state, ObjectState *os,
                              offset + i * elementSize);
   } else if (isa<ConstantAggregateZero>(c)) {
     unsigned i, size = targetData->getTypeStoreSize(c->getType());
-    for (i = 0; i < size; i++)
-      os->write8(offset + i, (uint8_t)0);
+    if (offset) {
+      for (i = 0; i < size; i++)
+        os->write8(offset + i, (uint8_t)0);
+    } else {
+      os->initializeToZero();
+    }
   } else if (const ConstantArray *ca = dyn_cast<ConstantArray>(c)) {
     unsigned elementSize =
         targetData->getTypeStoreSize(ca->getType()->getElementType());
@@ -1587,22 +1591,22 @@ const Cell &Executor::eval(const KInstruction *ki, unsigned index,
 
 void Executor::bindLocal(const KInstruction *target, StackFrame &frame,
                          ref<Expr> value) {
-  getDestCell(frame, target).value = value;
+  setDestCell(frame, target, value);
 }
 
 void Executor::bindArgument(KFunction *kf, unsigned index, StackFrame &frame,
                             ref<Expr> value) {
-  getArgumentCell(frame, kf, index).value = value;
+  setArgumentCell(frame, kf, index, value);
 }
 
 void Executor::bindLocal(const KInstruction *target, ExecutionState &state,
                          ref<Expr> value) {
-  getDestCell(state, target).value = value;
+  setDestCell(state, target, value);
 }
 
 void Executor::bindArgument(KFunction *kf, unsigned index,
                             ExecutionState &state, ref<Expr> value) {
-  getArgumentCell(state, kf, index).value = value;
+  setArgumentCell(state, kf, index, value);
 }
 
 ref<Expr> Executor::toUnique(const ExecutionState &state, ref<Expr> &e) {
