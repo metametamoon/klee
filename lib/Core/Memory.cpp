@@ -9,8 +9,11 @@
 
 #include "Memory.h"
 
+#include "ConstructStorage.h"
 #include "ExecutionState.h"
 #include "MemoryManager.h"
+#include "klee/ADT/Ref.h"
+#include "klee/ADT/SparseStorage.h"
 #include "klee/Core/Context.h"
 
 #include "CodeLocation.h"
@@ -33,8 +36,19 @@ DISABLE_WARNING_DEPRECATED_DECLARATIONS
 #include "llvm/Support/raw_ostream.h"
 DISABLE_WARNING_POP
 
+#include <algorithm>
 #include <cassert>
+#include <cstddef>
+#include <functional>
 #include <sstream>
+
+namespace klee {
+llvm::cl::opt<bool>
+    UseImmerStructures("use-immer-structures",
+                       llvm::cl::desc("Use optimized persistent structures "
+                                      "form immer project (default=false)"),
+                       llvm::cl::init(false));
+}
 
 using namespace llvm;
 using namespace klee;
@@ -304,8 +318,8 @@ ref<Expr> ObjectState::readValue(ref<Expr> offset, Expr::Width width) const {
   ref<Expr> Res(0);
   for (unsigned i = 0; i != NumBytes; ++i) {
     unsigned idx = Context::get().isLittleEndian() ? i : (NumBytes - i - 1);
-    ref<Expr> Byte =
-        readValue8(AddExpr::create(offset, ConstantExpr::create(idx, Expr::Int32)));
+    ref<Expr> Byte = readValue8(
+        AddExpr::create(offset, ConstantExpr::create(idx, Expr::Int32)));
     Res = i ? ConcatExpr::create(Byte, Res) : Byte;
   }
 
@@ -353,8 +367,8 @@ ref<Expr> ObjectState::readBase(ref<Expr> offset, Expr::Width width) const {
   ref<Expr> null = Expr::createPointer(0);
   for (unsigned i = 0; i != NumBytes; ++i) {
     unsigned idx = Context::get().isLittleEndian() ? i : (NumBytes - i - 1);
-    ref<Expr> Byte =
-        readBase8(AddExpr::create(offset, ConstantExpr::create(idx, Expr::Int32)));
+    ref<Expr> Byte = readBase8(
+        AddExpr::create(offset, ConstantExpr::create(idx, Expr::Int32)));
     if (i) {
       ref<Expr> eqBytes = EqExpr::create(Byte, Res);
       Res = SelectExpr::create(eqBytes, Byte, null);
@@ -503,48 +517,56 @@ bool ObjectState::isAccessableFrom(KType *accessingType) const {
 
 ObjectStage::ObjectStage(const Array *array, ref<Expr> defaultValue, bool safe,
                          Expr::Width width)
-    : knownSymbolics(defaultValue), unflushedMask(false),
-      updates(array, nullptr), size(array->size), safeRead(safe), width(width) {
+    : updates(array, nullptr), size(array->size), safeRead(safe), width(width) {
+  knownSymbolics.reset(constructStorage<ref<Expr>, OptionalRefEq<Expr>>(
+      array->getSize(), defaultValue));
+  unflushedMask.reset(constructStorage(array->getSize(), false));
 }
 
 ObjectStage::ObjectStage(ref<Expr> size, ref<Expr> defaultValue, bool safe,
                          Expr::Width width)
-    : knownSymbolics(defaultValue), unflushedMask(false),
-      updates(nullptr, nullptr), size(size), safeRead(safe), width(width) {}
+    : updates(nullptr, nullptr), size(size), safeRead(safe), width(width) {
+  knownSymbolics.reset(
+      constructStorage<ref<Expr>, OptionalRefEq<Expr>>(size, defaultValue));
+  unflushedMask.reset(constructStorage(size, false));
+}
 
 ObjectStage::ObjectStage(const ObjectStage &os)
-    : knownSymbolics(os.knownSymbolics), unflushedMask(os.unflushedMask),
-      updates(os.updates), size(os.size), safeRead(os.safeRead),
-      width(os.width) {}
+    : knownSymbolics(os.knownSymbolics->clone()),
+      unflushedMask(os.unflushedMask->clone()), updates(os.updates),
+      size(os.size), safeRead(os.safeRead), width(os.width) {}
 
 /***/
 
 const UpdateList &ObjectStage::getUpdates() const {
   if (auto sizeExpr = dyn_cast<ConstantExpr>(size)) {
     auto size = sizeExpr->getZExtValue();
-    if (knownSymbolics.storage().size() == size) {
-      SparseStorage<ref<ConstantExpr>> values(ConstantExpr::create(0, width));
+    if (knownSymbolics->storage().size() == size) {
+      std::unique_ptr<Storage<ref<ConstantExpr>>> values(
+          constructStorage(sizeExpr, ConstantExpr::create(0, width)));
       UpdateList symbolicUpdates = UpdateList(nullptr, nullptr);
       for (unsigned i = 0; i < size; i++) {
-        auto value = knownSymbolics.load(i);
+        auto value = knownSymbolics->load(i);
         assert(value);
         if (isa<ConstantExpr>(value)) {
-          values.store(i, cast<ConstantExpr>(value));
+          values->store(i, cast<ConstantExpr>(value));
         } else {
           symbolicUpdates.extend(ConstantExpr::create(i, Expr::Int32), value);
         }
       }
-      auto array = Array::create(sizeExpr, SourceBuilder::constant(values),
-                                 Expr::Int32, width);
+      auto array =
+          Array::create(sizeExpr, SourceBuilder::constant(values->clone()),
+                        Expr::Int32, width);
       updates = UpdateList(array, symbolicUpdates.head);
-      knownSymbolics.reset(nullptr);
-      unflushedMask.reset();
+      knownSymbolics->reset(nullptr);
+      unflushedMask->reset();
     }
   }
 
   if (!updates.root) {
-    SparseStorage<ref<ConstantExpr>> values(ConstantExpr::create(0, width));
-    auto array = Array::create(size, SourceBuilder::constant(values),
+    auto array = Array::create(size,
+                               SourceBuilder::constant(constructStorage(
+                                   size, ConstantExpr::create(0, width))),
                                Expr::Int32, width);
     updates = UpdateList(array, updates.head);
   }
@@ -555,37 +577,39 @@ const UpdateList &ObjectStage::getUpdates() const {
 }
 
 void ObjectStage::initializeToZero() {
-  SparseStorage<ref<ConstantExpr>> values(ConstantExpr::create(0, width));
-  auto array =
-      Array::create(size, SourceBuilder::constant(values), Expr::Int32, width);
+  auto array = Array::create(size,
+                             SourceBuilder::constant(constructStorage(
+                                 size, ConstantExpr::create(0, width))),
+                             Expr::Int32, width);
   updates = UpdateList(array, nullptr);
-  knownSymbolics.reset();
-  unflushedMask.reset();
+  knownSymbolics->reset();
+  unflushedMask->reset();
 }
 
 void ObjectStage::flushForRead() const {
-  for (const auto &unflushed : unflushedMask.storage()) {
+  for (const auto &unflushed : unflushedMask->storage()) {
     auto offset = unflushed.first;
-    auto value = knownSymbolics.load(offset);
+    auto value = knownSymbolics->load(offset);
     assert(value);
     updates.extend(ConstantExpr::create(offset, Expr::Int32), value);
   }
-  unflushedMask.reset(false);
+  unflushedMask->reset(false);
 }
 
 void ObjectStage::flushForWrite() {
   flushForRead();
   // The write is symbolic offset and might overwrite any byte
-  knownSymbolics.reset(nullptr);
+  knownSymbolics->reset(nullptr);
 }
 
 /***/
 
 ref<Expr> ObjectStage::readWidth(unsigned offset) const {
-  if (auto byte = knownSymbolics.load(offset)) {
+  if (auto byte = knownSymbolics->load(offset)) {
     return byte;
   } else {
-    assert(!unflushedMask.load(offset) && "unflushed byte without cache value");
+    assert(!unflushedMask->load(offset) &&
+           "unflushed byte without cache value");
     return ReadExpr::create(
         getUpdates(), ConstantExpr::create(offset, Expr::Int32), safeRead);
   }
@@ -601,15 +625,15 @@ ref<Expr> ObjectStage::readWidth(ref<Expr> offset) const {
 }
 
 void ObjectStage::writeWidth(unsigned offset, uint64_t value) {
-  auto byte = knownSymbolics.load(offset);
+  auto byte = knownSymbolics->load(offset);
   if (byte) {
     auto ce = dyn_cast<ConstantExpr>(byte);
     if (ce && ce->getZExtValue(width) == value) {
       return;
     }
   }
-  knownSymbolics.store(offset, ConstantExpr::create(value, width));
-  unflushedMask.store(offset, true);
+  knownSymbolics->store(offset, ConstantExpr::create(value, width));
+  unflushedMask->store(offset, true);
 }
 
 void ObjectStage::writeWidth(unsigned offset, ref<Expr> value) {
@@ -617,12 +641,12 @@ void ObjectStage::writeWidth(unsigned offset, ref<Expr> value) {
   if (ConstantExpr *CE = dyn_cast<ConstantExpr>(value)) {
     writeWidth(offset, CE->getZExtValue(width));
   } else {
-    auto byte = knownSymbolics.load(offset);
+    auto byte = knownSymbolics->load(offset);
     if (byte && byte == value) {
       return;
     }
-    knownSymbolics.store(offset, value);
-    unflushedMask.store(offset, true);
+    knownSymbolics->store(offset, value);
+    unflushedMask->store(offset, true);
   }
 }
 
@@ -630,8 +654,8 @@ void ObjectStage::writeWidth(ref<Expr> offset, ref<Expr> value) {
   assert(!isa<ConstantExpr>(offset) &&
          "constant offset passed to symbolic write8");
 
-  if (knownSymbolics.defaultV() && knownSymbolics.defaultV() == value &&
-      knownSymbolics.storage().size() == 0 && updates.getSize() == 0) {
+  if (knownSymbolics->defaultV() && knownSymbolics->defaultV() == value &&
+      knownSymbolics->storage().size() == 0 && updates.getSize() == 0) {
     return;
   }
 
@@ -641,8 +665,25 @@ void ObjectStage::writeWidth(ref<Expr> offset, ref<Expr> value) {
 }
 
 void ObjectStage::write(const ObjectStage &os) {
-  knownSymbolics = os.knownSymbolics;
-  unflushedMask = os.unflushedMask;
+  auto constSize = dyn_cast<ConstantExpr>(size);
+  auto osConstSize = dyn_cast<ConstantExpr>(os.size);
+  if (constSize || osConstSize) {
+    size_t bound = 0;
+    if (osConstSize && constSize) {
+      bound = std::min(constSize->getZExtValue(), osConstSize->getZExtValue());
+    } else if (constSize) {
+      bound = constSize->getZExtValue();
+    } else {
+      bound = osConstSize->getZExtValue();
+    }
+    for (size_t i = 0; i < bound; ++i) {
+      knownSymbolics->store(i, os.knownSymbolics->load(i));
+      unflushedMask->store(i, os.unflushedMask->load(i));
+    }
+  } else {
+    knownSymbolics.reset(os.knownSymbolics->clone());
+    unflushedMask.reset(os.unflushedMask->clone());
+  }
   updates = UpdateList(updates.root, os.updates.head);
 }
 
@@ -655,7 +696,7 @@ void ObjectStage::print() const {
 
   llvm::errs() << "\tBytes:\n";
 
-  for (auto [index, value] : knownSymbolics.storage()) {
+  for (auto [index, value] : knownSymbolics->storage()) {
     llvm::errs() << "\t\t[" << index << "]";
     llvm::errs() << value << "\n";
   }

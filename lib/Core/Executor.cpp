@@ -11,6 +11,7 @@
 
 #include "AddressSpace.h"
 #include "CXXTypeSystem/CXXTypeManager.h"
+#include "ConstructStorage.h"
 #include "CoreStats.h"
 #include "DistanceCalculator.h"
 #include "ExecutionState.h"
@@ -122,7 +123,6 @@ DISABLE_WARNING_POP
 #include <memory>
 #include <sstream>
 #include <string>
-#include <cstdint>
 #include <sys/mman.h>
 #include <sys/resource.h>
 #include <utility>
@@ -563,9 +563,9 @@ Executor::Executor(LLVMContext &ctx, const InterpreterOptions &opts,
                    InterpreterHandler *ih)
     : Interpreter(opts), interpreterHandler(ih), searcher(nullptr),
       externalDispatcher(new ExternalDispatcher(ctx)), statsTracker(0),
-      pathWriter(0), symPathWriter(0),
-      specialFunctionHandler(0), timers{time::Span(TimerInterval)},
-      guidanceKind(opts.Guidance), codeGraphInfo(new CodeGraphInfo()),
+      pathWriter(0), symPathWriter(0), specialFunctionHandler(0),
+      timers{time::Span(TimerInterval)}, guidanceKind(opts.Guidance),
+      codeGraphInfo(new CodeGraphInfo()),
       distanceCalculator(new DistanceCalculator(*codeGraphInfo)),
       targetCalculator(new TargetCalculator(*codeGraphInfo)),
       targetManager(new TargetManager(guidanceKind, *distanceCalculator,
@@ -829,8 +829,12 @@ void Executor::initializeGlobalObject(ExecutionState &state, ObjectState *os,
                              offset + i * elementSize);
   } else if (isa<ConstantAggregateZero>(c)) {
     unsigned i, size = targetData->getTypeStoreSize(c->getType());
-    for (i = 0; i < size; i++)
-      os->write8(offset + i, (uint8_t)0);
+    if (offset) {
+      for (i = 0; i < size; i++)
+        os->write8(offset + i, (uint8_t)0);
+    } else {
+      os->initializeToZero();
+    }
   } else if (const ConstantArray *ca = dyn_cast<ConstantArray>(c)) {
     unsigned elementSize =
         targetData->getTypeStoreSize(ca->getType()->getElementType());
@@ -1672,11 +1676,11 @@ const Cell &Executor::eval(const KInstruction *ki, unsigned index,
     return kmodule->constantTable[index];
   } else {
     unsigned index = vnumber;
-    ref<Expr> reg = sf.locals[index].value;
+    ref<Expr> reg = sf.locals->at(index).value;
     if (isSymbolic && reg.isNull()) {
       prepareSymbolicRegister(state, sf, index);
     }
-    return sf.locals[index];
+    return sf.locals->at(index);
   }
 }
 
@@ -1687,22 +1691,22 @@ const Cell &Executor::eval(const KInstruction *ki, unsigned index,
 
 void Executor::bindLocal(const KInstruction *target, StackFrame &frame,
                          ref<Expr> value) {
-  getDestCell(frame, target).value = value;
+  setDestCell(frame, target, value);
 }
 
 void Executor::bindArgument(KFunction *kf, unsigned index, StackFrame &frame,
                             ref<Expr> value) {
-  getArgumentCell(frame, kf, index).value = value;
+  setArgumentCell(frame, kf, index, value);
 }
 
 void Executor::bindLocal(const KInstruction *target, ExecutionState &state,
                          ref<Expr> value) {
-  getDestCell(state, target).value = value;
+  setDestCell(state, target, value);
 }
 
 void Executor::bindArgument(KFunction *kf, unsigned index,
                             ExecutionState &state, ref<Expr> value) {
-  getArgumentCell(state, kf, index).value = value;
+  setArgumentCell(state, kf, index, value);
 }
 
 ref<Expr> Executor::toUnique(const ExecutionState &state, ref<Expr> e) {
@@ -3658,8 +3662,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
 
     if (castToType->isPointerTy()) {
       castToType = castToType->getPointerElementType();
-      if (ref<PointerExpr> pointer =
-              dyn_cast<PointerExpr>(makePointer(result))) {
+      if (ref<PointerExpr> pointer = cast<PointerExpr>(makePointer(result))) {
         ref<Expr> base = pointer->getBase();
         if (state.isGEPExpr(base)) {
           state.gepExprBases[base] = castToType;
@@ -5738,7 +5741,7 @@ void Executor::executeAlloc(ExecutionState &state, ref<Expr> size, bool isLocal,
       ref<SymbolicSource> source = nullptr;
       if (zeroMemory) {
         source = SourceBuilder::constant(
-            SparseStorage(ConstantExpr::create(0, Expr::Int8)));
+            constructStorage(size, ConstantExpr::create(0, Expr::Int8)));
       } else {
         source = SourceBuilder::uninitialized(allocations++, target);
       }
@@ -7007,9 +7010,6 @@ const Array *Executor::makeArray(ref<Expr> size,
 }
 
 ref<PointerExpr> Executor::makePointer(ref<Expr> expr) const {
-  if (isa<ConstantExpr>(expr)) {
-    llvm::errs();
-  }
   return PointerExpr::create(expr);
 }
 
@@ -7062,8 +7062,7 @@ void Executor::executeMakeSymbolic(ExecutionState &state,
                  (!AllowSeedTruncation && obj->numBytes > moSize))) {
               std::stringstream msg;
               msg << "replace size mismatch: " << mo->name << "[" << moSize
-                  << "]"
-                  << " vs " << obj->name << "[" << obj->numBytes << "]"
+                  << "]" << " vs " << obj->name << "[" << obj->numBytes << "]"
                   << " in test\n";
 
               terminateStateOnUserError(state, msg.str());
@@ -7486,8 +7485,7 @@ void Executor::logState(const ExecutionState &state, int id,
     object.first->getSizeExpr()->print(*f);
     *f << "\n";
   }
-  *f << state.symbolics.size() << " symbolics total. "
-     << "Symbolics:\n";
+  *f << state.symbolics.size() << " symbolics total. " << "Symbolics:\n";
   size_t sc = 0;
   for (const auto &symbolic : state.symbolics) {
     *f << "Symbolic number " << sc++ << "\n";
