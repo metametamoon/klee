@@ -14,6 +14,7 @@
 
 #include "klee/ADT/ImmutableList.h"
 #include "klee/ADT/ImmutableSet.h"
+#include "klee/ADT/PersistentHashMap.h"
 #include "klee/ADT/PersistentMap.h"
 #include "klee/ADT/PersistentSet.h"
 #include "klee/ADT/TreeStream.h"
@@ -66,7 +67,7 @@ extern llvm::cl::opt<unsigned long long> MaxCyclesBeforeStuck;
 struct StackFrame {
   KFunction *kf;
   std::vector<IDType> allocas;
-  Cell *locals;
+  PersistentHashMap<unsigned, Cell> locals;
 
   // For vararg functions: arguments not passed via parameter are
   // stored (packed tightly) in a local (alloca) memory object. This

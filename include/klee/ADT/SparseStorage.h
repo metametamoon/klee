@@ -1,6 +1,8 @@
 #ifndef KLEE_SPARSESTORAGE_H
 #define KLEE_SPARSESTORAGE_H
 
+#include "klee/ADT/PersistentHashMap.h"
+
 #include <cassert>
 #include <cstddef>
 #include <functional>
@@ -23,7 +25,7 @@ enum class Density {
 template <typename ValueType, typename Eq = std::equal_to<ValueType>>
 class SparseStorage {
 private:
-  std::unordered_map<size_t, ValueType> internalStorage;
+  PersistentHashMap<size_t, ValueType> internalStorage;
   ValueType defaultValue;
   Eq eq;
 
@@ -51,9 +53,9 @@ public:
 
   void store(size_t idx, const ValueType &value) {
     if (eq(value, defaultValue)) {
-      internalStorage.erase(idx);
+      internalStorage.remove(idx);
     } else {
-      internalStorage[idx] = value;
+      internalStorage.replace({idx, value});
     }
   }
 
@@ -66,8 +68,8 @@ public:
   }
 
   ValueType load(size_t idx) const {
-    auto it = internalStorage.find(idx);
-    return it != internalStorage.end() ? it->second : defaultValue;
+    auto it = internalStorage.lookup(idx);
+    return it ? *it : defaultValue;
   }
 
   size_t sizeOfSetRange() const {
@@ -121,7 +123,7 @@ public:
     return vectorized;
   }
 
-  const std::unordered_map<size_t, ValueType> &storage() const {
+  const PersistentHashMap<size_t, ValueType> &storage() const {
     return internalStorage;
   };
 

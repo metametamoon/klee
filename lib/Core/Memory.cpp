@@ -160,6 +160,15 @@ void ObjectState::flushForWrite() {
 
 /***/
 
+void ObjectState::initializeToZero() {
+  SparseStorage<ref<ConstantExpr>> values(ConstantExpr::create(0, Expr::Int8));
+  auto array = getArrayCache()->CreateArray(object->getSizeExpr(),
+                                            SourceBuilder::constant(values));
+  updates = UpdateList(array, nullptr);
+  knownSymbolics.reset();
+  unflushedMask.reset();
+}
+
 ref<Expr> ObjectState::read8(unsigned offset) const {
   if (auto byte = knownSymbolics.load(offset)) {
     return byte;

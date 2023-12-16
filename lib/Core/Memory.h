@@ -231,12 +231,11 @@ public:
   const MemoryObject *getObject() const { return object.get(); }
 
   void setReadOnly(bool ro) { readOnly = ro; }
+  void initializeToZero();
 
   size_t getSparseStorageEntries() {
     return knownSymbolics.storage().size() + unflushedMask.storage().size();
   }
-
-  void swapObjectHack(MemoryObject *mo) { object = mo; }
 
   ref<Expr> read(ref<Expr> offset, Expr::Width width) const;
   ref<Expr> read(unsigned offset, Expr::Width width) const;
@@ -258,8 +257,6 @@ public:
 
 private:
   const UpdateList &getUpdates() const;
-
-  void makeConcrete();
 
   ref<Expr> read8(ref<Expr> offset) const;
   void write8(unsigned offset, ref<Expr> value);

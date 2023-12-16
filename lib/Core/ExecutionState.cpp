@@ -100,17 +100,16 @@ void ExecutionStack::popFrame() {
 }
 
 StackFrame::StackFrame(KFunction *kf) : kf(kf), varargs(nullptr) {
-  locals = new Cell[kf->getNumRegisters()];
+  for (unsigned i = 0; i < kf->getNumRegisters(); i++)
+    locals.insert({i, Cell()});
 }
 
 StackFrame::StackFrame(const StackFrame &s)
     : kf(s.kf), allocas(s.allocas), varargs(s.varargs) {
-  locals = new Cell[kf->getNumRegisters()];
-  for (unsigned i = 0; i < kf->getNumRegisters(); i++)
-    locals[i] = s.locals[i];
+  locals = s.locals;
 }
 
-StackFrame::~StackFrame() { delete[] locals; }
+StackFrame::~StackFrame() {}
 
 InfoStackFrame::InfoStackFrame(KFunction *kf) : kf(kf) {}
 
@@ -407,7 +406,7 @@ void ExecutionState::dumpStack(llvm::raw_ostream &out) const {
       if (ai->hasName())
         out << ai->getName().str() << "=";
 
-      ref<Expr> value = sf.locals[csf.kf->getArgRegister(index++)].value;
+      ref<Expr> value = sf.locals.at(csf.kf->getArgRegister(index++)).value;
       if (isa_and_nonnull<ConstantExpr>(value)) {
         out << value;
       } else {
