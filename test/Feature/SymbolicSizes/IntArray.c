@@ -2,7 +2,7 @@
 // Disabling darwin and metasmt because test has flaky behaviour on CI
 // RUN: %clang %s -g -emit-llvm %O0opt -c -o %t1.bc
 // RUN: rm -rf %t.klee-out
-// RUN: %klee --output-dir=%t.klee-out --use-sym-size-alloc --use-sym-size-li --min-number-elements-li=1 --skip-not-lazy-initialized %t1.bc 2>&1 | FileCheck %s
+// RUN: %klee --output-dir=%t.klee-out --use-sym-size-alloc --use-sym-size-li --min-number-elements-li=1 --skip-local --skip-global %t1.bc 2>&1 | FileCheck %s
 
 #include "klee/klee.h"
 #include <assert.h>

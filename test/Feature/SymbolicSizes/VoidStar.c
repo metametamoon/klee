@@ -1,6 +1,6 @@
 // RUN: %clang %s -g -emit-llvm %O0opt -c -o %t1.bc
 // RUN: rm -rf %t.klee-out
-// RUN: %klee --output-dir=%t.klee-out --check-out-of-memory --use-sym-size-alloc --skip-not-lazy-initialized --use-merged-pointer-dereference=true %t1.bc 2>&1 | FileCheck %s
+// RUN: %klee --output-dir=%t.klee-out --check-out-of-memory --use-sym-size-alloc --skip-local --skip-global --use-merged-pointer-dereference=true %t1.bc 2>&1 | FileCheck %s
 
 #include "klee/klee.h"
 #include <stdio.h>
