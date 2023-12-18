@@ -10,9 +10,11 @@
 #ifndef KLEE_PRESISTENTHASHMAP_H
 #define KLEE_PRESISTENTHASHMAP_H
 
+#ifndef IMMER_NO_EXCEPTIONS
 #define IMMER_NO_EXCEPTIONS
 
 #include <immer/map.hpp>
+#endif /* IMMER_NO_EXCEPTIONS */
 
 namespace klee {
 
