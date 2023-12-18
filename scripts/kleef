@@ -39,7 +39,8 @@ def klee_options(
         "--max-solvers-approx-tree-inc=16",
         f"--max-memory={int(max_memory * 0.9)}",  # Just use half of the memory in case we have to fork
         "--libc=klee",
-        "--skip-not-lazy-initialized",
+        "--skip-local",
+        "--skip-global",
         f"--output-dir={test_output_dir}",  # Output files into specific directory
         "--output-source=false",  # Do not output assembly.ll - it can be too large
         "--output-stats=false",
