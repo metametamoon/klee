@@ -13,6 +13,8 @@
 #include <variant>
 
 namespace klee {
+typedef std::vector<ref<const MemoryObject>> ObjectResolutionList;
+
 struct ComposeHelper {
 private:
   Executor *executor;
@@ -56,7 +58,7 @@ public:
   bool resolveMemoryObjects(ExecutionState &state, ref<Expr> address,
                             KType *targetType, KInstruction *target,
                             unsigned bytes,
-                            std::vector<IDType> &mayBeResolvedMemoryObjects,
+                            ObjectResolutionList &mayBeResolvedMemoryObjects,
                             bool &mayBeOutOfBound, bool &mayLazyInitialize,
                             bool &incomplete) {
     return executor->resolveMemoryObjects(
@@ -66,8 +68,8 @@ public:
 
   bool checkResolvedMemoryObjects(
       ExecutionState &state, ref<Expr> address, KInstruction *target,
-      unsigned bytes, const std::vector<IDType> &mayBeResolvedMemoryObjects,
-      bool hasLazyInitialized, std::vector<IDType> &resolvedMemoryObjects,
+      unsigned bytes, const ObjectResolutionList &mayBeResolvedMemoryObjects,
+      bool hasLazyInitialized, ObjectResolutionList &resolvedMemoryObjects,
       std::vector<ref<Expr>> &resolveConditions,
       std::vector<ref<Expr>> &unboundConditions, ref<Expr> &checkOutOfBounds,
       bool &mayBeOutOfBound) {
@@ -92,18 +94,18 @@ public:
                             ref<Expr> &guard,
                             std::vector<ref<Expr>> &resolveConditions,
                             std::vector<ref<Expr>> &unboundConditions,
-                            std::vector<IDType> &resolvedMemoryObjects);
+                            ObjectResolutionList &resolvedMemoryObjects);
 
   void collectReads(ExecutionState &state, ref<Expr> address, KType *targetType,
                     Expr::Width type, unsigned bytes,
-                    const std::vector<IDType> &resolvedMemoryObjects,
+                    const ObjectResolutionList &resolvedMemoryObjects,
                     std::vector<ref<Expr>> &results) {
     executor->collectReads(state, address, targetType, type, bytes,
                            resolvedMemoryObjects, results);
   }
 
   void collectObjectStates(ExecutionState &state,
-                           const std::vector<IDType> &resolvedMemoryObjects,
+                           const ObjectResolutionList &resolvedMemoryObjects,
                            std::vector<ref<ObjectState>> &results) {
     executor->collectObjectStates(state, resolvedMemoryObjects, results);
   }

@@ -63,11 +63,14 @@ void AddressSpace::bindObject(const MemoryObject *mo, ObjectState *os) {
   assert(os->copyOnWriteOwner == 0 && "object already has owner");
   os->copyOnWriteOwner = cowKey;
   objects = objects.replace(std::make_pair(mo, os));
-  idToObjects = idToObjects.replace(std::make_pair(mo->id, mo));
+}
+
+void AddressSpace::bindObject(const MemoryObject *mo, const ObjectState *os) {
+  ref<ObjectState> newObjectState(new ObjectState(*os));
+  bindObject(mo, newObjectState.get());
 }
 
 void AddressSpace::unbindObject(const MemoryObject *mo) {
-  idToObjects = idToObjects.remove(mo->id);
   objects = objects.remove(mo);
 }
 
@@ -77,9 +80,21 @@ ObjectPair AddressSpace::findObject(const MemoryObject *mo) const {
              : ObjectPair(nullptr, nullptr);
 }
 
-ObjectPair AddressSpace::findObject(IDType id) const {
-  const auto res = idToObjects.lookup(id);
-  return res ? findObject(res->second) : ObjectPair(nullptr, nullptr);
+RefObjectPair AddressSpace::lazyInitializeObject(const MemoryObject *mo) const {
+  return RefObjectPair(mo, new ObjectState(mo, mo->content, mo->type));
+}
+
+RefObjectPair
+AddressSpace::findOrLazyInitializeObject(const MemoryObject *mo) const {
+  ObjectPair op = findObject(mo);
+  if (op.first && op.second) {
+    return RefObjectPair(op.first, op.second);
+  }
+  assert(!op.first && !op.second);
+  if (mo->isLazyInitialized) {
+    return lazyInitializeObject(mo);
+  }
+  return ObjectPair(nullptr, nullptr);
 }
 
 ObjectState *AddressSpace::getWriteable(const MemoryObject *mo,
@@ -90,16 +105,14 @@ ObjectState *AddressSpace::getWriteable(const MemoryObject *mo,
 
   // Add a copy of this object state that can be updated
   ref<ObjectState> newObjectState(new ObjectState(*os));
-  newObjectState->copyOnWriteOwner = cowKey;
-  objects = objects.replace(std::make_pair(mo, newObjectState));
-  idToObjects = idToObjects.replace(std::make_pair(mo->id, mo));
+  bindObject(mo, newObjectState.get());
   return newObjectState.get();
 }
 
 ///
 
 bool AddressSpace::resolveOne(const ref<ConstantExpr> &addr, KType *objectType,
-                              IDType &result) const {
+                              ObjectPair &result) const {
   uint64_t address = addr->getZExtValue();
   MemoryObject hack(address);
 
@@ -116,7 +129,7 @@ bool AddressSpace::resolveOne(const ref<ConstantExpr> &addr, KType *objectType,
         uint64_t moAddress = arrayConstantAddress->getZExtValue();
         if ((moSize == 0 && address == moAddress) ||
             (address - moAddress < moSize)) {
-          result = mo->id;
+          result = findObject(mo);
           return true;
         }
       }
@@ -128,7 +141,7 @@ bool AddressSpace::resolveOne(const ref<ConstantExpr> &addr, KType *objectType,
 
 bool AddressSpace::resolveOneIfUnique(ExecutionState &state,
                                       TimingSolver *solver, ref<Expr> address,
-                                      KType *objectType, IDType &result,
+                                      KType *objectType, ObjectPair &result,
                                       bool &success) const {
   ref<Expr> base =
       state.isGEPExpr(address) ? state.gepExprBases.at(address).first : address;
@@ -152,7 +165,7 @@ bool AddressSpace::resolveOneIfUnique(ExecutionState &state,
         return false;
       }
       if (success) {
-        result = mo->id;
+        result = findObject(mo);
       }
     }
   }
@@ -203,7 +216,7 @@ public:
 
 bool AddressSpace::resolveOne(ExecutionState &state, TimingSolver *solver,
                               ref<Expr> address, KType *objectType,
-                              IDType &result, bool &success,
+                              ObjectPair &result, bool &success,
                               const std::atomic_bool &haltExecution) const {
   ResolvePredicate predicate(state, address, objectType, complete);
   if (ref<ConstantExpr> CE = dyn_cast<ConstantExpr>(address)) {
@@ -242,7 +255,7 @@ bool AddressSpace::resolveOne(ExecutionState &state, TimingSolver *solver,
         if (example - arrayConstantAddress->getZExtValue() <
                 arrayConstantSize->getZExtValue() &&
             res->second->isAccessableFrom(objectType)) {
-          result = mo->id;
+          result = findObject(mo);
           success = true;
           return true;
         }
@@ -269,7 +282,7 @@ bool AddressSpace::resolveOne(ExecutionState &state, TimingSolver *solver,
                            state.queryMetaData))
       return false;
     if (mayBeTrue) {
-      result = oi->first->id;
+      result = {oi->first, oi->second.get()};
       success = true;
       return true;
     }
@@ -296,7 +309,7 @@ int AddressSpace::checkPointerInObject(ExecutionState &state,
   }
 
   if (mayBeTrue) {
-    rl.push_back(mo->id);
+    rl.push_back(op);
 
     // fast path check
     auto size = rl.size();
@@ -321,7 +334,7 @@ bool AddressSpace::resolve(ExecutionState &state, TimingSolver *solver,
                            time::Span timeout) const {
   ResolvePredicate predicate(state, p, objectType, complete);
   if (ConstantExpr *CE = dyn_cast<ConstantExpr>(p)) {
-    IDType res;
+    ObjectPair res;
     if (resolveOne(CE, objectType, res)) {
       rl.push_back(res);
       return false;
@@ -329,7 +342,7 @@ bool AddressSpace::resolve(ExecutionState &state, TimingSolver *solver,
   }
   TimerStatIncrementer timer(stats::resolveTime);
 
-  IDType fastPathObjectID;
+  ObjectPair fastPathObjectID;
   bool fastPathSuccess;
   if (!resolveOneIfUnique(state, solver, p, objectType, fastPathObjectID,
                           fastPathSuccess)) {

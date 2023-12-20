@@ -65,7 +65,7 @@ extern llvm::cl::opt<unsigned long long> MaxCyclesBeforeStuck;
 
 struct StackFrame {
   KFunction *kf;
-  std::vector<IDType> allocas;
+  std::vector<ref<const MemoryObject>> allocas;
   Cell *locals;
 
   // For vararg functions: arguments not passed via parameter are
@@ -315,9 +315,9 @@ public:
   ImmutableList<Symbolic> symbolics;
 
   /// @brief map from memory accesses to accessed objects and access offsets.
-  ExprHashMap<std::set<IDType>> resolvedPointers;
-  std::unordered_map<MemorySubobject, std::set<IDType>, MemorySubobjectHash,
-                     MemorySubobjectCompare>
+  ExprHashMap<std::set<ref<const MemoryObject>>> resolvedPointers;
+  std::unordered_map<MemorySubobject, std::set<ref<const MemoryObject>>,
+                     MemorySubobjectHash, MemorySubobjectCompare>
       resolvedSubobjects;
 
   /// @brief A set of boolean expressions

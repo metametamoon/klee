@@ -299,6 +299,8 @@ private:
   ObjectState *bindObjectInState(ExecutionState &state, const MemoryObject *mo,
                                  KType *dynamicType, bool IsAlloca,
                                  const Array *array = nullptr);
+  ObjectState *bindObjectInState(ExecutionState &state, const MemoryObject *mo,
+                                 const ObjectState *object);
 
   /// Resolve a pointer to the memory objects it could point to the
   /// start of, forking execution when necessary and generating errors
@@ -308,7 +310,8 @@ private:
   /// \param results[out] A list of ((MemoryObject,ObjectState),
   /// state) pairs for each object the given address can point to the
   /// beginning of.
-  typedef std::vector<std::pair<IDType, ExecutionState *>> ExactResolutionList;
+  typedef std::vector<std::pair<const MemoryObject *, ExecutionState *>>
+      ExactResolutionList;
   bool resolveExact(ExecutionState &state, ref<Expr> p, KType *type,
                     ExactResolutionList &results, const std::string &name);
 
@@ -325,9 +328,9 @@ private:
 
   MemoryObject *allocate(ExecutionState &state, ref<Expr> size, bool isLocal,
                          bool isGlobal, const llvm::Value *allocSite,
-                         size_t allocationAlignment,
+                         size_t allocationAlignment, KType *type,
                          ref<Expr> lazyInitializationSource = ref<Expr>(),
-                         unsigned timestamp = 0);
+                         unsigned timestamp = 0, bool isSymbolic = false);
 
   /// Allocate and bind a new object in a particular state. NOTE: This
   /// function may fork.
@@ -375,17 +378,19 @@ private:
   void executeCall(ExecutionState &state, KInstruction *ki, llvm::Function *f,
                    std::vector<ref<Expr>> &arguments);
 
+  typedef std::vector<ref<const MemoryObject>> ObjectResolutionList;
+
   bool resolveMemoryObjects(ExecutionState &state, ref<Expr> address,
                             KType *targetType, KInstruction *target,
                             unsigned bytes,
-                            std::vector<IDType> &mayBeResolvedMemoryObjects,
+                            ObjectResolutionList &mayBeResolvedMemoryObjects,
                             bool &mayBeOutOfBound, bool &mayLazyInitialize,
                             bool &incomplete, bool onlyLazyInitialize = false);
 
   bool checkResolvedMemoryObjects(
       ExecutionState &state, ref<Expr> address, KInstruction *target,
-      unsigned bytes, const std::vector<IDType> &mayBeResolvedMemoryObjects,
-      bool hasLazyInitialized, std::vector<IDType> &resolvedMemoryObjects,
+      unsigned bytes, const ObjectResolutionList &mayBeResolvedMemoryObjects,
+      bool hasLazyInitialized, ObjectResolutionList &resolvedMemoryObjects,
       std::vector<ref<Expr>> &resolveConditions,
       std::vector<ref<Expr>> &unboundConditions, ref<Expr> &checkOutOfBounds,
       bool &mayBeOutOfBound);
@@ -397,12 +402,12 @@ private:
                  ref<Expr> &guard, bool &mayBeInBounds);
 
   void collectObjectStates(ExecutionState &state,
-                           const std::vector<IDType> &resolvedMemoryObjects,
+                           const ObjectResolutionList &resolvedMemoryObjects,
                            std::vector<ref<ObjectState>> &results);
 
   void collectReads(ExecutionState &state, ref<Expr> address, KType *targetType,
                     Expr::Width type, unsigned bytes,
-                    const std::vector<IDType> &resolvedMemoryObjects,
+                    const ObjectResolutionList &resolvedMemoryObjects,
                     std::vector<ref<Expr>> &results);
 
   // do address resolution / object binding / out of bounds checking
@@ -412,17 +417,17 @@ private:
                               ref<Expr> value /* undef if read */,
                               KInstruction *target /* undef if write */);
 
-  bool lazyInitializeObject(ExecutionState &state, ref<Expr> address,
-                            const KInstruction *target, KType *targetType,
-                            uint64_t concreteSize, ref<Expr> size, bool isLocal,
-                            IDType &id, bool isConstant = true);
+  ref<const MemoryObject>
+  lazyInitializeObject(ExecutionState &state, ref<Expr> address,
+                       const KInstruction *target, KType *targetType,
+                       uint64_t concreteSize, ref<Expr> size, bool isLocal,
+                       bool isConstant = true);
 
-  IDType lazyInitializeLocalObject(ExecutionState &state, StackFrame &sf,
-                                   ref<Expr> address,
-                                   const KInstruction *target);
+  void lazyInitializeLocalObject(ExecutionState &state, StackFrame &sf,
+                                 ref<Expr> address, const KInstruction *target);
 
-  IDType lazyInitializeLocalObject(ExecutionState &state, ref<Expr> address,
-                                   const KInstruction *target);
+  void lazyInitializeLocalObject(ExecutionState &state, ref<Expr> address,
+                                 const KInstruction *target);
 
   void executeMakeSymbolic(ExecutionState &state, const MemoryObject *mo,
                            KType *type, const ref<SymbolicSource> source,

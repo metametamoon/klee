@@ -84,6 +84,8 @@ public:
   bool isUserSpecified;
 
   MemoryManager *parent;
+  KType *type;
+  const Array *content;
 
   /// "Location" for which this memory object was allocated. This
   /// should be either the allocating instruction or the global object
@@ -99,18 +101,21 @@ public:
   explicit MemoryObject(uint64_t _address)
       : id(0), timestamp(0), addressExpr(Expr::createPointer(_address)),
         sizeExpr(Expr::createPointer(0)), alignment(0), isFixed(true),
-        isLazyInitialized(false), parent(NULL), allocSite(0) {}
+        isLazyInitialized(false), parent(nullptr), type(nullptr),
+        content(nullptr), allocSite(nullptr) {}
 
   MemoryObject(
       ref<Expr> _address, ref<Expr> _size, uint64_t alignment, bool _isLocal,
       bool _isGlobal, bool _isFixed, bool _isLazyInitialized,
-      const llvm::Value *_allocSite, MemoryManager *_parent,
-      unsigned _timestamp = 0 /* unused if _isLazyInitialized is false*/)
+      const llvm::Value *_allocSite, MemoryManager *_parent, KType *_type,
+      unsigned _timestamp = 0 /* unused if _isLazyInitialized is false*/,
+      const Array *_content =
+          nullptr /* unused if _isLazyInitialized is false*/)
       : id(counter++), timestamp(_timestamp), addressExpr(_address),
         sizeExpr(_size), alignment(alignment), name("unnamed"),
         isLocal(_isLocal), isGlobal(_isGlobal), isFixed(_isFixed),
         isLazyInitialized(_isLazyInitialized), isUserSpecified(false),
-        parent(_parent), allocSite(_allocSite) {
+        parent(_parent), type(_type), content(_content), allocSite(_allocSite) {
     if (isLazyInitialized) {
       timestamp = _timestamp;
     } else {

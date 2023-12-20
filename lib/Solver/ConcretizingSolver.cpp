@@ -270,75 +270,28 @@ bool ConcretizingSolver::relaxSymcreteConstraints(const Query &query,
   }
 
   if (isa<ValidResponse>(result)) {
-    ValidityCore validityCore;
-    bool success = result->tryGetValidityCore(validityCore);
-    assert(success);
-
-    constraints_ty allValidityCoreConstraints = validityCore.constraints;
-    allValidityCoreConstraints.insert(validityCore.expr);
-    std::vector<const Array *> currentlyBrokenSymcretizedArrays;
-    findObjects(allValidityCoreConstraints.begin(),
-                allValidityCoreConstraints.end(),
-                currentlyBrokenSymcretizedArrays);
-
-    std::queue<const Array *> arrayQueue;
-
-    for (const Array *array : currentlyBrokenSymcretizedArrays) {
-      if (symcretesDependentFromArrays.count(array) &&
-          !usedSymcretizedArrays.count(array)) {
-        arrayQueue.push(array);
-      }
-    }
-
-    if (!arrayQueue.empty()) {
-      if (!solver->impl->check(query, result)) {
-        return false;
-      }
-    }
-
     return true;
   }
 
-  Query concretizedNegatedQuery =
-      constructConcretizedQuery(query.negateExpr(), assignment);
-
-  ConstraintSet queryConstraints = concretizedNegatedQuery.constraints;
-  queryConstraints.addConstraint(concretizedNegatedQuery.expr);
+  assignment = cast<InvalidResponse>(result)->initialValuesFor(
+      query.constraints.gatherSymcretizedArrays());
 
   ExprHashMap<ref<Expr>> concretizations;
-  ExprHashMap<ref<Expr>> concretizationsMod;
 
   for (ref<Symcrete> symcrete : query.constraints.symcretes()) {
     concretizations[symcrete->symcretized] =
-        assignment.evaluate(symcrete->symcretized);
-    concretizationsMod[symcrete->symcretized] =
-        assignment.evaluate(symcrete->symcretized);
+        cast<ConstantExpr>(assignment.evaluate(symcrete->symcretized));
   }
 
   ref<Expr> concretizationCondition = query.expr;
-  for (const auto &concretization : concretizationsMod) {
+  for (const auto &concretization : concretizations) {
     concretizationCondition =
         OrExpr::create(Expr::createIsZero(EqExpr::create(
                            concretization.first, concretization.second)),
                        concretizationCondition);
   }
 
-  if (!solver->impl->check(query.withExpr(concretizationCondition), result)) {
-    return false;
-  }
-
-  if (isa<ValidResponse>(result)) {
-    concretizationCondition = query.expr;
-    for (const auto &concretization : concretizations) {
-      concretizationCondition =
-          OrExpr::create(Expr::createIsZero(EqExpr::create(
-                             concretization.first, concretization.second)),
-                         concretizationCondition);
-    }
-    return solver->impl->check(query.withExpr(concretizationCondition), result);
-  }
-
-  return true;
+  return solver->impl->check(query.withExpr(concretizationCondition), result);
 }
 
 bool ConcretizingSolver::computeValidity(const Query &query,

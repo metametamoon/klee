@@ -134,8 +134,9 @@ MemoryManager::~MemoryManager() {
 MemoryObject *MemoryManager::allocate(ref<Expr> size, bool isLocal,
                                       bool isGlobal, bool isLazyInitialized,
                                       const llvm::Value *allocSite,
-                                      size_t alignment, ref<Expr> addressExpr,
-                                      unsigned timestamp) {
+                                      size_t alignment, KType *type,
+                                      ref<Expr> addressExpr, unsigned timestamp,
+                                      const Array *content) {
   if (ref<ConstantExpr> sizeExpr = dyn_cast<ConstantExpr>(size)) {
     auto moSize = sizeExpr->getZExtValue();
     if (moSize > MaxConstantAllocationSize) {
@@ -206,9 +207,9 @@ MemoryObject *MemoryManager::allocate(ref<Expr> size, bool isLocal,
            allocSite == res->allocSite);
   } else {
     ++stats::allocations;
-    res =
-        new MemoryObject(addressExpr, size, alignment, isLocal, isGlobal, false,
-                         isLazyInitialized, allocSite, this, timestamp);
+    res = new MemoryObject(addressExpr, size, alignment, isLocal, isGlobal,
+                           false, isLazyInitialized, allocSite, this, type,
+                           timestamp, content);
     if (!isa<ConstantExpr>(addressExpr)) {
       symbolicAddresses[addressExpr] = res;
     }
@@ -219,7 +220,8 @@ MemoryObject *MemoryManager::allocate(ref<Expr> size, bool isLocal,
 }
 
 MemoryObject *MemoryManager::allocateFixed(uint64_t address, uint64_t size,
-                                           const llvm::Value *allocSite) {
+                                           const llvm::Value *allocSite,
+                                           KType *type) {
 #ifndef NDEBUG
   for (objects_ty::iterator it = objects.begin(), ie = objects.end(); it != ie;
        ++it) {
@@ -241,7 +243,7 @@ MemoryObject *MemoryManager::allocateFixed(uint64_t address, uint64_t size,
   ref<Expr> addressExpr = Expr::createPointer(address);
   MemoryObject *res =
       new MemoryObject(addressExpr, Expr::createPointer(size), 8, false, true,
-                       true, false, allocSite, this);
+                       true, false, allocSite, this, type);
   objects.insert(res);
   return res;
 }

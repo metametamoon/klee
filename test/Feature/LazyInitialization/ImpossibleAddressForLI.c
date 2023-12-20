@@ -15,5 +15,5 @@ int main() {
   *x = 30;
 }
 
-// CHECK: KLEE: done: completed paths = 1
+// CHECK: KLEE: done: completed paths = 2
 // CHECK: KLEE: done: generated tests = 3

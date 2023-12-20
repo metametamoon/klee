@@ -13,11 +13,11 @@ bool ComposeHelper::collectMemoryObjects(
     KInstruction *target, ref<Expr> &guard,
     std::vector<ref<Expr>> &resolveConditions,
     std::vector<ref<Expr>> &unboundConditions,
-    std::vector<IDType> &resolvedMemoryObjects) {
+    ObjectResolutionList &resolvedMemoryObjects) {
   bool mayBeOutOfBound = true;
   bool hasLazyInitialized = false;
   bool incomplete = false;
-  std::vector<IDType> mayBeResolvedMemoryObjects;
+  ObjectResolutionList mayBeResolvedMemoryObjects;
 
   if (!resolveMemoryObjects(state, address, targetType, target, 0,
                             mayBeResolvedMemoryObjects, mayBeOutOfBound,
@@ -46,7 +46,7 @@ bool ComposeHelper::tryResolveAddress(ExecutionState &state, ref<Expr> address,
   ref<Expr> guard;
   std::vector<ref<Expr>> resolveConditions;
   std::vector<ref<Expr>> unboundConditions;
-  std::vector<IDType> resolvedMemoryObjects;
+  ObjectResolutionList resolvedMemoryObjects;
   KType *targetType = executor->typeSystemManager->getUnknownType();
   KInstruction *target = nullptr;
 
@@ -60,13 +60,10 @@ bool ComposeHelper::tryResolveAddress(ExecutionState &state, ref<Expr> address,
   if (resolvedMemoryObjects.size() > 0) {
     state.assumptions.insert(guard);
     ref<Expr> resultAddress =
-        state.addressSpace
-            .findObject(resolvedMemoryObjects.at(resolveConditions.size() - 1))
-            .first->getBaseExpr();
+        resolvedMemoryObjects.at(resolveConditions.size() - 1)->getBaseExpr();
     for (unsigned int i = 0; i < resolveConditions.size(); ++i) {
       unsigned int index = resolveConditions.size() - 1 - i;
-      const MemoryObject *mo =
-          state.addressSpace.findObject(resolvedMemoryObjects.at(index)).first;
+      const MemoryObject *mo = resolvedMemoryObjects.at(index).get();
       resultAddress = SelectExpr::create(resolveConditions[index],
                                          mo->getBaseExpr(), resultAddress);
     }
@@ -82,7 +79,7 @@ bool ComposeHelper::tryResolveSize(ExecutionState &state, ref<Expr> address,
   ref<Expr> guard;
   std::vector<ref<Expr>> resolveConditions;
   std::vector<ref<Expr>> unboundConditions;
-  std::vector<IDType> resolvedMemoryObjects;
+  ObjectResolutionList resolvedMemoryObjects;
   KType *targetType = executor->typeSystemManager->getUnknownType();
   KInstruction *target = nullptr;
 
@@ -96,13 +93,10 @@ bool ComposeHelper::tryResolveSize(ExecutionState &state, ref<Expr> address,
   if (resolvedMemoryObjects.size() > 0) {
     state.assumptions.insert(guard);
     ref<Expr> resultSize =
-        state.addressSpace
-            .findObject(resolvedMemoryObjects.at(resolveConditions.size() - 1))
-            .first->getSizeExpr();
+        resolvedMemoryObjects.at(resolveConditions.size() - 1)->getSizeExpr();
     for (unsigned int i = 0; i < resolveConditions.size(); ++i) {
       unsigned int index = resolveConditions.size() - 1 - i;
-      const MemoryObject *mo =
-          state.addressSpace.findObject(resolvedMemoryObjects.at(index)).first;
+      const MemoryObject *mo = resolvedMemoryObjects.at(index).get();
       resultSize = SelectExpr::create(resolveConditions[index],
                                       mo->getSizeExpr(), resultSize);
     }
@@ -122,7 +116,7 @@ bool ComposeHelper::tryResolveContent(
   bool mayBeOutOfBound = true;
   bool hasLazyInitialized = false;
   bool incomplete = false;
-  std::vector<IDType> mayBeResolvedMemoryObjects;
+  ObjectResolutionList mayBeResolvedMemoryObjects;
   KType *baseType = executor->typeSystemManager->getUnknownType();
   KInstruction *target = nullptr;
 
@@ -135,7 +129,7 @@ bool ComposeHelper::tryResolveContent(
   ref<Expr> checkOutOfBounds;
   std::vector<ref<Expr>> resolveConditions;
   std::vector<ref<Expr>> unboundConditions;
-  std::vector<IDType> resolvedMemoryObjects;
+  ObjectResolutionList resolvedMemoryObjects;
   ref<Expr> address = base;
 
   if (!checkResolvedMemoryObjects(

@@ -12,6 +12,7 @@
 
 #include "klee/Expr/Expr.h"
 #include "klee/Expr/ExprHashMap.h"
+#include "klee/Module/KType.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -51,10 +52,12 @@ public:
    */
   MemoryObject *allocate(ref<Expr> size, bool isLocal, bool isGlobal,
                          bool isLazyInitialiazed, const llvm::Value *allocSite,
-                         size_t alignment, ref<Expr> addressExpr = ref<Expr>(),
-                         unsigned timestamp = 0);
+                         size_t alignment, KType *type,
+                         ref<Expr> addressExpr = ref<Expr>(),
+                         unsigned timestamp = 0,
+                         const Array *content = nullptr);
   MemoryObject *allocateFixed(uint64_t address, uint64_t size,
-                              const llvm::Value *allocSite);
+                              const llvm::Value *allocSite, KType *type);
   void deallocate(const MemoryObject *mo);
   void markFreed(MemoryObject *mo);
   ArrayCache *getArrayCache() const { return arrayCache; }
