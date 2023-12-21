@@ -122,18 +122,26 @@ public:
   [[nodiscard]] Kind getKind() const override;
 };
 
-//TODO: maybe separate class Taint
+struct Taint : public Unknown {
+protected:
+    std::string taintType;
 
-struct TaintOutput final : public Unknown {
-  std::string type;
+public:
+    explicit Taint(const std::string &str = "Unknown");
 
+    [[nodiscard]] Kind getKind() const override;
+
+    [[nodiscard]] std::string getTaintType() const;
+    [[nodiscard]] std::string getTaintTypeAsLower() const;
+};
+
+struct TaintOutput final : public Taint {
   explicit TaintOutput(const std::string &str = "TaintOutput");
 
   [[nodiscard]] Kind getKind() const override;
 };
 
-struct TaintPropagation final : public Unknown {
-  std::string type;
+struct TaintPropagation final : public Taint {
   size_t propagationParameter;
 
   explicit TaintPropagation(const std::string &str = "TaintPropagation");
@@ -141,9 +149,7 @@ struct TaintPropagation final : public Unknown {
   [[nodiscard]] Kind getKind() const override;
 };
 
-struct TaintSink final : public Unknown {
-  std::string type;
-
+struct TaintSink final : public Taint {
   explicit TaintSink(const std::string &str = "TaintSink");
 
   [[nodiscard]] Kind getKind() const override;

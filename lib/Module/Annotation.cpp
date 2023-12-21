@@ -139,16 +139,25 @@ Free::Free(const std::string &str) : Unknown(str) {
 
 Kind Free::getKind() const { return Kind::Free; }
 
+Taint::Taint(const std::string &str) : Unknown(str) {
+  taintType = rawValue.substr(0, rawValue.find(':'));
+  // TODO: in the future, support typeless annotations (meaning all types)
+  if (taintType.empty()) {
+    klee_error("Annotation Taint: Incorrect value format, must has taint type");
+  }
+}
+
+Kind Taint::getKind() const { return Unknown::getKind(); }
+
+std::string Taint::getTaintType() const { return taintType; }
+
+std::string Taint::getTaintTypeAsLower() const { return toLower(taintType); }
+
 /*
  * Format: TaintOutput:{offset}:{type}
  */
 
-TaintOutput::TaintOutput(const std::string &str) : Unknown(str) {
-  if (rawValue.empty()) {
-    klee_error("Annotation TaintOutput: Incorrect value format, must be not empty");
-  }
-  type = rawValue;
-}
+TaintOutput::TaintOutput(const std::string &str) : Taint(str) {}
 
 Kind TaintOutput::getKind() const { return Kind::TaintOutput; }
 
@@ -156,22 +165,27 @@ Kind TaintOutput::getKind() const { return Kind::TaintOutput; }
  * Format: TaintPropagation::{type}:{data}
  */
 
-TaintPropagation::TaintPropagation(const std::string &str) : Unknown(str) {
+TaintPropagation::TaintPropagation(const std::string &str) : Taint(str) {
+  //TODO: now this is true for cooddy, but it’s not clear how to use them.
   if (!rawOffset.empty()) {
-      klee_error("Annotation TaintPropagation: Incorrect offset format, must be empty");
-  }
-  if (rawValue.empty()) {
-    klee_error("Annotation TaintPropagation: Incorrect value format, must be not empty");
+    klee_error("Annotation TaintSink: Incorrect offset format, must be empty");
   }
 
   const size_t colonPos = rawValue.find(':');
-  if (colonPos == std::string::npos) {
-    klee_error("Annotation TaintPropagation: Incorrect value %s format, must be <type>:<index>", rawValue.c_str());
-  }
-  type = rawValue.substr(0, colonPos);
+  const std::string rawData = (colonPos == std::string::npos)
+                              ? std::string()
+                              : rawValue.substr(colonPos + 1, std::string::npos);
 
-  if (sscanf(rawValue.substr(colonPos + 1, std::string::npos).c_str(), "%zu", &propagationParameter) != 1) {
-    klee_error("Annotation TaintPropagation: Incorrect value %s format, must be <type>:<index>", rawValue.c_str());
+  if (rawData.empty()) {
+    klee_error("Annotation TaintPropagation: Incorrect value %s format, must be <type>:<index>",
+               rawValue.c_str());
+  }
+
+  char* end = nullptr;
+  propagationParameter = strtoul(rawData.c_str(), &end, 10);
+  if (*end != '\0' || errno == ERANGE) {
+    klee_error("Annotation TaintPropagation: Incorrect value %s format, must be <type>:<index>",
+               rawValue.c_str());
   }
 }
 
@@ -181,15 +195,11 @@ Kind TaintPropagation::getKind() const { return Kind::TaintPropagation; }
  * Format: TaintSink::{type}
  */
 
-TaintSink::TaintSink(const std::string &str) : Unknown(str) {
+TaintSink::TaintSink(const std::string &str) : Taint(str) {
+  //TODO: now this is true for cooddy, but it’s not clear how to use them.
   if (!rawOffset.empty()) {
     klee_error("Annotation TaintSink: Incorrect offset format, must be empty");
   }
-  if (rawValue.empty()) {
-    klee_error("Annotation TaintSink: Incorrect value format, must be not empty");
-  }
-
-  type = rawValue;
 }
 
 Kind TaintSink::getKind() const { return Kind::TaintSink; }
