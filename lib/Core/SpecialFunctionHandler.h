@@ -183,7 +183,7 @@ public:
   HANDLER(handlePointerOverflow);
   HANDLER(handleAddTaint);
   HANDLER(handleClearTaint);
-  HANDLER(handleCheckTaint);
+  HANDLER(handleCheckTaintSource);
   HANDLER(handleCheckTaintSink);
   HANDLER(handleTaintSinkHit);
 #undef HANDLER

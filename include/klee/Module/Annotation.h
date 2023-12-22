@@ -142,7 +142,7 @@ struct TaintOutput final : public Taint {
 };
 
 struct TaintPropagation final : public Taint {
-  size_t propagationParameter;
+  size_t propagationParameterIndex;
 
   explicit TaintPropagation(const std::string &str = "TaintPropagation");
 
