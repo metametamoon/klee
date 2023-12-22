@@ -165,11 +165,17 @@ TaintPropagation::TaintPropagation(const std::string &str) : Taint(str) {
   }
 
   char* end = nullptr;
-  propagationParameter = strtoul(rawData.c_str(), &end, 10);
+  size_t propagationParameterData = strtoul(rawData.c_str(), &end, 10);
   if (*end != '\0' || errno == ERANGE) {
     klee_error("Annotation TaintPropagation: Incorrect value %s format, must be <type>:<index>",
                rawValue.c_str());
   }
+
+  if (propagationParameterData == 0) {
+    klee_error("Annotation TaintPropagation: Incorrect value %s, data for propagation must be >= 1",
+               rawValue.c_str());
+  }
+  propagationParameterIndex = propagationParameterData - 1;
 }
 
 Kind TaintPropagation::getKind() const { return Kind::TaintPropagation; }
