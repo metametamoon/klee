@@ -14,7 +14,7 @@ def getNames(name: str):
     return name, name
 
 
-def transform_annotation_with_taint_statements(annotation, funcName):
+def transform_annotation_with_taint_statements(annotation, func_name):
     transformed_annotation = []
     for i, annotation_for_param in enumerate(annotation):
         transformed_annotation_for_param = []
@@ -24,41 +24,45 @@ def transform_annotation_with_taint_statements(annotation, funcName):
             assert(st_len <= 3)
 
             transformed_statement = st
-            if (statement[0] == "TaintOutput"):
-                if (st_len == 3 and statement[2] != ""):
-                    print("For TaintOutput in {} annotation elem #{} ignore data from cooddy annotations file".format(funcName, i))
-                offset = statement[1] if st_len == 2 else ""
-                transformed_statement = "TaintOutput:{}:UntrustedSource".format(offset)
-            elif (statement[0] == "TaintPropagation"):
-                if (st_len == 2):
-                    print("TaintPropagation in {} annotation elem #{} misprint".format(funcName, i))
+            if statement[0] == "TaintOutput":
+                if st_len > 1:
+                    print("For TaintOutput in {} annotation elem #{} " +
+                          "ignore offset and data from cooddy annotations file".format(func_name, i))
+                transformed_statement = "TaintOutput::UntrustedSource"
+            elif statement[0] == "TaintPropagation":
+                if st_len == 2:
+                    print("TaintPropagation in {} annotation elem #{} misprint".format(func_name, i))
                     transformed_statement = "TaintPropagation::UntrustedSource:{}".format(statement[1])
-                elif (st_len == 3):
-                    if (statement[1] != ""):
-                        print("For TaintPropagation in {} annotation elem #{} ignore offset from cooddy annotations file".format(funcName, i))
+                elif st_len == 3:
+                    if statement[1] != "":
+                        print("For TaintPropagation in {} annotation elem #{} " +
+                              "ignore offset from cooddy annotations file".format(func_name, i))
                     transformed_statement = "TaintPropagation::UntrustedSource:{}".format(statement[2])
-            elif (statement[0] == "SensitiveDataSource"):
-                if (st_len != 1):
-                    print("For SensitiveDataSource in {} annotation elem #{} ignore offset and data from cooddy annotations file".format(funcName, i))
+            elif statement[0] == "SensitiveDataSource":
+                if st_len != 1:
+                    print("For SensitiveDataSource in {} annotation elem #{} " +
+                          "ignore offset and data from cooddy annotations file".format(func_name, i))
                 transformed_statement = "TaintOutput::SensitiveDataSource"
-            elif (statement[0] == "Execute"):
-                if (st_len != 1):
-                    print("For Execute in {} annotation elem #{} ignore offset and data from cooddy annotations file".format(funcName, i))
+            elif statement[0] == "Execute":
+                if st_len != 1:
+                    print("For Execute in {} annotation elem #{} " +
+                          "ignore offset and data from cooddy annotations file".format(func_name, i))
                 transformed_statement = "TaintSink::Execute"
-            elif (statement[0] == "FormatString"):
-                if (st_len != 1):
-                    print("For FormatString in {} annotation elem #{} ignore offset and data from cooddy annotations file".format(funcName, i))
+            elif statement[0] == "FormatString":
+                if st_len != 1:
+                    print("For FormatString in {} annotation elem #{} " +
+                          "ignore offset and data from cooddy annotations file".format(func_name, i))
                 transformed_statement = "TaintSink::FormatString"
-            elif (statement[0] == "SensitiveDataLeak"):
-                if (st_len != 1):
-                    print("For SensitiveDataLeak in {} annotation elem #{} ignore offset and data from cooddy annotations file".format(funcName, i))
+            elif statement[0] == "SensitiveDataLeak":
+                if st_len != 1:
+                    print("For SensitiveDataLeak in {} annotation elem #{} " +
+                          "ignore offset and data from cooddy annotations file".format(func_name, i))
                 transformed_statement = "TaintSink::SensitiveDataLeak"        
 
             transformed_annotation_for_param.append(transformed_statement)
         transformed_annotation.append(transformed_annotation_for_param)
 
     return transformed_annotation    
-
 
 
 def transform(utbot_json, coody_json, process_taint):

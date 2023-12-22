@@ -5321,7 +5321,7 @@
         "TaintSink::FormatString"
       ],
       [
-        "TaintOutput:*:UntrustedSource",
+        "TaintOutput::UntrustedSource",
         "Write:*",
         "OutputString"
       ]
@@ -5341,7 +5341,7 @@
         "TaintSink::FormatString"
       ],
       [
-        "TaintOutput:*:UntrustedSource",
+        "TaintOutput::UntrustedSource",
         "Write:*",
         "FormatStringArgs",
         "OutputString::-1"
@@ -9944,7 +9944,7 @@
         "TaintSink::FormatString"
       ],
       [
-        "TaintOutput:*:UntrustedSource",
+        "TaintOutput::UntrustedSource",
         "Write:*",
         "FormatStringArgs",
         "OutputString"
