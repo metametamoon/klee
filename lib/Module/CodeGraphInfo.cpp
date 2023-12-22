@@ -119,7 +119,7 @@ void CodeGraphInfo::calculateBackwardDistance(KFunction *kf) {
 }
 
 void CodeGraphInfo::calculateFunctionBranches(KFunction *kf) {
-  std::map<KBlock *, std::set<unsigned>> &fbranches = functionBranches[kf];
+  KBlockMap<std::set<unsigned>> &fbranches = functionBranches[kf];
   for (auto &kb : kf->blocks) {
     fbranches[kb.get()];
     for (unsigned branch = 0;
@@ -130,8 +130,7 @@ void CodeGraphInfo::calculateFunctionBranches(KFunction *kf) {
   }
 }
 void CodeGraphInfo::calculateFunctionConditionalBranches(KFunction *kf) {
-  std::map<KBlock *, std::set<unsigned>> &fbranches =
-      functionConditionalBranches[kf];
+  KBlockMap<std::set<unsigned>> &fbranches = functionConditionalBranches[kf];
   for (auto &kb : kf->blocks) {
     if (kb->basicBlock->getTerminator()->getNumSuccessors() > 1) {
       fbranches[kb.get()];
@@ -144,7 +143,7 @@ void CodeGraphInfo::calculateFunctionConditionalBranches(KFunction *kf) {
   }
 }
 void CodeGraphInfo::calculateFunctionBlocks(KFunction *kf) {
-  std::map<KBlock *, std::set<unsigned>> &fbranches = functionBlocks[kf];
+  KBlockMap<std::set<unsigned>> &fbranches = functionBlocks[kf];
   for (auto &kb : kf->blocks) {
     fbranches[kb.get()];
   }
@@ -180,9 +179,10 @@ const FunctionDistanceMap &CodeGraphInfo::getBackwardDistance(KFunction *kf) {
   return functionBackwardDistance.at(kf);
 }
 
-void CodeGraphInfo::getNearestPredicateSatisfying(
-    KBlock *from, KBlockPredicate predicate, bool forward,
-    std::set<KBlock *, KBlockCompare> &result) {
+void CodeGraphInfo::getNearestPredicateSatisfying(KBlock *from,
+                                                  KBlockPredicate predicate,
+                                                  bool forward,
+                                                  KBlockSet &result) {
   std::unordered_set<KBlock *> visited;
   std::unordered_set<KBlock *> queued;
 
@@ -221,28 +221,28 @@ void CodeGraphInfo::getNearestPredicateSatisfying(
   }
 }
 
-const std::map<KBlock *, std::set<unsigned>> &
+const KBlockMap<std::set<unsigned>> &
 CodeGraphInfo::getFunctionBranches(KFunction *kf) {
   if (functionBranches.count(kf) == 0)
     calculateFunctionBranches(kf);
   return functionBranches.at(kf);
 }
 
-const std::map<KBlock *, std::set<unsigned>> &
+const KBlockMap<std::set<unsigned>> &
 CodeGraphInfo::getFunctionConditionalBranches(KFunction *kf) {
   if (functionConditionalBranches.count(kf) == 0)
     calculateFunctionConditionalBranches(kf);
   return functionConditionalBranches.at(kf);
 }
 
-std::set<KBlock *, KBlockCompare> CodeGraphInfo::getNearestPredicateSatisfying(
+KBlockSet CodeGraphInfo::getNearestPredicateSatisfying(
     KBlock *from, KBlockPredicate predicate, bool forward) {
-  std::set<KBlock *, KBlockCompare> result;
+  KBlockSet result;
   getNearestPredicateSatisfying(from, predicate, forward, result);
   return result;
 }
 
-const std::map<KBlock *, std::set<unsigned>> &
+const KBlockMap<std::set<unsigned>> &
 CodeGraphInfo::getFunctionBlocks(KFunction *kf) {
   if (functionBlocks.count(kf) == 0)
     calculateFunctionBlocks(kf);
@@ -253,7 +253,7 @@ std::vector<std::pair<KBlock *, KBlock *>>
 CodeGraphInfo::dismantleFunction(KFunction *kf, KBlockPredicate predicate) {
   std::vector<std::pair<KBlock *, KBlock *>> dismantled;
   std::queue<KBlock *> queue;
-  std::set<KBlock *> used;
+  KBlockSet used;
 
   // triple check!
   if (kf->finalKBlocks.count(kf->entryKBlock)) {
@@ -265,8 +265,8 @@ CodeGraphInfo::dismantleFunction(KFunction *kf, KBlockPredicate predicate) {
     auto kblock = queue.front();
     queue.pop();
     used.insert(kblock);
-    std::set<KBlock *> visited;
-    std::set<KBlock *, KBlockCompare> nearest;
+    KBlockSet visited;
+    KBlockSet nearest;
     getNearestPredicateSatisfying(kblock, predicate, true, nearest);
     for (auto to : nearest) {
       dismantled.push_back({kblock, to});

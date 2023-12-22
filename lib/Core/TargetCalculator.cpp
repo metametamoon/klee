@@ -72,7 +72,7 @@ void TargetCalculator::update(const ExecutionState &state) {
     if (!fullyCoveredFunctions.count(state.getPrevPC()->parent->parent) &&
         coveredFunctionsInBranches.count(state.getPrevPC()->parent->parent)) {
       bool covered = true;
-      std::set<KFunction *> fnsTaken;
+      KFunctionSet fnsTaken;
       std::deque<KFunction *> fns;
       fns.push_back(state.getPrevPC()->parent->parent);
 
@@ -135,7 +135,7 @@ void TargetCalculator::update(ref<ObjectManager::Event> e) {
   }
 }
 
-const std::map<KBlock *, std::set<unsigned>> &
+const KBlockMap<std::set<unsigned>> &
 TargetCalculator::getCoverageTargets(KFunction *kf) {
   switch (TrackCoverage) {
   case TrackCoverageBy::Blocks:

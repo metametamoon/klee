@@ -50,7 +50,7 @@ public:
 private:
   unsigned propagationsCount = 0;
   pobs_ty rootPobs;
-  std::map<ProofObligation *, std::set<ExecutionState *>> propagations;
+  pobs_map_ty<states_ty> propagations;
   RNG &rng;
 };
 

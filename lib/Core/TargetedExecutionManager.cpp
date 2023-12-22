@@ -506,7 +506,7 @@ TargetedExecutionManager::prepareTargets(KModule *kmodule, SarifReport paths) {
     }
   }
 
-  std::map<KFunction *, ref<TargetForest>, KFunctionCompare> forwardWhitelists;
+  KFunctionMap<ref<TargetForest>> forwardWhitelists;
   std::map<std::string, ref<TargetForest>> backwardWhitelists;
 
   for (auto &result : paths.results) {
@@ -535,7 +535,7 @@ TargetedExecutionManager::prepareTargets(KModule *kmodule, SarifReport paths) {
     backwardWhitelists[result.id]->addTrace(result, kf, locToBlocks, true);
   }
 
-  std::set<KFunction *, KFunctionCompare> functionsToDismantle;
+  KFunctionSet functionsToDismantle;
   for (auto wl : forwardWhitelists) {
     auto kf = wl.first;
     auto &dist = codeGraphInfo.getDistance(kf);
@@ -564,7 +564,7 @@ TargetedExecutionManager::prepareTargets(KModule *kmodule,
     }
   }
 
-  std::map<KFunction *, ref<TargetForest>, KFunctionCompare> forwardWhitelists;
+  KFunctionMap<ref<TargetForest>> forwardWhitelists;
   std::map<std::string, ref<TargetForest>> backwardWhitelists;
 
   unsigned id = 0; // Why need ID in backward?
@@ -585,7 +585,7 @@ TargetedExecutionManager::prepareTargets(KModule *kmodule,
     backwardWhitelists[traceID]->addTrace(path, true);
   }
 
-  std::set<KFunction *, KFunctionCompare> functionsToDismantle;
+  KFunctionSet functionsToDismantle;
   for (auto wl : forwardWhitelists) {
     auto kf = wl.first;
     auto &dist = codeGraphInfo.getDistance(kf);

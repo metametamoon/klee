@@ -134,7 +134,6 @@ class TargetedSearcher final : public Searcher {
 private:
   std::unique_ptr<WeightedQueue<ExecutionState *, ExecutionStateIDCompare>>
       states;
-  std::set<ExecutionState *> stateshere;
   ref<Target> target;
   DistanceCalculator &distanceCalculator;
 
@@ -152,16 +151,13 @@ public:
 };
 
 class GuidedSearcher final : public Searcher, public TargetManagerSubscriber {
-  template <class T>
-  using TargetHistoryTargetPairHashMap =
-      std::unordered_map<TargetHistoryTargetPair, T, TargetHistoryTargetHash,
-                         TargetHistoryTargetCmp>;
   using TargetHistoryTargetPairToSearcherMap =
       std::unordered_map<TargetHistoryTargetPair,
                          std::unique_ptr<TargetedSearcher>,
                          TargetHistoryTargetHash, TargetHistoryTargetCmp>;
   using TargetForestHisoryTargetVector = std::vector<TargetHistoryTargetPair>;
-  using TargetForestHistoryTargetSet =
+  using TargetForestHistoryTargetSet = std::set<TargetHistoryTargetPair>;
+  using TargetForestHistoryTargetHashSet =
       std::unordered_set<TargetHistoryTargetPair, TargetHistoryTargetHash,
                          TargetHistoryTargetCmp>;
 
@@ -180,7 +176,7 @@ class GuidedSearcher final : public Searcher, public TargetManagerSubscriber {
 
   TargetHashSet removedTargets;
   TargetHashSet addedTargets;
-  TargetForestHistoryTargetSet currTargets;
+  TargetForestHistoryTargetHashSet currTargets;
 
   TargetForestHisoryTargetVector historiesAndTargets;
   bool isThereTarget(ref<const TargetsHistory> history, ref<Target> target);
@@ -328,7 +324,7 @@ private:
   std::unique_ptr<Searcher> baseSearcher;
   TargetManagerSubscriber *tms;
   std::unique_ptr<Metric> metric;
-  std::set<ExecutionState *> pausedStates;
+  states_ty pausedStates;
 
 public:
   /// \param baseSearcher The underlying searcher (takes ownership).

@@ -645,6 +645,11 @@ bool KBlockCompare::operator()(const KBlock *a, const KBlock *b) const {
           a->getId() < b->getId());
 }
 
+bool KFunctionCompare::operator()(const KFunction *a,
+                                  const KFunction *b) const {
+  return a->getGlobalIndex() < b->getGlobalIndex();
+}
+
 KBlock::KBlock(
     KFunction *_kfunction, llvm::BasicBlock *block, KModule *km,
     const std::unordered_map<Instruction *, unsigned> &instructionToRegisterMap,
@@ -707,16 +712,16 @@ KReturnBlock::KReturnBlock(
     : KBlock::KBlock(_kfunction, block, km, instructionToRegisterMap,
                      instructionsKF, globalIndexInc) {}
 
-std::set<KBlock *, KBlockCompare> KBlock::successors() {
-  std::set<KBlock *, KBlockCompare> result;
+KBlockSet KBlock::successors() {
+  KBlockSet result;
   for (auto bb : llvm::successors(basicBlock)) {
     result.insert(parent->blockMap[bb]);
   }
   return result;
 }
 
-std::set<KBlock *, KBlockCompare> KBlock::predecessors() {
-  std::set<KBlock *, KBlockCompare> result;
+KBlockSet KBlock::predecessors() {
+  KBlockSet result;
   for (auto bb : llvm::predecessors(basicBlock)) {
     result.insert(parent->blockMap[bb]);
   }

@@ -139,7 +139,7 @@ public:
   Subscriber *tgms;
   ExecutionState *emptyState;
 
-  std::set<KFunction *> entrypoints;
+  KFunctionSet entrypoints;
 
   states_ty states;
   states_ty isolatedStates;
@@ -149,7 +149,7 @@ public:
   std::map<ref<Target>, pobs_ty> pobs;
   std::map<std::pair<Path, ref<Target>>, ProofObligation *> pathedPobs;
   std::map<ref<Target>, propagations_ty> propagations;
-  std::map<ProofObligation *, unsigned> propagationCount;
+  pobs_map_ty<unsigned> propagationCount;
 
   // These are used to buffer execution results and pass the updates to
   // subscribers

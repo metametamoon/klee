@@ -11,7 +11,9 @@
 #include "klee/Module/Target.h"
 #include "klee/Module/TargetForest.h"
 
+#include <map>
 #include <queue>
+#include <set>
 #include <sstream>
 #include <string>
 #include <unordered_set>
@@ -23,6 +25,11 @@ class ProofObligation;
 struct ProofObligationIDCompare {
   bool operator()(const ProofObligation *a, const ProofObligation *b) const;
 };
+
+using pobs_ty = std::set<ProofObligation *, ProofObligationIDCompare>;
+
+template <class T>
+using pobs_map_ty = std::map<ProofObligation *, T, ProofObligationIDCompare>;
 
 class ProofObligation {
 public:
@@ -39,7 +46,7 @@ public:
     }
   }
 
-  std::set<ProofObligation *, ProofObligationIDCompare> getSubtree();
+  pobs_ty getSubtree();
 
   bool atReturn() const { return isa<KReturnBlock>(location->getBlock()); }
   std::uint32_t getID() const { return id; };
@@ -56,7 +63,6 @@ public:
 private:
   ProofObligation *makeChild(ref<Target> target) {
     auto pob = new ProofObligation(target);
-    pob->id = nextID++;
     pob->parent = this;
     pob->root = root;
     pob->propagationCount = propagationCount;
@@ -70,7 +76,7 @@ public:
   std::uint32_t id;
   ProofObligation *parent;
   ProofObligation *root;
-  std::set<ProofObligation *, ProofObligationIDCompare> children;
+  pobs_ty children;
   std::vector<CallStackFrame> stack;
   std::map<ExecutionState *, unsigned, ExecutionStateIDCompare>
       propagationCount;
@@ -88,9 +94,6 @@ private:
   static unsigned nextID;
   bool isTargeted_ = false;
 };
-
-using pobs_ty = std::set<ProofObligation *, ProofObligationIDCompare>;
-
 } // namespace klee
 
 #endif

@@ -89,7 +89,7 @@ public:
 
 class TargetedExecutionManager final : public Subscriber {
 private:
-  using Blocks = std::unordered_set<KBlock *>;
+  using Blocks = KBlockSet;
   using LocationToBlocks = std::unordered_map<ref<Location>, Blocks,
                                               RefLocationHash, RefLocationCmp>;
   using Locations =
@@ -118,11 +118,10 @@ private:
 
 public:
   struct Data {
-    std::map<KFunction *, ref<TargetForest>, KFunctionCompare>
-        forwardWhitelists;
+    KFunctionMap<ref<TargetForest>> forwardWhitelists;
     std::map<std::string, ref<TargetForest>> backwardWhitelists;
-    std::set<KFunction *, KFunctionCompare> functionsToDismantle;
-    std::set<KBlock *, KBlockCompare> specialPoints;
+    KFunctionSet functionsToDismantle;
+    KBlockSet specialPoints;
   };
 
   explicit TargetedExecutionManager(CodeGraphInfo &codeGraphInfo_,

@@ -63,6 +63,19 @@ struct KBlockCompare {
   bool operator()(const KBlock *a, const KBlock *b) const;
 };
 
+template <class T> using KBlockMap = std::map<KBlock *, T, KBlockCompare>;
+
+using KBlockSet = std::set<KBlock *, KBlockCompare>;
+
+struct KFunctionCompare {
+  bool operator()(const KFunction *a, const KFunction *b) const;
+};
+
+template <class T>
+using KFunctionMap = std::map<KFunction *, T, KFunctionCompare>;
+
+using KFunctionSet = std::set<KFunction *, KFunctionCompare>;
+
 struct KBlock {
   KFunction *parent;
   llvm::BasicBlock *basicBlock;
@@ -77,8 +90,8 @@ public:
   KBlock &operator=(const KBlock &) = delete;
   virtual ~KBlock() = default;
 
-  std::set<KBlock *, KBlockCompare> successors();
-  std::set<KBlock *, KBlockCompare> predecessors();
+  KBlockSet successors();
+  KBlockSet predecessors();
 
   virtual KBlockType getKBlockType() const { return KBlockType::Base; }
   static bool classof(const KBlock *) { return true; }
@@ -118,8 +131,8 @@ private:
 };
 
 struct TraceVerifyPredicate : public InitializerPredicate {
-  explicit TraceVerifyPredicate(std::set<KBlock *, KBlockCompare> specialPoints,
-                                CodeGraphInfo &cgd, bool initJoinBlocks)
+  explicit TraceVerifyPredicate(KBlockSet specialPoints, CodeGraphInfo &cgd,
+                                bool initJoinBlocks)
       : specialPoints(specialPoints), cgd(cgd),
         initJoinBlocks(initJoinBlocks){};
 
@@ -130,9 +143,9 @@ struct TraceVerifyPredicate : public InitializerPredicate {
   ~TraceVerifyPredicate() override {}
 
 private:
-  std::set<KBlock *, KBlockCompare> specialPoints;
-  std::set<KFunction *> interestingFns;
-  std::set<KFunction *> uninsterestingFns;
+  KBlockSet specialPoints;
+  KFunctionSet interestingFns;
+  KFunctionSet uninsterestingFns;
 
   CodeGraphInfo &cgd;
   bool initJoinBlocks;
@@ -152,7 +165,7 @@ private:
 
 struct KCallBlock : KBlock {
   KInstruction *kcallInstruction;
-  std::set<KFunction *> calledFunctions;
+  KFunctionSet calledFunctions;
 
 public:
   KCallBlock() = delete;
@@ -200,7 +213,7 @@ public:
   std::unordered_map<const llvm::BasicBlock *, KBlock *> blockMap;
   KBlock *entryKBlock;
   std::vector<KBlock *> returnKBlocks;
-  std::set<KBlock *, KBlockCompare> finalKBlocks;
+  KBlockSet finalKBlocks;
   std::vector<KCallBlock *> kCallBlocks;
 
   /// count of instructions in function
@@ -251,12 +264,6 @@ public:
   [[nodiscard]] inline unsigned getGlobalIndex() const { return globalIndex; }
 };
 
-struct KFunctionCompare {
-  bool operator()(const KFunction *a, const KFunction *b) const {
-    return a->getGlobalIndex() < b->getGlobalIndex();
-  }
-};
-
 class KConstant {
 public:
   /// Actual LLVM constant this represents.
@@ -284,13 +291,13 @@ public:
   // Our shadow versions of LLVM structures.
   std::vector<std::unique_ptr<KFunction>> functions;
   std::unordered_map<const llvm::Function *, KFunction *> functionMap;
-  std::unordered_map<KFunction *, std::set<KFunction *>> callMap;
+  KFunctionMap<KFunctionSet> callMap;
   std::unordered_map<std::string, KFunction *> functionNameMap;
   [[nodiscard]] unsigned getFunctionId(const llvm::Function *) const;
 
   // Functions which escape (may be called indirectly)
   // XXX change to KFunction
-  std::set<KFunction *> escapingFunctions;
+  KFunctionSet escapingFunctions;
 
   std::set<std::string> mainModuleFunctions;
   std::set<std::string> mainModuleGlobals;

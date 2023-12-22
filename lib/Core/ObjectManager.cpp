@@ -196,6 +196,7 @@ void ObjectManager::updateSubscribers() {
           !removedPobs.count(parent)) {
         leafPobs.insert(parent);
       }
+      propagationCount.erase(pob);
       delete pob;
     }
     addedPobs.clear();
@@ -229,7 +230,7 @@ const pobs_ty &ObjectManager::getRootPobs() { return rootPobs; }
 
 void ObjectManager::checkReachedStates() {
   assert(statesUpdated && stateUpdateKind == StateKind::Isolated);
-  std::set<ExecutionState *> states(addedStates.begin(), addedStates.end());
+  states_ty states(addedStates.begin(), addedStates.end());
   if (current) {
     states.insert(current);
   }
@@ -290,7 +291,7 @@ void ObjectManager::checkReachedStates() {
 void ObjectManager::checkReachedPobs() {
   assert(statesUpdated && stateUpdateKind == StateKind::Regular);
 
-  std::set<ExecutionState *> states(addedStates.begin(), addedStates.end());
+  states_ty states(addedStates.begin(), addedStates.end());
   if (current) {
     states.insert(current);
   }

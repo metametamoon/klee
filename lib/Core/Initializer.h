@@ -33,7 +33,7 @@ public:
 
   void addConflictInit(const Conflict &, KBlock *) override;
 
-  void initializeFunctions(std::set<KFunction *, KFunctionCompare> functions);
+  void initializeFunctions(KFunctionSet functions);
   void addErrorInit(ref<Target> errorTarget);
 
   void update(const pobs_ty &added, const pobs_ty &removed) override;
@@ -76,7 +76,7 @@ private:
   // Already dismantled functions don't need to be dismantled again
   std::unordered_set<KFunction *> dismantledFunctions;
 
-  std::set<KFunction *, KFunctionCompare> allowed;
+  KFunctionSet allowed;
 
   void addInit(KInstruction *from, ref<Target> to);
   void addPob(ProofObligation *pob);

@@ -40,15 +40,14 @@ class ExecutionState;
 enum class TrackCoverageBy { None, Blocks, Branches, All };
 
 class TargetCalculator : public Subscriber {
-  using StatesSet = std::unordered_set<ExecutionState *>;
+  using StatesSet = states_ty;
 
   typedef std::unordered_set<KBlock *> VisitedBlocks;
   typedef std::unordered_set<Branch, BranchHash> VisitedBranches;
 
   enum HistoryKind { Blocks, Transitions };
 
-  typedef std::unordered_map<KFunction *,
-                             std::map<KBlock *, std::set<unsigned>>>
+  typedef std::unordered_map<KFunction *, KBlockMap<std::set<unsigned>>>
       CoveredBranches;
 
   typedef std::unordered_set<KFunction *> CoveredFunctionsBranches;
@@ -75,8 +74,7 @@ private:
   CoveredFunctionsBranches fullyCoveredFunctions;
   StatesSet localStates;
 
-  const std::map<KBlock *, std::set<unsigned>> &
-  getCoverageTargets(KFunction *kf);
+  const KBlockMap<std::set<unsigned>> &getCoverageTargets(KFunction *kf);
 
   bool uncoveredBlockPredicate(ExecutionState *state, KBlock *kblock);
 };

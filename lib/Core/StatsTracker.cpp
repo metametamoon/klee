@@ -693,11 +693,9 @@ void StatsTracker::writeStatsLine() {
 }
 
 void StatsTracker::updateStateStatistics(uint64_t addend) {
-  std::set<ExecutionState *, ExecutionStateIDCompare> states =
-      executor.objectManager->getStates();
-  for (std::set<ExecutionState *>::iterator it = states.begin(),
-                                            ie = states.end();
-       it != ie; ++it) {
+  states_ty states = executor.objectManager->getStates();
+  for (states_ty::iterator it = states.begin(), ie = states.end(); it != ie;
+       ++it) {
     ExecutionState &state = **it;
     theStatisticManager->incrementIndexedValue(
         stats::states, state.getPC()->getGlobalIndex(), addend);
@@ -1126,11 +1124,9 @@ void StatsTracker::computeReachableUncovered() {
     }
   } while (changed);
 
-  std::set<ExecutionState *, ExecutionStateIDCompare> states =
-      executor.objectManager->getStates();
-  for (std::set<ExecutionState *>::iterator it = states.begin(),
-                                            ie = states.end();
-       it != ie; ++it) {
+  states_ty states = executor.objectManager->getStates();
+  for (states_ty::iterator it = states.begin(), ie = states.end(); it != ie;
+       ++it) {
     ExecutionState *es = *it;
     uint64_t currentFrameMinDist = 0;
     ExecutionStack::call_stack_ty::const_iterator

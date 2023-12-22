@@ -32,12 +32,12 @@ class CodeGraphInfo {
       std::unordered_map<KFunction *, SortedFunctionDistances>;
 
   using functionBranchesSet =
-      std::unordered_map<KFunction *, std::map<KBlock *, std::set<unsigned>>>;
+      std::unordered_map<KFunction *, KBlockMap<std::set<unsigned>>>;
 
 private:
   blockToDistanceMap blockDistance;
   blockToDistanceMap blockBackwardDistance;
-  std::set<KBlock *, KBlockCompare> blockCycles;
+  KBlockSet blockCycles;
   blockDistanceList blockSortedDistance;
   blockDistanceList blockSortedBackwardDistance;
 
@@ -70,20 +70,17 @@ public:
   const FunctionDistanceMap &getBackwardDistance(KFunction *kf);
 
   void getNearestPredicateSatisfying(KBlock *from, KBlockPredicate predicate,
-                                     bool forward,
-                                     std::set<KBlock *, KBlockCompare> &result);
+                                     bool forward, KBlockSet &result);
 
-  const std::map<KBlock *, std::set<unsigned>> &
-  getFunctionBranches(KFunction *kf);
+  const KBlockMap<std::set<unsigned>> &getFunctionBranches(KFunction *kf);
 
-  const std::map<KBlock *, std::set<unsigned>> &
+  const KBlockMap<std::set<unsigned>> &
   getFunctionConditionalBranches(KFunction *kf);
-  const std::map<KBlock *, std::set<unsigned>> &
-  getFunctionBlocks(KFunction *kf);
+  const KBlockMap<std::set<unsigned>> &getFunctionBlocks(KFunction *kf);
 
-  std::set<KBlock *, KBlockCompare>
-  getNearestPredicateSatisfying(KBlock *from, KBlockPredicate predicate,
-                                bool forward);
+  KBlockSet getNearestPredicateSatisfying(KBlock *from,
+                                          KBlockPredicate predicate,
+                                          bool forward);
 
   std::vector<std::pair<KBlock *, KBlock *>>
   dismantleFunction(KFunction *kf, KBlockPredicate predicate);

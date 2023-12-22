@@ -29,7 +29,7 @@ class TargetCalculator;
 using TargetHistoryTargetPair =
     std::pair<ref<const TargetsHistory>, ref<Target>>;
 using StatesVector = std::vector<ExecutionState *>;
-using StateSet = std::set<ExecutionState *>;
+using StateSet = states_ty;
 
 class StateIterable final {
 private:
@@ -161,12 +161,9 @@ public:
 
 class TargetManager final : public Subscriber {
 private:
-  using StatesSet = std::unordered_set<ExecutionState *>;
+  using StatesSet = states_ty;
   using StateToDistanceMap =
       std::unordered_map<const ExecutionState *, TargetHashMap<DistanceResult>>;
-  using TargetForestHistoryTargetSet =
-      std::unordered_set<TargetHistoryTargetPair, TargetHistoryTargetHash,
-                         TargetHistoryTargetCmp>;
 
   Interpreter::GuidanceKind guidance;
   DistanceCalculator &distanceCalculator;

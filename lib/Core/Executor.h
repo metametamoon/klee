@@ -248,7 +248,7 @@ private:
   std::vector<ref<Expr>> eh_typeids;
 
   // For statistics
-  std::set<KBlock *> summarized;
+  KBlockSet summarized;
 
   std::unordered_set<llvm::BasicBlock *> verifingTransitionsTo;
   std::unordered_set<llvm::BasicBlock *> successTransitionsTo;

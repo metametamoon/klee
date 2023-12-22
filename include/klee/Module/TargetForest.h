@@ -29,6 +29,8 @@ namespace klee {
 struct TargetHash;
 struct TargetCmp;
 
+using KBlockTrace = std::vector<KBlockSet>;
+
 class TargetsHistory {
 private:
   unsigned hashValue;
@@ -306,11 +308,11 @@ private:
       return getConfidence(confidence::MaxConfidence);
     }
 
-    void addTrace(
-        const Result &result, KFunction *entryKF,
-        const std::unordered_map<ref<Location>, std::unordered_set<KBlock *>,
-                                 RefLocationHash, RefLocationCmp> &locToBlocks,
-        bool reversed);
+    void
+    addTrace(const Result &result, KFunction *entryKF,
+             const std::unordered_map<ref<Location>, KBlockSet, RefLocationHash,
+                                      RefLocationCmp> &locToBlocks,
+             bool reversed);
 
     void addTrace(const KBlockTrace &trace, bool reversed);
   };
@@ -326,11 +328,11 @@ public:
   class ReferenceCounter _refCount;
   KFunction *getEntryFunction() { return entryFunction; }
 
-  void addTrace(
-      const Result &result, KFunction *entryKF,
-      const std::unordered_map<ref<Location>, std::unordered_set<KBlock *>,
-                               RefLocationHash, RefLocationCmp> &locToBlocks,
-      bool reversed) {
+  void
+  addTrace(const Result &result, KFunction *entryKF,
+           const std::unordered_map<ref<Location>, KBlockSet, RefLocationHash,
+                                    RefLocationCmp> &locToBlocks,
+           bool reversed) {
     forest->addTrace(result, entryKF, locToBlocks, reversed);
   }
 
