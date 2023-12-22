@@ -234,6 +234,12 @@ llvm::cl::opt<bool> UseSymbolicSizeLazyInit(
         "Allows lazy initialize symbolic size objects (default false)"),
     llvm::cl::init(false), llvm::cl::cat(LazyInitCat));
 
+llvm::cl::opt<unsigned> MinElementSizeLazyInit(
+    "min-element-size-li",
+    llvm::cl::desc("Minimum size of an element of array for one lazy "
+                   "initialization (default 4)"),
+    llvm::cl::init(4), llvm::cl::cat(LazyInitCat));
+
 llvm::cl::opt<unsigned> MinNumberElementsLazyInit(
     "min-number-elements-li",
     llvm::cl::desc("Minimum number of array elements for one lazy "
@@ -4610,7 +4616,7 @@ ref<Expr> Executor::fillSizeAddressSymcretes(ExecutionState &state,
   ref<ConstantExpr> arrayConstantSize =
       dyn_cast<ConstantExpr>(optimizer.optimizeExpr(uniqueSize, true));
 
-  MemoryObject *mo = nullptr;
+  ref<MemoryObject> mo = nullptr;
   const MemoryObject *oldMO = memory->getAllocatedObject(oldAddress);
   assert(oldMO);
 
@@ -4688,17 +4694,28 @@ Executor::compose(const ExecutionState &state, const PathConstraints &pob,
           llvm::errs() << "[conflict] Conflict in backward: "
                        << conflict.path.toString() << "\n";
         }
-        constraints_ty rebuiltCore;
+
+        constraints_ty coreConstraints;
         for (auto e : core.constraints) {
-          for (auto original :
-               composer.state.constraints.simplificationMap().at(e)) {
-            if (rebuildMap.count(original)) {
-              conflict.core.insert(Expr::createIsZero(rebuildMap.at(original)));
+          coreConstraints.insert(e);
+        }
+        if (!isa<ConstantExpr>(core.expr)) {
+          coreConstraints.insert(Expr::createIsZero(core.expr));
+        }
+
+        for (auto e : coreConstraints) {
+          if (e == condition) {
+            conflict.core.insert(Expr::createIsZero(constraint));
+          } else {
+            for (auto original :
+                 composer.state.constraints.simplificationMap().at(e)) {
+              if (rebuildMap.count(original)) {
+                conflict.core.insert(
+                    Expr::createIsZero(rebuildMap.at(original)));
+              }
             }
           }
         }
-
-        conflict.core.insert(Expr::createIsZero(constraint));
 
         result.success = false;
         result.conflict = conflict;
@@ -6431,8 +6448,15 @@ bool Executor::resolveMemoryObjects(
       if (!success) {
         return false;
       } else if (mayLazyInitialize) {
-        uint64_t minObjectSize =
-            state.isolated ? 0 : MinNumberElementsLazyInit * size;
+        uint64_t minObjectSize = 0;
+        if (!state.isolated) {
+          minObjectSize = MinNumberElementsLazyInit * MinElementSizeLazyInit;
+        }
+
+        if (base) {
+          base = Simplificator::simplifyExpr(state.constraints.cs(), base)
+                     .simplified;
+        }
         const Array *lazyInstantiationSize = makeArray(
             Expr::createPointer(Context::get().getPointerWidth() / CHAR_BIT),
             SourceBuilder::lazyInitializationSize(base));
