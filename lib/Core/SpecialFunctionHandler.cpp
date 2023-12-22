@@ -130,7 +130,7 @@ static SpecialFunctionHandler::HandlerInfo handlerInfo[] = {
 
     add("klee_add_taint", handleAddTaint, false),
     add("klee_clear_taint", handleClearTaint, false),
-    add("klee_check_taint", handleCheckTaint, true),
+    add("klee_check_taint_source", handleCheckTaintSource, true),
     add("klee_check_taint_sink", handleCheckTaintSink, true),
     add("klee_taint_sink_hit", handleTaintSinkHit, false),
 #ifdef SUPPORT_KLEE_EH_CXX
@@ -1237,14 +1237,14 @@ void SpecialFunctionHandler::handleClearTaint(
   //  executor.executeMemoryOperation(state, true)
 }
 
-void SpecialFunctionHandler::handleCheckTaint(
+void SpecialFunctionHandler::handleCheckTaintSource(
     klee::ExecutionState &state,
     klee::KInstruction *target,
     std::vector<ref<Expr>> &arguments) {
   if (arguments.size() != 3) {
     executor.terminateStateOnUserError(
         state, "Incorrect number of arguments to "
-               "klee_check_taint(void*, size_t, size_t)");
+               "klee_check_taint_source(void*, size_t, size_t)");
     return;
   }
 

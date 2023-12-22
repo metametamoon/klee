@@ -37,35 +37,35 @@ void *klee_define_fixed_object(void *addr, size_t nbytes);
  */
 void klee_make_symbolic(void *addr, size_t nbytes, const char *name);
 
-/* klee_add_taint - Add taint \arg taint_type for the contents
+/* klee_add_taint - Add taint \arg taint_source for the contents
  * of the object pointer to \arg addr.
  *
  * \arg addr - The start of the object.
  * \arg nbytes - The number of bytes to set taint type; currently this *must*
  * be the entire contents of the object.
- * \arg taint_type - Taint type.
+ * \arg taint_source - Taint source.
  */
-void klee_add_taint(void *array, size_t nbytes, size_t taint_type);
+void klee_add_taint(void *array, size_t nbytes, size_t taint_source);
 
 /* klee_clear_taint - Clear the contents of the object pointer to \arg addr
- * of the taint \arg taint_type.
+ * of the taint \arg taint_source.
  *
  * \arg addr - The start of the object.
  * \arg nbytes - The number of bytes to set taint type; currently this *must*
  * be the entire contents of the object.
- * \arg taint_type - Taint type.
+ * \arg taint_source - Taint source.
  */
-void klee_clear_taint(void *array, size_t nbytes, size_t taint_type);
+void klee_clear_taint(void *array, size_t nbytes, size_t taint_source);
 
-/* klee_check_taint - Check that the contents of the object pointer
- * to \arg addr has a \arg taint_type.
+/* klee_check_taint_source - Check that the contents of the object pointer
+ * to \arg addr has a \arg taint_source.
  *
  * \arg addr - The start of the object.
  * \arg nbytes - The number of bytes to set taint type; currently this *must*
  * be the entire contents of the object.
- * \arg taint_type - Taint type.
+ * \arg taint_source - Taint source.
  */
-bool klee_check_taint(void *array, size_t nbytes, size_t taint_type);
+bool klee_check_taint_source(void *array, size_t nbytes, size_t taint_source);
 
 /* klee_check_taint_sink - Check that the contents of the object pointer
  * to \arg addr causes a taint sink \arg taint_sink hit.
