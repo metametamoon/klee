@@ -147,9 +147,7 @@ TargetCalculator::getCoverageTargets(KFunction *kf) {
   }
 }
 
-bool TargetCalculator::uncoveredBlockPredicate(ExecutionState *state,
-                                               KBlock *kblock) {
-  Function *initialFunction = state->getInitPCBlock()->getParent();
+bool TargetCalculator::uncoveredBlockPredicate(KBlock *kblock) {
   bool result = false;
 
   auto &fBranches = getCoverageTargets(kblock->parent);
@@ -196,7 +194,7 @@ TargetHashSet TargetCalculator::calculate(ExecutionState &state) {
     std::set<KBlock *> blocks;
     using std::placeholders::_1;
     KBlockPredicate func =
-        std::bind(&TargetCalculator::uncoveredBlockPredicate, this, &state, _1);
+        std::bind(&TargetCalculator::uncoveredBlockPredicate, this, _1);
     codeGraphInfo.getNearestPredicateSatisfying(kb, func, blocks);
 
     if (!blocks.empty()) {
