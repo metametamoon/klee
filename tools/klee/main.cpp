@@ -30,6 +30,7 @@
 
 #include "klee/Support/CompilerWarning.h"
 #include "llvm/Analysis/CallGraph.h"
+#include "llvm/IR/Attributes.h"
 DISABLE_WARNING_PUSH
 DISABLE_WARNING_DEPRECATED_DECLARATIONS
 #include "llvm/ADT/APFloat.h"
@@ -410,6 +411,9 @@ cl::opt<bool> AnnotateOnlyExternal(
     cl::desc("Ignore annotations for defined function (default=false)"),
     cl::init(false), cl::cat(MockCat));
 
+cl::opt<bool> multiplexForStaticAnalysis("multiplex-static-analysis",
+                                         llvm::cl::desc(""),
+                                         llvm::cl::cat(StartCat));
 } // namespace
 
 namespace klee {
@@ -1735,6 +1739,9 @@ void multiplexEntryPoint(llvm::Module *m, LLVMContext &ctx,
   auto multiplexedEntry = llvm::Function::Create(
       type, GlobalVariable::ExternalLinkage, multiplexedEntryName, m);
 
+  multiplexedEntry->addFnAttr(Attribute::NoInline);
+  multiplexedEntry->addFnAttr(Attribute::OptimizeNone);
+
   auto entryBB = llvm::BasicBlock::Create(ctx, "entry", multiplexedEntry);
   auto exitBB = llvm::BasicBlock::Create(ctx, "exit", multiplexedEntry);
 
@@ -2065,9 +2072,24 @@ int main(int argc, char **argv, char **envp) {
       mainModuleFunctions.insert(Function.getName().str());
     }
   }
+
   std::set<std::string> mainModuleGlobals;
   for (const auto &gv : mainModule->globals()) {
     mainModuleGlobals.insert(gv.getName().str());
+  }
+
+  if (multiplexForStaticAnalysis) {
+    assert(UseGuidedSearch != Interpreter::GuidanceKind::ErrorGuidance);
+    std::vector<llvm::Function *> Fns;
+    for (auto &Function : *mainModule) {
+      if (!Function.isDeclaration()) {
+        Fns.push_back(&Function);
+        // if (Fns.size() == 100) {
+        //   break;
+        // }
+      }
+    }
+    multiplexEntryPoint(mainModule, ctx, Fns);
   }
 
   const std::string &module_triple = mainModule->getTargetTriple();

@@ -341,6 +341,10 @@ cl::opt<bool> AllExternalWarnings(
              "as opposed to once per function (default=false)"),
     cl::cat(ExtCallsCat));
 
+cl::opt<bool> MockAllFunctions("tmp-mock-all", cl::init(false),
+                               cl::desc("If true, all externals are mocked."),
+                               cl::cat(ExtCallsCat));
+
 /*** Seeding options ***/
 
 cl::opt<bool> AlwaysOutputSeeds(
@@ -2039,6 +2043,7 @@ ref<klee::ConstantExpr> Executor::getEhTypeidFor(ref<Expr> type_info) {
 
 void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f,
                            std::vector<ref<Expr>> &arguments) {
+
   Instruction *i = ki->inst();
   if (isa_and_nonnull<DbgInfoIntrinsic>(i))
     return;
@@ -2365,6 +2370,13 @@ void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f,
       state.eventsRecorder.record(new CallEvent(locationOf(state), kf));
     }
 
+    if (MockAllFunctions && state.multiplexKF) {
+      if (!kf->getFunctionType()->getReturnType()->isVoidTy()) {
+        prepareMockValue(state, "mock_return_sa", ki);
+      }
+      return;
+    }
+
     state.pushFrame(state.prevPC, kf);
     transferToBasicBlock(&*kf->function()->begin(), state.getPrevPCBlock(),
                          state);
@@ -2499,6 +2511,19 @@ void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f,
     for (unsigned k = 0; k < numFormals; k++)
       bindArgument(kf, k, state, arguments[k]);
   }
+
+  if (!state.multiplexKF && !f->isIntrinsic() && !f->isDeclaration() &&
+      kmodule->mainModuleFunctions.count(std::string(f->getName()))) {
+    state.multiplexKF = ki->getKModule()->functionMap.at(f);
+    multiplexReached++;
+    // if (multiplexReached % 20 == 0) {
+    //   llvm::errs() << "Multiplex reached: " << multiplexReached << "\n";
+    // }
+  }
+
+  // if (!state.multiplexKF && !f->isIntrinsic() && !f->isDeclaration() &&
+  //     ki->getKFunction()->getName() == "__klee_multiplexed_entry") {
+  // }
 }
 
 void Executor::increaseProgressVelocity(ExecutionState &state, KBlock *block) {
@@ -4823,6 +4848,8 @@ void Executor::terminateState(ExecutionState &state,
     klee_warning("remove state twice");
     return;
   }
+
+  // llvm::errs() << state.constraints.path().toString() << "\n";
 
   interpreterHandler->incPathsExplored();
   state.pc = state.prevPC;
