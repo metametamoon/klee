@@ -2342,7 +2342,7 @@ void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f,
     // KInstIterator from just an instruction (unlike LLVM).
     KFunction *kf = kmodule->functionMap[f];
 
-    if (MockAllFunctions && state.multiplexKF) {
+    if (MockAllFunctions && state.multiplexKF && !f->getName().startswith("klee")) {
       if (!kf->getFunctionType()->getReturnType()->isVoidTy()) {
         prepareMockValue(state, "mock_return_sa", ki);
       }
