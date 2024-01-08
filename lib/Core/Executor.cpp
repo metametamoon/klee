@@ -2374,7 +2374,7 @@ void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f,
       state.eventsRecorder.record(new CallEvent(locationOf(state), kf));
     }
 
-    if (MockAllFunctions && state.multiplexKF) {
+    if (MockAllFunctions && state.multiplexKF && !f->getName().startswith("klee")) {
       if (!kf->getFunctionType()->getReturnType()->isVoidTy()) {
         prepareMockValue(state, "mock_return_sa", ki);
       }
