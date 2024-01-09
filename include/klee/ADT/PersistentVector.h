@@ -22,7 +22,7 @@ namespace klee {
 template <class T> class PersistentVector {
 public:
   using Vector = immer::vector<T>;
-  using iterator = Vector::iterator;
+  using iterator = typename Vector::iterator;
   using value_type = T;
 
 private:
