@@ -13,7 +13,7 @@ using json = nlohmann::json;
 
 namespace klee {
 
-using TaintSinksSourcesMap = std::map<size_t , std::set<size_t>>;
+using TaintSinksSourcesMap = std::map<size_t, std::set<size_t>>;
 
 class TaintAnnotation final {
 public:
@@ -21,6 +21,7 @@ public:
   std::map<std::string, size_t> sinks;
   std::map<std::string, size_t> sources;
 
+  explicit TaintAnnotation();
   explicit TaintAnnotation(const std::string &taintAnnotationsFile);
   virtual ~TaintAnnotation();
 };

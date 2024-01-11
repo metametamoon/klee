@@ -10,9 +10,9 @@
 #ifndef KLEE_H
 #define KLEE_H
 
+#include "stdbool.h"
 #include "stddef.h"
 #include "stdint.h"
-#include "stdbool.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -41,41 +41,33 @@ void klee_make_symbolic(void *addr, size_t nbytes, const char *name);
  * of the object pointer to \arg addr.
  *
  * \arg addr - The start of the object.
- * \arg nbytes - The number of bytes to set taint type; currently this *must*
- * be the entire contents of the object.
  * \arg taint_source - Taint source.
  */
-void klee_add_taint(void *array, size_t nbytes, size_t taint_source);
+void klee_add_taint(void *array, size_t taint_source);
 
 /* klee_clear_taint - Clear the contents of the object pointer to \arg addr
  * of the taint \arg taint_source.
  *
  * \arg addr - The start of the object.
- * \arg nbytes - The number of bytes to set taint type; currently this *must*
- * be the entire contents of the object.
  * \arg taint_source - Taint source.
  */
-void klee_clear_taint(void *array, size_t nbytes, size_t taint_source);
+void klee_clear_taint(void *array, size_t taint_source);
 
 /* klee_check_taint_source - Check that the contents of the object pointer
  * to \arg addr has a \arg taint_source.
  *
  * \arg addr - The start of the object.
- * \arg nbytes - The number of bytes to set taint type; currently this *must*
- * be the entire contents of the object.
  * \arg taint_source - Taint source.
  */
-bool klee_check_taint_source(void *array, size_t nbytes, size_t taint_source);
+bool klee_check_taint_source(void *array, size_t taint_source);
 
 /* klee_check_taint_sink - Check that the contents of the object pointer
  * to \arg addr causes a taint sink \arg taint_sink hit.
  *
  * \arg addr - The start of the object.
- * \arg nbytes - The number of bytes to set taint type; currently this *must*
- * be the entire contents of the object.
  * \arg taint_sink - Taint sink.
  */
-bool klee_check_taint_sink(void *array, size_t nbytes, size_t taint_sink);
+bool klee_check_taint_sink(void *array, size_t taint_sink);
 
 /* klee_taint_sink_hit - Execute taint sink \arg taint_sink hit.
  *

@@ -124,15 +124,15 @@ public:
 
 struct Taint : public Unknown {
 protected:
-    std::string taintType;
+  std::string taintType;
 
 public:
-    explicit Taint(const std::string &str = "Unknown");
+  explicit Taint(const std::string &str = "Unknown");
 
-    [[nodiscard]] Kind getKind() const override;
+  [[nodiscard]] Kind getKind() const override;
 
-    [[nodiscard]] std::string getTaintType() const;
-    [[nodiscard]] std::string getTaintTypeAsLower() const;
+  [[nodiscard]] std::string getTaintType() const;
+  [[nodiscard]] std::string getTaintTypeAsLower() const;
 };
 
 struct TaintOutput final : public Taint {

@@ -171,24 +171,28 @@ Kind TaintOutput::getKind() const { return Kind::TaintOutput; }
 
 TaintPropagation::TaintPropagation(const std::string &str) : Taint(str) {
   const size_t colonPos = rawValue.find(':');
-  const std::string rawData = (colonPos == std::string::npos)
-                              ? std::string()
-                              : rawValue.substr(colonPos + 1, std::string::npos);
+  const std::string rawData =
+      (colonPos == std::string::npos)
+          ? std::string()
+          : rawValue.substr(colonPos + 1, std::string::npos);
 
   if (rawData.empty()) {
-    klee_error("Annotation TaintPropagation: Incorrect value %s format, must be <type>:<index>",
+    klee_error("Annotation TaintPropagation: Incorrect value %s format, must "
+               "be <type>:<index>",
                rawValue.c_str());
   }
 
-  char* end = nullptr;
+  char *end = nullptr;
   size_t propagationParameterData = strtoul(rawData.c_str(), &end, 10);
   if (*end != '\0' || errno == ERANGE) {
-    klee_error("Annotation TaintPropagation: Incorrect value %s format, must be <type>:<index>",
+    klee_error("Annotation TaintPropagation: Incorrect value %s format, must "
+               "be <type>:<index>",
                rawValue.c_str());
   }
 
   if (propagationParameterData == 0) {
-    klee_error("Annotation TaintPropagation: Incorrect value %s, data for propagation must be >= 1",
+    klee_error("Annotation TaintPropagation: Incorrect value %s, data for "
+               "propagation must be >= 1",
                rawValue.c_str());
   }
   propagationParameterIndex = propagationParameterData - 1;
