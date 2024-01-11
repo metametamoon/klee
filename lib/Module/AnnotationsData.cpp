@@ -2,9 +2,12 @@
 
 namespace klee {
 
-klee::AnnotationsData::AnnotationsData(const std::string &annotationsFile,
-                                       const std::string &taintAnnotationsFile):
-                                       taintAnnotation(taintAnnotationsFile) {
+klee::AnnotationsData::AnnotationsData(
+    const std::string &annotationsFile,
+    const std::string &taintAnnotationsFile) {
+  taintAnnotation = taintAnnotationsFile.empty()
+                        ? TaintAnnotation()
+                        : TaintAnnotation(taintAnnotationsFile);
   annotations = parseAnnotations(annotationsFile);
 }
 

@@ -11,10 +11,10 @@
 
 #include <assert.h>
 #include <stdarg.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdbool.h>
 #include <sys/time.h>
 
 #include "klee/klee.h"
@@ -165,10 +165,10 @@ void klee_make_mock(void *ret_array, size_t ret_nbytes, const char *fname) {
 }
 
 // TODO: add for tests
-void klee_add_taint(void *array, size_t nbytes, size_t taint_source) {}
-void klee_clear_taint(void *array, size_t nbytes, size_t taint_source) {}
-bool klee_check_taint_source(void *array, size_t nbytes, size_t taint_source) {}
-bool klee_check_taint_sink(void *array, size_t nbytes, size_t taint_sink) {}
+void klee_add_taint(void *array, size_t taint_source) {}
+void klee_clear_taint(void *array, size_t taint_source) {}
+bool klee_check_taint_source(void *array, size_t taint_source) {}
+bool klee_check_taint_sink(void *array, size_t taint_sink) {}
 void klee_taint_sink_hit(size_t taint_sink) {}
 
 void klee_silent_exit(int x) { exit(x); }
