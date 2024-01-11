@@ -1166,16 +1166,15 @@ void SpecialFunctionHandler::handleFAbs(ExecutionState &state,
   executor.bindLocal(target, state, result);
 }
 
-//TODO: update definitions after adding taint memory, now pure
+// TODO: update definitions after adding taint memory
 
-void SpecialFunctionHandler::handleAddTaint(
-    klee::ExecutionState &state,
-    klee::KInstruction *target,
-    std::vector<ref<Expr>> &arguments) {
-  if (arguments.size() != 3) {
-    executor.terminateStateOnUserError(
-        state, "Incorrect number of arguments to "
-               "klee_add_taint(void*, size_t, size_t)");
+void SpecialFunctionHandler::handleAddTaint(klee::ExecutionState &state,
+                                            klee::KInstruction *target,
+                                            std::vector<ref<Expr>> &arguments) {
+  if (arguments.size() != 2) {
+    executor.terminateStateOnUserError(state,
+                                       "Incorrect number of arguments to "
+                                       "klee_add_taint(void*, size_t)");
     return;
   }
 
@@ -1183,13 +1182,12 @@ void SpecialFunctionHandler::handleAddTaint(
 }
 
 void SpecialFunctionHandler::handleClearTaint(
-    klee::ExecutionState &state,
-    klee::KInstruction *target,
+    klee::ExecutionState &state, klee::KInstruction *target,
     std::vector<ref<Expr>> &arguments) {
-  if (arguments.size() != 3) {
-    executor.terminateStateOnUserError(
-        state, "Incorrect number of arguments to "
-               "klee_clear_taint(void*, size_t, size_t)");
+  if (arguments.size() != 2) {
+    executor.terminateStateOnUserError(state,
+                                       "Incorrect number of arguments to "
+                                       "klee_clear_taint(void*, size_t)");
     return;
   }
 
@@ -1197,40 +1195,35 @@ void SpecialFunctionHandler::handleClearTaint(
 }
 
 void SpecialFunctionHandler::handleCheckTaintSource(
-    klee::ExecutionState &state,
-    klee::KInstruction *target,
+    klee::ExecutionState &state, klee::KInstruction *target,
     std::vector<ref<Expr>> &arguments) {
-  if (arguments.size() != 3) {
+  if (arguments.size() != 2) {
     executor.terminateStateOnUserError(
         state, "Incorrect number of arguments to "
-               "klee_check_taint_source(void*, size_t, size_t)");
+               "klee_check_taint_source(void*, size_t)");
     return;
   }
 
-  // FIXME: this is a test version right now
-  ref<Expr> result = ConstantExpr::create(true, Expr::Bool);
-  executor.bindLocal(target, state, result);
+  //  ref<Expr> result = ConstantExpr::create(true, Expr::Bool);
+  //  executor.bindLocal(target, state, result);
 }
 
 void SpecialFunctionHandler::handleCheckTaintSink(
-        klee::ExecutionState &state,
-        klee::KInstruction *target,
-        std::vector<ref<Expr>> &arguments) {
-  if (arguments.size() != 3) {
-    executor.terminateStateOnUserError(
-            state, "Incorrect number of arguments to "
-                   "klee_check_taint_sink(void*, size_t, size_t)");
+    klee::ExecutionState &state, klee::KInstruction *target,
+    std::vector<ref<Expr>> &arguments) {
+  if (arguments.size() != 2) {
+    executor.terminateStateOnUserError(state,
+                                       "Incorrect number of arguments to "
+                                       "klee_check_taint_sink(void*, size_t)");
     return;
   }
 
-  // FIXME: this is a test version right now
-  ref<Expr> result = ConstantExpr::create(true, Expr::Bool);
-  executor.bindLocal(target, state, result);
+  //  ref<Expr> result = ConstantExpr::create(true, Expr::Bool);
+  //  executor.bindLocal(target, state, result);
 }
 
 void SpecialFunctionHandler::handleTaintSinkHit(
-    klee::ExecutionState &state,
-    klee::KInstruction *target,
+    klee::ExecutionState &state, klee::KInstruction *target,
     std::vector<ref<Expr>> &arguments) {
   if (arguments.size() != 1) {
     executor.terminateStateOnUserError(
@@ -1238,5 +1231,6 @@ void SpecialFunctionHandler::handleTaintSinkHit(
     return;
   }
 
-  executor.terminateStateOnError(state, "FormatString", StateTerminationType::User);
+  //  executor.terminateStateOnError(state, "FormatString",
+  //  StateTerminationType::User);
 }

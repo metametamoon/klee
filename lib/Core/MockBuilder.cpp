@@ -376,6 +376,198 @@ unifyByOffset(const std::vector<Statement::Ptr> &statements) {
   return res;
 }
 
+void MockBuilder::buildAnnotationTaintOutput(llvm::Value *elem,
+                                             const Statement::Ptr &statement) {
+  auto taintOutputPtr = (Statement::TaintOutput *)statement.get();
+  const auto source = annotationsData.taintAnnotation.sources.find(
+      taintOutputPtr->getTaintType());
+  if (source == annotationsData.taintAnnotation.sources.end()) {
+    klee_warning("Annotation: unknown TaintOutput source %s",
+                 taintOutputPtr->getTaintType().c_str());
+    return;
+  }
+  buildCallKleeTaintFunction("klee_add_taint", elem, source->second, false);
+}
+
+void MockBuilder::buildAnnotationTaintPropagation(
+    llvm::Value *elem, const Statement::Ptr &statement, llvm::Function *func,
+    const std::string &target) {
+  auto taintPropagationPtr = (Statement::TaintPropagation *)statement.get();
+  const std::string sourceTypeLower =
+      taintPropagationPtr->getTaintTypeAsLower();
+  const auto source = annotationsData.taintAnnotation.sources.find(
+      taintPropagationPtr->getTaintType());
+  if (source == annotationsData.taintAnnotation.sources.end()) {
+    klee_warning("Annotation: unknown TaintPropagation source %s",
+                 taintPropagationPtr->getTaintType().c_str());
+    return;
+  }
+
+  // TODO: support variable arg list
+  if (taintPropagationPtr->propagationParameterIndex >= func->arg_size()) {
+    klee_warning(
+        "Annotation: ignore TaintPropagation because not support arg lists");
+    return;
+  }
+
+  const std::string propagateCondName = "condition_taint_propagate_" +
+                                        sourceTypeLower + target +
+                                        func->getName().str();
+
+  llvm::BasicBlock *fromIf = builder->GetInsertBlock();
+  llvm::Function *curFunc = fromIf->getParent();
+
+  llvm::BasicBlock *propagateBB = llvm::BasicBlock::Create(
+      mockModule->getContext(), propagateCondName, curFunc);
+  llvm::BasicBlock *contBB = llvm::BasicBlock::Create(
+      mockModule->getContext(), "continue_" + propagateCondName);
+
+  llvm::Value *propagationValue =
+      func->getArg(taintPropagationPtr->propagationParameterIndex);
+  auto brValuePropagate = buildCallKleeTaintFunction(
+      "klee_check_taint_source", propagationValue, source->second, true);
+  builder->CreateCondBr(brValuePropagate, propagateBB, contBB);
+
+  builder->SetInsertPoint(propagateBB);
+  buildCallKleeTaintFunction("klee_add_taint", elem, source->second, false);
+  builder->CreateBr(contBB);
+
+  curFunc->getBasicBlockList().push_back(contBB);
+  builder->SetInsertPoint(contBB);
+}
+
+void MockBuilder::buildAnnotationTaintSink(llvm::Value *elem,
+                                           const Statement::Ptr &statement,
+                                           llvm::Function *func,
+                                           const std::string &target) {
+  auto taintSinkPtr = (Statement::TaintSink *)statement.get();
+  const std::string sinkTypeLower = taintSinkPtr->getTaintTypeAsLower();
+  const auto sink =
+      annotationsData.taintAnnotation.sinks.find(taintSinkPtr->getTaintType());
+  if (sink == annotationsData.taintAnnotation.sinks.end()) {
+    klee_warning("Annotation: unknown TaintSink sink %s",
+                 taintSinkPtr->getTaintType().c_str());
+    return;
+  }
+
+  const std::string sinkCondName =
+      "condition_taint_sink_" + sinkTypeLower + target + func->getName().str();
+
+  llvm::BasicBlock *fromIf = builder->GetInsertBlock();
+  llvm::Function *curFunc = fromIf->getParent();
+
+  llvm::BasicBlock *sinkBB =
+      llvm::BasicBlock::Create(mockModule->getContext(), sinkCondName, curFunc);
+  llvm::BasicBlock *contBB = llvm::BasicBlock::Create(
+      mockModule->getContext(), "continue_" + sinkCondName);
+  auto brValueSink = buildCallKleeTaintFunction("klee_check_taint_sink", elem,
+                                                sink->second, true);
+  builder->CreateCondBr(brValueSink, sinkBB, contBB);
+
+  builder->SetInsertPoint(sinkBB);
+  std::string sinkHitCondName = "condition_taint_sink_hit_" + sinkTypeLower +
+                                target + func->getName().str();
+
+  auto intType = llvm::IntegerType::get(mockModule->getContext(), 1);
+  auto *sinkHitCond = builder->CreateAlloca(intType, nullptr);
+  buildCallKleeMakeSymbolic("klee_make_mock", sinkHitCond, intType,
+                            sinkHitCondName);
+  fromIf = builder->GetInsertBlock();
+  curFunc = fromIf->getParent();
+  llvm::BasicBlock *sinkHitBB = llvm::BasicBlock::Create(
+      mockModule->getContext(), sinkHitCondName, curFunc);
+  auto brValueSinkHit = builder->CreateLoad(intType, sinkHitCond);
+  builder->CreateCondBr(brValueSinkHit, sinkHitBB, contBB);
+
+  builder->SetInsertPoint(sinkHitBB);
+  buildCallKleeTaintSinkHit(sink->second);
+  builder->CreateBr(contBB);
+
+  curFunc->getBasicBlockList().push_back(contBB);
+  builder->SetInsertPoint(contBB);
+}
+
+llvm::CallInst *
+MockBuilder::buildCallKleeTaintFunction(const std::string &functionName,
+                                        llvm::Value *source, size_t taint,
+                                        bool returnBool) {
+  const auto returnType = returnBool
+                              ? llvm::Type::getInt1Ty(mockModule->getContext())
+                              : llvm::Type::getVoidTy(mockModule->getContext());
+
+  auto *kleeTaintFunctionType = llvm::FunctionType::get(
+      returnType,
+      {llvm::Type::getInt8PtrTy(mockModule->getContext()),
+       llvm::Type::getInt64Ty(mockModule->getContext())},
+      false);
+  auto kleeAddTaintCallee =
+      mockModule->getOrInsertFunction(functionName, kleeTaintFunctionType);
+
+  //  //TODO: that's not all:
+  //  // - add var arg list (now it is not even considered
+  //  //                 when passing through the function
+  //  //                 parameters and never gets here)
+  //  // - think about **
+  //  // - add going by pointers
+  //  llvm::Value *beginPtr;
+  //  llvm::Value *countBytes;
+  //  if (!source->getType()->isPointerTy() && !source->getType()->isArrayTy())
+  //  {
+  //    beginPtr = builder->CreateAlloca(source->getType());
+  //    builder->CreateStore(source, beginPtr);
+  //
+  //    const size_t bytes = mockModule->getDataLayout().getTypeStoreSize(
+  //      source->getType()->getPointerElementType());
+  //    countBytes = llvm::ConstantInt::get(
+  //      mockModule->getContext(),
+  //      llvm::APInt(64, bytes, false));
+  //  } else if (source->getType()->isPointerTy()) {
+  //    beginPtr = builder->CreateBitCast(
+  //      source, llvm::Type::getInt8PtrTy(mockModule->getContext()));
+  //
+  //    if (source->getType()->getPointerElementType()->isIntegerTy(8)) {
+  //      auto *TLI = new
+  //      llvm::TargetLibraryInfo(llvm::TargetLibraryInfoImpl()); countBytes =
+  //      llvm::emitStrLen(source, *builder,
+  //                                    mockModule->getDataLayout(),TLI);
+  //    }
+  //    else {
+  //      const size_t bytes = mockModule->getDataLayout().getTypeStoreSize(
+  //        source->getType()->getPointerElementType());
+  //      countBytes = llvm::ConstantInt::get(
+  //        mockModule->getContext(),
+  //        llvm::APInt(64, bytes, false));
+  //    }
+  //  }
+
+  llvm::Value *beginPtr;
+  if (!source->getType()->isPointerTy() && !source->getType()->isArrayTy()) {
+    beginPtr = builder->CreateAlloca(source->getType());
+    builder->CreateStore(source, beginPtr);
+  } else {
+    beginPtr = builder->CreateBitCast(
+        source, llvm::Type::getInt8PtrTy(mockModule->getContext()));
+  }
+
+  return builder->CreateCall(
+      kleeAddTaintCallee,
+      {beginPtr, llvm::ConstantInt::get(mockModule->getContext(),
+                                        llvm::APInt(64, taint, false))});
+}
+
+void MockBuilder::buildCallKleeTaintSinkHit(size_t taintSink) {
+  auto *kleeTaintSinkHitType = llvm::FunctionType::get(
+      llvm::Type::getVoidTy(mockModule->getContext()),
+      {llvm::Type::getInt64Ty(mockModule->getContext())}, false);
+  auto kleeTaintSinkHitCallee = mockModule->getOrInsertFunction(
+      "klee_taint_sink_hit", kleeTaintSinkHitType);
+
+  builder->CreateCall(
+      kleeTaintSinkHitCallee,
+      {llvm::ConstantInt::get(mockModule->getContext(),
+                              llvm::APInt(64, taintSink, false))});
+}
+
 void MockBuilder::buildAnnotationForExternalFunctionArgs(
     llvm::Function *func,
     const std::vector<std::vector<Statement::Ptr>> &statementsNotAlign) {
@@ -463,103 +655,22 @@ void MockBuilder::buildAnnotationForExternalFunctionArgs(
         }
         case Statement::Kind::TaintOutput: {
           if (!elem->getType()->isPointerTy()) {
-            klee_error("Annotation: TaintOutput arg not pointer");
+            klee_error("Annotation: TaintOutput arg is not pointer");
           }
-
-          auto taintOutputPtr = (Statement::TaintOutput *)statement.get();
-          const size_t sourceTypeNum = annotationsData.taintAnnotation.sinks[
-            taintOutputPtr->getTaintType()
-          ];
-
-          buildCallKleeTaintFunction("klee_add_taint", elem, sourceTypeNum);
+          buildAnnotationTaintOutput(elem, statement);
           break;
         }
         case Statement::Kind::TaintPropagation: {
           if (!elem->getType()->isPointerTy()) {
-            klee_error("Annotation: TaintPropagation arg not pointer");
+            klee_error("Annotation: TaintPropagation arg is not pointer");
           }
-
-          auto taintPropagationPtr = (Statement::TaintPropagation *)statement.get();
-          const std::string sourceTypeLower = taintPropagationPtr->getTaintTypeAsLower();
-          const size_t sourceTypeNum = annotationsData.taintAnnotation.sinks[
-            taintPropagationPtr->getTaintType()
-          ];
-
-          //TODO: support arg lists
-          if (taintPropagationPtr->propagationParameterIndex >= func->arg_size()) {
-            klee_warning("Annotation: ignore TaintPropagation because not support arg lists");
-            break;
-          }
-
-          const std::string propagateCondName =
-            "condition_taint_propagate_" + sourceTypeLower + "_arg_" +
-            std::to_string(i) + "_" + func->getName().str();
-
-          llvm::BasicBlock *fromIf = builder->GetInsertBlock();
-          llvm::Function *curFunc = fromIf->getParent();
-
-          llvm::BasicBlock *propagateBB = llvm::BasicBlock::Create(
-            mockModule->getContext(), propagateCondName, curFunc);
-          llvm::BasicBlock *contBB = llvm::BasicBlock::Create(
-            mockModule->getContext(), "continue_" + propagateCondName);
-
-          llvm::Value *propagationValue =
-            func->getArg(taintPropagationPtr->propagationParameterIndex);
-          auto brValuePropagate = buildCallKleeTaintFunction(
-            "klee_check_taint_source", propagationValue, sourceTypeNum);
-          builder->CreateCondBr(brValuePropagate, propagateBB, contBB);
-
-          builder->SetInsertPoint(propagateBB);
-          buildCallKleeTaintFunction("klee_add_taint", elem, sourceTypeNum);
-          builder->CreateBr(contBB);
-
-          curFunc->getBasicBlockList().push_back(contBB);
-          builder->SetInsertPoint(contBB);
+          buildAnnotationTaintPropagation(elem, statement, func,
+                                          "_arg_" + std::to_string(i) + "_");
           break;
         }
         case Statement::Kind::TaintSink: {
-          auto taintSinkPtr = (Statement::TaintSink *)statement.get();
-          const std::string sinkTypeLower = taintSinkPtr->getTaintTypeAsLower();
-          const size_t sinkTypeNum = annotationsData.taintAnnotation.sinks[
-            taintSinkPtr->getTaintType()
-          ];
-
-          const std::string sinkCondName =
-            "condition_taint_sink_" + sinkTypeLower + "_arg_" +
-            std::to_string(i) + "_" + func->getName().str();
-
-          llvm::BasicBlock *fromIf = builder->GetInsertBlock();
-          llvm::Function *curFunc = fromIf->getParent();
-
-          llvm::BasicBlock *sinkBB = llvm::BasicBlock::Create(
-            mockModule->getContext(), sinkCondName, curFunc);
-          llvm::BasicBlock *contBB = llvm::BasicBlock::Create(
-            mockModule->getContext(), "continue_" + sinkCondName);
-          auto brValueSink = buildCallKleeTaintFunction(
-            "klee_check_taint_sink", elem, sinkTypeNum);
-          builder->CreateCondBr(brValueSink, sinkBB, contBB);
-
-          builder->SetInsertPoint(sinkBB);
-          std::string sinkHitCondName =
-            "condition_taint_sink_hit_" + sinkTypeLower + "_arg_" +
-            std::to_string(i) + "_" + func->getName().str();
-          auto intType = llvm::IntegerType::get(mockModule->getContext(), 1);
-          auto *sinkHitCond = builder->CreateAlloca(intType, nullptr);
-          buildCallKleeMakeSymbolic("klee_make_mock", sinkHitCond, intType,
-                                    sinkHitCondName);
-          fromIf = builder->GetInsertBlock();
-          curFunc = fromIf->getParent();
-          llvm::BasicBlock *sinkHitBB = llvm::BasicBlock::Create(
-            mockModule->getContext(), sinkHitCondName, curFunc);
-          auto brValueSinkHit = builder->CreateLoad(intType, sinkHitCond);
-          builder->CreateCondBr(brValueSinkHit, sinkHitBB, contBB);
-
-          builder->SetInsertPoint(sinkHitBB);
-          buildCallKleeTaintSinkHit(sinkTypeNum);
-          builder->CreateBr(contBB);
-
-          curFunc->getBasicBlockList().push_back(contBB);
-          builder->SetInsertPoint(contBB);
+          buildAnnotationTaintSink(elem, statement, func,
+                                   "_arg_" + std::to_string(i) + "_");
           break;
         }
         case Statement::Kind::Unknown:
@@ -575,84 +686,6 @@ void MockBuilder::buildAnnotationForExternalFunctionArgs(
       processingValue(prev, elem->getType(), allocSourcePtr, initNullPtr);
     }
   }
-}
-
-llvm::CallInst*
-MockBuilder::buildCallKleeTaintFunction(const std::string &functionName,
-                                        llvm::Value *source, size_t target) {
-  // TODO: maybe separate as parameter
-  const auto returnType = (functionName == "klee_check_taint_source" ||
-                           functionName == "klee_check_taint_sink")
-      ? llvm::Type::getInt1Ty(mockModule->getContext())
-      : llvm::Type::getVoidTy(mockModule->getContext());
-
-  auto *kleeTaintFunctionType = llvm::FunctionType::get(
-      returnType,
-      {llvm::Type::getInt8PtrTy(mockModule->getContext()),
-       llvm::Type::getInt64Ty(mockModule->getContext()),
-       llvm::Type::getInt64Ty(mockModule->getContext())},
-      false);
-  auto kleeAddTaintCallee = mockModule->getOrInsertFunction(
-      functionName, kleeTaintFunctionType);
-
-  //TODO: that's not all:
-  // - add arg list (now it is not even considered
-  //                 when passing through the function
-  //                 parameters and never gets here)
-  // - think about **
-  // - add going by pointers
-  llvm::Value *beginPtr;
-  llvm::Value *countBytes;
-  if (!source->getType()->isPointerTy() && !source->getType()->isArrayTy()) {
-    beginPtr = builder->CreateAlloca(source->getType());
-    builder->CreateStore(source, beginPtr);
-
-    const size_t bytes = mockModule->getDataLayout().getTypeStoreSize(
-      source->getType()->getPointerElementType());
-    countBytes = llvm::ConstantInt::get(
-      mockModule->getContext(),
-      llvm::APInt(64, bytes, false));
-  } else if (source->getType()->isPointerTy()) {
-    beginPtr = builder->CreateBitCast(
-      source, llvm::Type::getInt8PtrTy(mockModule->getContext()));
-
-    if (source->getType()->getPointerElementType()->isIntegerTy(8)) {
-      auto *TLI = new llvm::TargetLibraryInfo(llvm::TargetLibraryInfoImpl());
-      countBytes = llvm::emitStrLen(source, *builder,
-                                    mockModule->getDataLayout(),TLI);
-    }
-    else {
-      const size_t bytes = mockModule->getDataLayout().getTypeStoreSize(
-        source->getType()->getPointerElementType());
-      countBytes = llvm::ConstantInt::get(
-        mockModule->getContext(),
-        llvm::APInt(64, bytes, false));
-    }
-  }
-
-  return builder->CreateCall(
-      kleeAddTaintCallee,
-      {beginPtr,
-       countBytes,
-       llvm::ConstantInt::get(
-           mockModule->getContext(),
-           llvm::APInt(64, target, false))
-      });
-}
-
-void MockBuilder::buildCallKleeTaintSinkHit(size_t taintSink) {
-  auto *kleeTaintSinkHitType = llvm::FunctionType::get(
-      llvm::Type::getVoidTy(mockModule->getContext()),
-      {llvm::Type::getInt64Ty(mockModule->getContext())},
-      false);
-  auto kleeTaintSinkHitCallee = mockModule->getOrInsertFunction(
-      "klee_taint_sink_hit", kleeTaintSinkHitType);
-
-  builder->CreateCall(
-      kleeTaintSinkHitCallee,
-      {llvm::ConstantInt::get(
-          mockModule->getContext(),
-          llvm::APInt(64, taintSink, false))});
 }
 
 void MockBuilder::processingValue(llvm::Value *prev, llvm::Type *elemType,
@@ -736,6 +769,7 @@ void MockBuilder::buildAnnotationForExternalFunctionReturn(
   Statement::InitNull *mustInitNull = nullptr;
   Statement::MaybeInitNull *maybeInitNull = nullptr;
 
+  std::vector<Statement::Ptr> taintStatements;
   for (const auto &statement : statements) {
     switch (statement->getKind()) {
     case Statement::Kind::Deref:
@@ -764,51 +798,10 @@ void MockBuilder::buildAnnotationForExternalFunctionReturn(
       klee_warning("Annotation: unused \"Free\" for return");
       break;
     }
-    case Statement::Kind::TaintOutput: {
-      auto taintOutputPtr = (Statement::TaintOutput *)statement.get();
-      const size_t sourceTypeNum = annotationsData.taintAnnotation.sinks[
-        taintOutputPtr->getTaintType()
-      ];
-
-      //TODO: get return value (maybe value from function body before returning)
-//      buildCallKleeTaintFunction("klee_add_taint", ??? ret_value, sourceTypeNum);
-      break;
-    }
-    case Statement::Kind::TaintPropagation: {
-      auto taintPropagationPtr = (Statement::TaintPropagation *)statement.get();
-      const std::string sourceTypeLower = taintPropagationPtr->getTaintTypeAsLower();
-      const size_t sourceTypeNum = annotationsData.taintAnnotation.sinks[
-        taintPropagationPtr->getTaintType()
-      ];
-
-      const std::string propagateCondName =
-        "condition_taint_propagate_" + sourceTypeLower + "_ret_" + func->getName().str();
-
-      llvm::BasicBlock *fromIf = builder->GetInsertBlock();
-      llvm::Function *curFunc = fromIf->getParent();
-
-      llvm::BasicBlock *propagateBB = llvm::BasicBlock::Create(
-        mockModule->getContext(), propagateCondName, curFunc);
-      llvm::BasicBlock *contBB = llvm::BasicBlock::Create(
-        mockModule->getContext(), "continue_" + propagateCondName);
-
-      llvm::Value *propagationValue = func->getArg(taintPropagationPtr->propagationParameterIndex);
-      auto brValuePropagate = buildCallKleeTaintFunction(
-        "klee_check_taint_source", propagationValue, sourceTypeNum);
-      builder->CreateCondBr(brValuePropagate, propagateBB, contBB);
-
-      builder->SetInsertPoint(propagateBB);
-      //TODO: get return value (maybe value from function body before returning)
-//      buildCallKleeTaintFunction("klee_add_taint", ??? ret_value, sourceTypeNum);
-      builder->CreateBr(contBB);
-
-      curFunc->getBasicBlockList().push_back(contBB);
-      builder->SetInsertPoint(contBB);
-      break;
-    }
+    case Statement::Kind::TaintOutput:
+    case Statement::Kind::TaintPropagation:
     case Statement::Kind::TaintSink: {
-      klee_warning("Annotation: unused TaintSink for return function \"%s\"",
-                   func->getName().str().c_str());
+      taintStatements.push_back(statement);
       break;
     }
     case Statement::Kind::Unknown:
@@ -847,6 +840,27 @@ void MockBuilder::buildAnnotationForExternalFunctionReturn(
       builder->CreateCall(kleeAssumeFunc, {cmpResult64});
     }
   }
+
+  for (const auto &statement : taintStatements) {
+    switch (statement->getKind()) {
+    case Statement::Kind::TaintOutput: {
+      buildAnnotationTaintOutput(retValuePtr, statement);
+      break;
+    }
+    case Statement::Kind::TaintPropagation: {
+      buildAnnotationTaintPropagation(retValuePtr, statement, func, "_ret_");
+      break;
+    }
+    case Statement::Kind::TaintSink: {
+      klee_warning("Annotation: unused TaintSink for return function \"%s\"",
+                   func->getName().str().c_str());
+      break;
+    }
+    default:
+      __builtin_unreachable();
+    }
+  }
+
   llvm::Value *retValue = builder->CreateLoad(returnType, retValuePtr, retName);
   builder->CreateRet(retValue);
 }

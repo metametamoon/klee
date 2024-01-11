@@ -422,7 +422,8 @@ cl::opt<bool> AnnotateOnlyExternal(
     cl::init(false), cl::cat(MockCat));
 
 cl::opt<std::string>
-    TaintAnnotationsFile("taint-annotations", cl::desc("Path to the taint annotations JSON file"),
+    TaintAnnotationsFile("taint-annotations",
+                         cl::desc("Path to the taint annotations JSON file"),
                          cl::value_desc("path file"), cl::cat(MockCat));
 
 } // namespace
@@ -1037,11 +1038,11 @@ static const char *modelledExternals[] = {
     "klee_get_value_i32", "klee_get_value_i64", "klee_get_obj_size",
     "klee_is_symbolic", "klee_make_symbolic", "klee_make_mock",
     "klee_add_taint", "klee_clear_taint", "klee_check_taint_source",
-    "klee_check_taint_sink", "klee_taint_sink_hit",
-    "klee_mark_global", "klee_open_merge", "klee_close_merge",
-    "klee_prefer_cex", "klee_posix_prefer_cex", "klee_print_expr",
-    "klee_print_range", "klee_report_error", "klee_set_forking",
-    "klee_silent_exit", "klee_warning", "klee_warning_once", "klee_stack_trace",
+    "klee_check_taint_sink", "klee_taint_sink_hit", "klee_mark_global",
+    "klee_open_merge", "klee_close_merge", "klee_prefer_cex",
+    "klee_posix_prefer_cex", "klee_print_expr", "klee_print_range",
+    "klee_report_error", "klee_set_forking", "klee_silent_exit", "klee_warning",
+    "klee_warning_once", "klee_stack_trace",
 #ifdef SUPPORT_KLEE_EH_CXX
     "_klee_eh_Unwind_RaiseException_impl", "klee_eh_typeid_for",
 #endif

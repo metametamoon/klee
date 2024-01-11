@@ -39,10 +39,21 @@ private:
   buildCallKleeMakeSymbolic(const std::string &kleeMakeSymbolicFunctionName,
                             llvm::Value *source, llvm::Type *type,
                             const std::string &symbolicName);
-  llvm::CallInst*
-  buildCallKleeTaintFunction(const std::string &functionName,
-                             llvm::Value *source, size_t target);
+  llvm::CallInst *buildCallKleeTaintFunction(const std::string &functionName,
+                                             llvm::Value *source, size_t taint,
+                                             bool returnBool);
   void buildCallKleeTaintSinkHit(size_t taintSink);
+
+  void buildAnnotationTaintOutput(llvm::Value *elem,
+                                  const Statement::Ptr &statement);
+  void buildAnnotationTaintPropagation(llvm::Value *elem,
+                                       const Statement::Ptr &statement,
+                                       llvm::Function *func,
+                                       const std::string &target);
+  void buildAnnotationTaintSink(llvm::Value *elem,
+                                const Statement::Ptr &statement,
+                                llvm::Function *func,
+                                const std::string &target);
 
   void buildAnnotationForExternalFunctionArgs(
       llvm::Function *func,
