@@ -387,6 +387,9 @@ cl::opt<MockPointerResolvePolicy> MockPointerResolve(
 cl::opt<bool> MockExternalGlobals("mock-external-globals", cl::init(false),
                                   cl::desc(""), cl::cat(ExecCat));
 
+cl::opt<bool> MockSymbolicIndirectCalls("mock-symbolic-indirect-calls", cl::init(false),
+                                        cl::desc(""), cl::cat(ExecCat));
+
 /*** Seeding options ***/
 
 cl::opt<bool> AlwaysOutputSeeds(
@@ -4678,7 +4681,8 @@ Executor::getMockInfo(ExecutionState &state, KCallable *f,
   CallableMockSignature result;
 
   if (!f) {
-    result.doMock = true;
+    // No f -> symbolic indirect call
+    result.doMock = MockSymbolicIndirectCalls;
   } else {
     bool isExternal = true;
     auto kf = dyn_cast<KFunction>(f);
