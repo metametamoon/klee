@@ -14,6 +14,8 @@
 #include "klee/Support/ErrorHandling.h"
 
 #include "klee/Support/CompilerWarning.h"
+#include "llvm/Analysis/CallGraph.h"
+#include <unordered_set>
 DISABLE_WARNING_PUSH
 DISABLE_WARNING_DEPRECATED_DECLARATIONS
 #include "llvm/Analysis/ValueTracking.h"
@@ -364,6 +366,44 @@ bool klee::loadFileAsOneModule(
   if (res) {
     modules.push_back(std::move(modules2.front()));
     return linkModules(modules.back().get(), modules2, 0, errorMsg);
+  }
+  return res;
+}
+
+bool klee::loadFileAsOneModule2(
+    const std::string &libraryName, LLVMContext &context,
+    std::vector<std::unique_ptr<llvm::Module>> &modules,
+    Interpreter::FunctionsByModule &functionsByModule,
+    std::string &errorMsg) {
+  std::vector<std::unique_ptr<llvm::Module>> modules2;
+  bool res = klee::loadFile(libraryName, context, modules2, errorMsg);
+  if (res) {
+    std::vector<std::vector<std::pair<StringRef, unsigned>>> namesByModule;
+    for (const auto &mod : modules2) {
+      llvm::CallGraph cg(*mod);
+      std::vector<std::pair<StringRef, unsigned>> names;
+      for (const auto &f : *mod) {
+        if (!f.isDeclaration()) {
+          names.push_back({f.getName(), cg[&f]->getNumReferences()});
+        }
+      }
+      namesByModule.push_back(std::move(names));
+    }
+
+    modules.push_back(std::move(modules2.front()));
+    res = linkModules(modules.back().get(), modules2, 0, errorMsg);
+    auto mainMod = modules.front().get();
+    for (const auto &mod : namesByModule) {
+      std::unordered_set<llvm::Function *> fns;
+      for (const auto &name : mod) {
+        auto fn = mainMod->getFunction(name.first);
+        if (fn) {
+          fns.insert(fn);
+          functionsByModule.usesInModule[fn] = name.second;
+        }
+      }
+      functionsByModule.modules.push_back(std::move(fns));
+    }
   }
   return res;
 }

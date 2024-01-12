@@ -12,7 +12,9 @@
 
 #include "klee/Config/Version.h"
 
+#include "klee/Core/Interpreter.h"
 #include "klee/Support/CompilerWarning.h"
+#include <unordered_set>
 DISABLE_WARNING_PUSH
 DISABLE_WARNING_DEPRECATED_DECLARATIONS
 #include "llvm/IR/InstrTypes.h"
@@ -118,6 +120,12 @@ bool loadFileAsOneModule(const std::string &libraryName,
                          llvm::LLVMContext &context,
                          std::vector<std::unique_ptr<llvm::Module>> &modules,
                          std::string &errorMsg);
+
+bool loadFileAsOneModule2(
+    const std::string &libraryName, llvm::LLVMContext &context,
+    std::vector<std::unique_ptr<llvm::Module>> &modules,
+    Interpreter::FunctionsByModule &functionsByModule,
+    std::string &errorMsg);
 } // namespace klee
 
 #endif /* KLEE_MODULEUTIL_H */

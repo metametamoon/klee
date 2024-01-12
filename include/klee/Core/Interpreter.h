@@ -73,6 +73,11 @@ public:
                       // targets coverage
   };
 
+  struct FunctionsByModule {
+    std::vector<std::unordered_set<llvm::Function *>> modules;
+    std::unordered_map<llvm::Function *, unsigned> usesInModule;
+  };
+
   /// ModuleOptions - Module level options which can be set when
   /// registering a module with the interpreter.
   struct ModuleOptions {
@@ -145,6 +150,9 @@ public:
             std::set<std::string> &&mainModuleFunctions,
             std::set<std::string> &&mainModuleGlobals,
             FLCtoOpcode &&origInstructions) = 0;
+
+  virtual void setFunctionsByModule(
+      FunctionsByModule &&functionsByModule) = 0;
 
   // supply a tree stream writer which the interpreter will use
   // to record the concrete path (as a stream of '0' and '1' bytes).
