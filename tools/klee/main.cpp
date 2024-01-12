@@ -349,9 +349,18 @@ cl::opt<std::string> XMLMetadataProgramHash(
     llvm::cl::desc("Test-Comp hash sum of original file for xml metadata"),
     llvm::cl::cat(TestCompCat));
 
-cl::opt<bool> multiplexForStaticAnalysis("multiplex-static-analysis",
-                                         llvm::cl::desc(""),
-                                         llvm::cl::cat(StartCat));
+enum class SAMultiplexKind {
+  None,
+  Module,
+  All,
+};
+
+cl::opt<SAMultiplexKind> multiplexForStaticAnalysis(
+    "multiplex-static-analysis",
+    cl::values(clEnumValN(SAMultiplexKind::None, "none", ""),
+               clEnumValN(SAMultiplexKind::Module, "module", ""),
+               clEnumValN(SAMultiplexKind::All, "all", "")),
+    cl::desc(""), cl::init(SAMultiplexKind::None), cl::cat(StartCat));
 
 } // namespace
 
@@ -1941,24 +1950,35 @@ int main(int argc, char **argv, char **envp) {
     mainModuleGlobals.insert(gv.getName().str());
   }
 
-  if (multiplexForStaticAnalysis) {
+  if (multiplexForStaticAnalysis != SAMultiplexKind::None) {
     assert(UseGuidedSearch != Interpreter::GuidanceKind::ErrorGuidance);
 
     std::vector<llvm::Function *> Fns;
 
-    for (auto &f : *mainModule) {
-      if (!f.isDeclaration()) {
-        Fns.push_back(&f);
+    switch (multiplexForStaticAnalysis) {
+    case SAMultiplexKind::All: {
+      for (auto &f : *mainModule) {
+        if (!f.isDeclaration()) {
+          Fns.push_back(&f);
+        }
       }
+      break;
     }
 
-    // for (const auto &mod : functionsByModule.modules) {
-    //   for (const auto &f : mod) {
-    //     if (functionsByModule.usesInModule[f] <= 1) {
-    //       Fns.push_back(f);
-    //     }
-    //   }
-    // }
+    case SAMultiplexKind::Module: {
+      for (const auto &mod : functionsByModule.modules) {
+        for (const auto &f : mod) {
+          if (functionsByModule.usesInModule[f] <= 1) {
+            Fns.push_back(f);
+          }
+        }
+      }
+      break;
+    }
+
+    default:
+      assert(0);
+    }
 
     multiplexEntryPoint(mainModule, ctx, Fns);
   }
