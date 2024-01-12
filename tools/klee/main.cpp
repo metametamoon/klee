@@ -31,6 +31,7 @@
 #include "klee/Support/CompilerWarning.h"
 #include "llvm/Analysis/CallGraph.h"
 #include "llvm/IR/Attributes.h"
+#include <unordered_set>
 DISABLE_WARNING_PUSH
 DISABLE_WARNING_DEPRECATED_DECLARATIONS
 #include "llvm/Bitcode/BitcodeReader.h"
@@ -1859,7 +1860,9 @@ int main(int argc, char **argv, char **envp) {
   LLVMContext ctx;
   std::vector<std::unique_ptr<llvm::Module>> loadedUserModules;
   std::vector<std::unique_ptr<llvm::Module>> loadedLibsModules;
-  if (!klee::loadFileAsOneModule(InputFile, ctx, loadedUserModules, errorMsg)) {
+  Interpreter::FunctionsByModule functionsByModule;
+  if (!klee::loadFileAsOneModule2(InputFile, ctx, loadedUserModules,
+                                  functionsByModule, errorMsg)) {
     klee_error("error loading program '%s': %s", InputFile.c_str(),
                errorMsg.c_str());
   }
@@ -1940,15 +1943,23 @@ int main(int argc, char **argv, char **envp) {
 
   if (multiplexForStaticAnalysis) {
     assert(UseGuidedSearch != Interpreter::GuidanceKind::ErrorGuidance);
+
     std::vector<llvm::Function *> Fns;
-    for (auto &Function : *mainModule) {
-      if (!Function.isDeclaration()) {
-        Fns.push_back(&Function);
-        // if (Fns.size() == 100) {
-        //   break;
-        // }
+
+    for (auto &f : *mainModule) {
+      if (!f.isDeclaration()) {
+        Fns.push_back(&f);
       }
     }
+
+    // for (const auto &mod : functionsByModule.modules) {
+    //   for (const auto &f : mod) {
+    //     if (functionsByModule.usesInModule[f] <= 1) {
+    //       Fns.push_back(f);
+    //     }
+    //   }
+    // }
+
     multiplexEntryPoint(mainModule, ctx, Fns);
   }
 
@@ -2189,6 +2200,8 @@ int main(int argc, char **argv, char **envp) {
       loadedUserModules, loadedLibsModules, Opts,
       std::move(mainModuleFunctions), std::move(mainModuleGlobals),
       std::move(origInstructions));
+
+  interpreter->setFunctionsByModule(std::move(functionsByModule));
 
   externalsAndGlobalsCheck(finalModule);
 
