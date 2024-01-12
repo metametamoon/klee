@@ -3093,7 +3093,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
         uint64_t addr = ce->getZExtValue();
         auto it = legalFunctions.find(addr);
         if (it != legalFunctions.end()) {
-          executeCall(state, ki, f, arguments);
+          executeCall(state, ki, it->second, arguments);
         } else {
           terminateStateOnExecError(state, "invalid function pointer");
         }
