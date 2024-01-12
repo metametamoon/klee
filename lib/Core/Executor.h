@@ -114,6 +114,11 @@ class Executor : public Interpreter {
   friend klee::Searcher *
   klee::constructUserSearcher(Executor &executor, bool stopAfterReachingTarget);
 
+  struct CallableMockSignature {
+    bool doMock = false;
+    std::unordered_set<const MemoryObject *> MOsToMock;
+  };
+
 public:
   typedef std::pair<ExecutionState *, ExecutionState *> StatePair;
 
@@ -187,6 +192,7 @@ private:
   /// Map of legal function addresses to the corresponding Function.
   /// Used to validate and dereference function pointers.
   std::unordered_map<std::uint64_t, llvm::Function *> legalFunctions;
+  std::unordered_map<llvm::Function *, std::uint64_t> reverseLegalFunctions;
 
   /// Manager for everything related to targeted execution mode
   std::unique_ptr<TargetedExecutionManager> targetedExecutionManager;
@@ -252,6 +258,8 @@ private:
   std::vector<ref<Expr>> eh_typeids;
 
   bool hasStateWhichCanReachSomeTarget = false;
+
+  FunctionsByModule functionsByModule;
 
   /// Return the typeid corresponding to a certain `type_info`
   ref<ConstantExpr> getEhTypeidFor(ref<Expr> type_info);
@@ -739,6 +747,8 @@ public:
             std::set<std::string> &&mainModuleGlobals,
             FLCtoOpcode &&origInstructions) override;
 
+  void setFunctionsByModule(FunctionsByModule &&functionsByModule) override;
+
   void useSeeds(const std::vector<struct KTest *> *seeds) override {
     usingSeeds = seeds;
   }
@@ -822,6 +832,12 @@ public:
   int *getErrnoLocation(const ExecutionState &state) const;
 
   void executeStep(ExecutionState &state);
+
+  CallableMockSignature getMockInfo(ExecutionState &state, KCallable *f,
+                                    const std::vector<ref<Expr>> &args);
+
+  void mockCallable(ExecutionState &state, KInstruction *ki, KCallable *f,
+                    CallableMockSignature mock);
 };
 
 } // namespace klee

@@ -348,21 +348,57 @@ cl::opt<bool> AllExternalWarnings(
              "as opposed to once per function (default=false)"),
     cl::cat(ExtCallsCat));
 
-cl::opt<bool>
-    MockExternalCalls("mock-external-calls", cl::init(false),
-                      cl::desc("If true, failed external calls are mocked, "
-                               "i.e. return values are made symbolic "
-                               "and then added to generated test cases. "
-                               "If false, fails on externall calls."),
-                      cl::cat(ExtCallsCat));
+enum class MockExternalCallsPolicy {
+  None,
+  All,
+};
 
-cl::opt<bool> MockAllExternals("mock-all-externals", cl::init(false),
-                               cl::desc("If true, all externals are mocked."),
-                               cl::cat(ExtCallsCat));
+enum class MockInternalCallsPolicy {
+  None,
+  Module,
+  All,
+};
 
-cl::opt<bool> MockAllFunctions("tmp-mock-all", cl::init(false),
-                               cl::desc("If true, all externals are mocked."),
-                               cl::cat(ExtCallsCat));
+enum class CallableMockType {
+  RVOnly,
+  Full,
+};
+
+enum class MockPointerResolvePolicy {
+  Constant,
+  Symbolic,
+};
+
+cl::opt<MockExternalCallsPolicy> MockExternalCalls(
+    "mock-external-calls",
+    cl::values(clEnumValN(MockExternalCallsPolicy::None, "none", ""),
+               clEnumValN(MockExternalCallsPolicy::All, "all", "")),
+    cl::init(MockExternalCallsPolicy::None), cl::desc(""),
+    cl::cat(ExtCallsCat));
+
+cl::opt<MockInternalCallsPolicy> MockInternalCalls(
+    "mock-internal-calls",
+    cl::values(clEnumValN(MockInternalCallsPolicy::None, "none", ""),
+               clEnumValN(MockInternalCallsPolicy::Module, "module", ""),
+               clEnumValN(MockInternalCallsPolicy::All, "all", "")),
+    cl::init(MockInternalCallsPolicy::None), cl::desc(""), cl::cat(ExecCat));
+
+cl::opt<CallableMockType>
+    CallMockType("call-mock-type",
+                 cl::values(clEnumValN(CallableMockType::RVOnly, "rv", ""),
+                            clEnumValN(CallableMockType::Full, "full", "")),
+                 cl::init(CallableMockType::RVOnly), cl::desc(""),
+                 cl::cat(ExecCat));
+
+cl::opt<MockPointerResolvePolicy> MockPointerResolve(
+    "mock-pointer-resolve",
+    cl::values(clEnumValN(MockPointerResolvePolicy::Constant, "constant", ""),
+               clEnumValN(MockPointerResolvePolicy::Symbolic, "symbolic", "")),
+    cl::init(MockPointerResolvePolicy::Constant), cl::desc(""),
+    cl::cat(ExecCat));
+
+cl::opt<bool> MockExternalGlobals("mock-external-globals", cl::init(false),
+                                  cl::desc(""), cl::cat(ExecCat));
 
 /*** Seeding options ***/
 
@@ -680,6 +716,10 @@ llvm::Module *Executor::setModule(
   return kmodule->module.get();
 }
 
+void Executor::setFunctionsByModule(FunctionsByModule &&fnsByModule) {
+  functionsByModule = std::move(fnsByModule);
+}
+
 Executor::~Executor() {
   delete typeSystemManager;
   delete externalDispatcher;
@@ -827,6 +867,7 @@ void Executor::allocateGlobalObjects(ExecutionState &state) {
       auto mo = allocate(state, Expr::createPointer(8), false, true, &f, 8);
       addr = Expr::createPointer(mo->address);
       legalFunctions.emplace(mo->address, &f);
+      reverseLegalFunctions.emplace(&f, mo->address);
     }
 
     globalAddresses.emplace(&f, addr);
@@ -1015,7 +1056,7 @@ void Executor::initializeGlobalObjects(ExecutionState &state) {
         } else {
           addr = externalDispatcher->resolveSymbol(v.getName().str());
         }
-        if (MockAllExternals && !addr) {
+        if (MockExternalGlobals && !addr) {
           executeMakeSymbolic(
               state, mo, typeSystemManager->getWrappedType(v.getType()),
               SourceBuilder::irreproducible("mockExternGlobalObject"), false);
@@ -2335,10 +2376,9 @@ void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f,
     // KInstIterator from just an instruction (unlike LLVM).
     KFunction *kf = kmodule->functionMap[f];
 
-    if (MockAllFunctions && state.multiplexKF && !f->getName().startswith("klee")) {
-      if (!kf->getFunctionType()->getReturnType()->isVoidTy()) {
-        prepareMockValue(state, "mock_return_sa", ki);
-      }
+    auto mock = getMockInfo(state, kf, arguments);
+    if (mock.doMock) {
+      mockCallable(state, ki, kf, mock);
       return;
     }
 
@@ -3020,55 +3060,50 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
 
       executeCall(state, ki, f, arguments);
     } else {
+
       ref<Expr> v = eval(ki, 0, state).value;
+      v = optimizer.optimizeExpr(v, true);
 
-      ExecutionState *free = &state;
-      bool hasInvalid = false, first = true;
+      ref<Expr> unique;
+      bool success = solver->tryGetUnique(state.constraints.cs(), v, unique,
+                                          state.queryMetaData);
+      assert(success && "FIXME: Unhandled solver failure");
+      (void)success;
 
-      /* XXX This is wasteful, no need to do a full evaluate since we
-          have already got a value. But in the end the caches should
-          handle it for us, albeit with some overhead. */
-      do {
-        if (!first && MockExternalCalls) {
-          free = nullptr;
-          if (ki->inst()->getType()->isSized()) {
-            prepareMockValue(state, "mockExternResult", ki);
-          }
+      if (auto ce = dyn_cast<ConstantExpr>(unique)) {
+        uint64_t addr = ce->getZExtValue();
+        auto it = legalFunctions.find(addr);
+        if (it != legalFunctions.end()) {
+          executeCall(state, ki, f, arguments);
         } else {
-          v = optimizer.optimizeExpr(v, true);
-          ref<ConstantExpr> value;
-          bool success = solver->getValue(free->constraints.cs(), v, value,
-                                          free->queryMetaData);
-          assert(success && "FIXME: Unhandled solver failure");
-          (void)success;
-          StatePair res =
-              forkInternal(*free, EqExpr::create(v, value), BranchType::Call);
-          if (res.first) {
-            uint64_t addr = value->getZExtValue();
-            auto it = legalFunctions.find(addr);
-            if (it != legalFunctions.end()) {
-              f = it->second;
-
-              // Don't give warning on unique resolution
-              if (res.second || !first)
-                klee_warning_once(reinterpret_cast<void *>(addr),
-                                  "resolved symbolic function pointer to: %s",
-                                  f->getName().data());
-
+          terminateStateOnExecError(state, "invalid function pointer");
+        }
+      } else {
+        auto mock = getMockInfo(state, nullptr, arguments);
+        if (mock.doMock) {
+          mockCallable(state, ki, nullptr, mock);
+        } else {
+          StatePair res = {&state, nullptr};
+          for (const auto &f : kmodule->escapingFunctions) {
+            auto address = reverseLegalFunctions.at(f);
+            auto eqExpr =
+                EqExpr::create(v, ConstantExpr::create(address, Expr::Int64));
+            res = forkInternal(*res.first, eqExpr, BranchType::Call);
+            if (res.first) {
               executeCall(*res.first, ki, f, arguments);
+            }
+
+            if (res.second) {
+              res = {res.second, nullptr};
             } else {
-              if (!hasInvalid) {
-                terminateStateOnExecError(state, "invalid function pointer");
-                hasInvalid = true;
-              }
+              break;
             }
           }
-
-          first = false;
-          free = res.second;
-          timers.invoke();
+          if (res.second) {
+            terminateStateOnExecError(*res.second, "invalid function pointer");
+          }
         }
-      } while (free && !haltExecution);
+      }
     }
     break;
   }
@@ -4612,6 +4647,104 @@ void Executor::executeStep(ExecutionState &state) {
   }
 }
 
+Executor::CallableMockSignature
+Executor::getMockInfo(ExecutionState &state, KCallable *f,
+                      const std::vector<ref<Expr>> &args) {
+
+  CallableMockSignature result;
+
+  if (!f) {
+    result.doMock = true;
+  } else {
+    bool isExternal = true;
+    auto kf = dyn_cast<KFunction>(f);
+    if (kf) {
+      if (!kf->function()->isDeclaration()) {
+        isExternal = false;
+      }
+    }
+
+    if (isExternal && MockExternalCalls == MockExternalCallsPolicy::All) {
+      result.doMock = true;
+    }
+
+    if (!isExternal && MockInternalCalls == MockInternalCallsPolicy::All) {
+      if (state.multiplexKF && !f->getName().startswith("klee")) {
+        result.doMock = true;
+      }
+    }
+
+    if (!isExternal && MockInternalCalls == MockInternalCallsPolicy::Module) {
+      if (state.multiplexKF && !f->getName().startswith("klee")) {
+        result.doMock = true;
+        for (const auto &mod : functionsByModule.modules) {
+          if (mod.count(state.multiplexKF->function()) && mod.count(kf->function())) {
+            result.doMock = false;
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  if (result.doMock && CallMockType == CallableMockType::Full) {
+    switch (MockPointerResolve) {
+    case MockPointerResolvePolicy::Constant: {
+      for (const auto &arg : args) {
+        auto ce = dyn_cast<ConstantExpr>(arg);
+        if (ce && ce->getWidth() == Context::get().getPointerWidth()) {
+          IDType object;
+          if (state.addressSpace.resolveOne(
+                  ce, typeSystemManager->getUnknownType(), object)) {
+            auto op = state.addressSpace.findObject(object);
+            result.MOsToMock.insert(op.first);
+          }
+        }
+      }
+      break;
+    }
+    case MockPointerResolvePolicy::Symbolic: {
+      for (const auto &arg : args) {
+        if (arg->getWidth() == Context::get().getPointerWidth()) {
+          ResolutionList rl;
+          ResolutionList rlSkipped;
+          state.addressSpace.resolve(state, solver.get(), arg,
+                                     typeSystemManager->getUnknownType(), rl,
+                                     rlSkipped);
+          if (rl.size() == 1) {
+            auto object = rl[0];
+            auto op = state.addressSpace.findObject(object);
+            result.MOsToMock.insert(op.first);
+          }
+        }
+      }
+      break;
+    }
+    }
+  }
+
+  return result;
+}
+
+void Executor::mockCallable(ExecutionState &state, KInstruction *ki,
+                            KCallable *f,
+                            Executor::CallableMockSignature mock) {
+  if (!f) {
+    if (ki->inst()->getType()->isSized()) {
+      prepareMockValue(state, "mockExternResult", ki);
+    }
+  } else {
+    if (!f->getFunctionType()->getReturnType()->isVoidTy()) {
+      prepareMockValue(state, "mockedReturnValue", ki);
+    }
+  }
+  for (const auto &mo : mock.MOsToMock) {
+    executeMakeSymbolic(
+        state, mo, typeSystemManager->getUnknownType(),
+        SourceBuilder::irreproducible("mockMutableGlobalObject"), false);
+  }
+}
+
 void Executor::targetedRun(ExecutionState &initialState, KBlock *target,
                            ExecutionState **resultState) {
   // Delay init till now so that ticks don't accrue during optimization and
@@ -5018,10 +5151,13 @@ void Executor::callExternalFunction(ExecutionState &state, KInstruction *target,
     return;
   }
 
-  if (ExternalCalls == ExternalCallPolicy::All && MockAllExternals) {
+  if (ExternalCalls == ExternalCallPolicy::All) {
+    auto mock = getMockInfo(state, callable, arguments);
+
     std::string TmpStr;
     llvm::raw_string_ostream os(TmpStr);
-    os << "calling external: " << callable->getName().str() << "(";
+    os << (mock.doMock ? "mocking " : "calling ")
+       << "external: " << callable->getName().str() << "(";
     for (unsigned i = 0; i < arguments.size(); i++) {
       os << arguments[i];
       if (i != arguments.size() - 1)
@@ -5034,10 +5170,10 @@ void Executor::callExternalFunction(ExecutionState &state, KInstruction *target,
     else if (!SuppressExternalWarnings)
       klee_warning_once(callable->unwrap(), "%s", os.str().c_str());
 
-    if (target->inst()->getType()->isSized()) {
-      prepareMockValue(state, "mockExternResult", target);
+    if (mock.doMock) {
+      mockCallable(state, target, callable, mock);
+      return;
     }
-    return;
   }
 
   // normal external function handling path
@@ -5158,15 +5294,9 @@ void Executor::callExternalFunction(ExecutionState &state, KInstruction *target,
                                                  roundingMode);
 
   if (!success) {
-    if (MockExternalCalls) {
-      if (target->inst()->getType()->isSized()) {
-        prepareMockValue(state, "mockExternResult", target);
-      }
-    } else {
-      terminateStateOnExecError(state,
-                                "failed external call: " + callable->getName(),
-                                StateTerminationType::External);
-    }
+    terminateStateOnExecError(state,
+                              "failed external call: " + callable->getName(),
+                              StateTerminationType::External);
     return;
   }
 
