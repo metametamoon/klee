@@ -373,8 +373,7 @@ bool klee::loadFileAsOneModule(
 bool klee::loadFileAsOneModule2(
     const std::string &libraryName, LLVMContext &context,
     std::vector<std::unique_ptr<llvm::Module>> &modules,
-    Interpreter::FunctionsByModule &functionsByModule,
-    std::string &errorMsg) {
+    Interpreter::FunctionsByModule &functionsByModule, std::string &errorMsg) {
   std::vector<std::unique_ptr<llvm::Module>> modules2;
   bool res = klee::loadFile(libraryName, context, modules2, errorMsg);
   if (res) {

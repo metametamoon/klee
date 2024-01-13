@@ -121,11 +121,11 @@ bool loadFileAsOneModule(const std::string &libraryName,
                          std::vector<std::unique_ptr<llvm::Module>> &modules,
                          std::string &errorMsg);
 
-bool loadFileAsOneModule2(
-    const std::string &libraryName, llvm::LLVMContext &context,
-    std::vector<std::unique_ptr<llvm::Module>> &modules,
-    Interpreter::FunctionsByModule &functionsByModule,
-    std::string &errorMsg);
+bool loadFileAsOneModule2(const std::string &libraryName,
+                          llvm::LLVMContext &context,
+                          std::vector<std::unique_ptr<llvm::Module>> &modules,
+                          Interpreter::FunctionsByModule &functionsByModule,
+                          std::string &errorMsg);
 } // namespace klee
 
 #endif /* KLEE_MODULEUTIL_H */
