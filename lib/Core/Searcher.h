@@ -395,7 +395,6 @@ private:
   std::optional<KFunction *> currentFunction;
   const unsigned selectQuant;
   unsigned currentQuant{1};
-  bool interleave = true;
 
   KFunctionStatesMap addedKStates;
   KFunctionStatesMap removedKStates;

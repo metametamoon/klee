@@ -791,8 +791,7 @@ void InterleavedSearcher::printName(llvm::raw_ostream &os) {
 //
 
 ExecutionState &DiscreteTimeFairSearcher::selectState() {
-  interleave ^= 1;
-  if (interleave && searchers.find(std::nullopt) != searchers.end()) {
+  if (searchers.find(std::nullopt) != searchers.end()) {
     return searchers.at(std::nullopt)->selectState();
   }
 
