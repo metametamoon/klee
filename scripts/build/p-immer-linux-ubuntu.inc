@@ -6,6 +6,7 @@ install_build_dependencies_immer() {
     ca-certificates
     wget
     unzip
+    git
   )
 
   #Install essential dependencies

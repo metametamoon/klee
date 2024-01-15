@@ -11,6 +11,8 @@
 #define KLEE_MEMORYMANAGER_H
 
 #include "klee/Expr/Expr.h"
+#include "klee/Expr/ExprHashMap.h"
+#include "klee/Module/KType.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -25,17 +27,14 @@ class Value;
 namespace klee {
 class MemoryObject;
 class ArrayCache;
-class AddressManager;
 
 typedef uint64_t IDType;
 
 class MemoryManager {
-  friend class AddressManager;
-
 private:
   typedef std::set<MemoryObject *> objects_ty;
   objects_ty objects;
-  std::unordered_map<IDType, std::map<uint64_t, MemoryObject *>> allocatedSizes;
+  ExprHashMap<MemoryObject *> symbolicAddresses;
 
   ArrayCache *const arrayCache;
 
@@ -44,7 +43,6 @@ private:
   size_t spaceSize;
 
 public:
-  AddressManager *am;
   MemoryManager(ArrayCache *arrayCache);
   ~MemoryManager();
 
@@ -52,18 +50,18 @@ public:
    * Returns memory object which contains a handle to real virtual process
    * memory.
    */
-  MemoryObject *allocate(uint64_t size, bool isLocal, bool isGlobal,
+  MemoryObject *allocate(ref<Expr> size, bool isLocal, bool isGlobal,
                          bool isLazyInitialiazed, const llvm::Value *allocSite,
-                         size_t alignment, ref<Expr> addressExpr = ref<Expr>(),
-                         ref<Expr> sizeExpr = ref<Expr>(),
-                         unsigned timestamp = 0, IDType id = 0);
+                         size_t alignment, KType *type,
+                         ref<Expr> addressExpr = ref<Expr>(),
+                         unsigned timestamp = 0,
+                         const Array *content = nullptr);
   MemoryObject *allocateFixed(uint64_t address, uint64_t size,
-                              const llvm::Value *allocSite);
+                              const llvm::Value *allocSite, KType *type);
   void deallocate(const MemoryObject *mo);
   void markFreed(MemoryObject *mo);
   ArrayCache *getArrayCache() const { return arrayCache; }
-  const std::map<uint64_t, MemoryObject *> &
-  getAllocatedObjects(IDType idObject);
+  const MemoryObject *getAllocatedObject(ref<Expr> address);
   /*
    * Returns the size used by deterministic allocation in bytes
    */
