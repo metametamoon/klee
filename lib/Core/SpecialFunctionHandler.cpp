@@ -132,6 +132,7 @@ static SpecialFunctionHandler::HandlerInfo handlerInfo[] = {
     add("klee_check_taint_source", handleCheckTaintSource, true),
     add("klee_check_taint_sink", handleCheckTaintSink, true),
     add("klee_taint_sink_hit", handleTaintSinkHit, false),
+
 #ifdef SUPPORT_KLEE_EH_CXX
     add("_klee_eh_Unwind_RaiseException_impl", handleEhUnwindRaiseExceptionImpl,
         false),
@@ -1206,8 +1207,6 @@ void SpecialFunctionHandler::handleFAbs(ExecutionState &state,
   executor.bindLocal(target, state, result);
 }
 
-// TODO: update definitions after adding taint memory
-
 void SpecialFunctionHandler::handleAddTaint(klee::ExecutionState &state,
                                             klee::KInstruction *target,
                                             std::vector<ref<Expr>> &arguments) {
@@ -1217,8 +1216,6 @@ void SpecialFunctionHandler::handleAddTaint(klee::ExecutionState &state,
                                        "klee_add_taint(void*, size_t)");
     return;
   }
-
-  //  executor.executeMemoryOperation(state, true)
 }
 
 void SpecialFunctionHandler::handleClearTaint(
@@ -1230,8 +1227,6 @@ void SpecialFunctionHandler::handleClearTaint(
                                        "klee_clear_taint(void*, size_t)");
     return;
   }
-
-  //  executor.executeMemoryOperation(state, true)
 }
 
 void SpecialFunctionHandler::handleCheckTaintSource(
@@ -1243,9 +1238,6 @@ void SpecialFunctionHandler::handleCheckTaintSource(
                "klee_check_taint_source(void*, size_t)");
     return;
   }
-
-  //  ref<Expr> result = ConstantExpr::create(true, Expr::Bool);
-  //  executor.bindLocal(target, state, result);
 }
 
 void SpecialFunctionHandler::handleCheckTaintSink(
@@ -1271,6 +1263,12 @@ void SpecialFunctionHandler::handleTaintSinkHit(
     return;
   }
 
-  //  executor.terminateStateOnError(state, "FormatString",
-  //  StateTerminationType::User);
+  char *end = nullptr;
+  size_t sink = strtoul(arguments[0]->toString().c_str(), &end, 10);
+  if (*end != '\0' || errno == ERANGE) {
+    executor.terminateStateOnUserError(
+        state, "Incorrect argument 0 to klee_taint_sink_hit(size_t)");
+  }
+
+  executor.terminateStateOnTaintError(state, sink);
 }
