@@ -28,6 +28,7 @@
 #include "klee/Expr/Constraints.h"
 #include "klee/Expr/SourceBuilder.h"
 #include "klee/Expr/SymbolicSource.h"
+#include "klee/Module/AnnotationsData.h"
 #include "klee/Module/Cell.h"
 #include "klee/Module/KInstruction.h"
 #include "klee/Module/KModule.h"
@@ -126,6 +127,8 @@ public:
   RNG theRNG;
 
 private:
+  AnnotationsData annotationsData;
+
   int *errno_addr;
 
   size_t maxNewWriteableOSSize = 0;
@@ -640,6 +643,8 @@ private:
   /// Save extra information in targeted mode
   /// Then just call `terminateStateOnError`
   void terminateStateOnTargetError(ExecutionState &state, ReachWithError error);
+
+  void terminateStateOnTaintError(ExecutionState &state, size_t sink);
 
   /// Call error handler and terminate state in case of program errors
   /// (e.g. free()ing globals, out-of-bound accesses)
