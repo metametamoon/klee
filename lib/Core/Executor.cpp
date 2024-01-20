@@ -505,7 +505,9 @@ const std::unordered_set<Intrinsic::ID> Executor::modelledFPIntrinsics = {
 
 Executor::Executor(LLVMContext &ctx, const InterpreterOptions &opts,
                    InterpreterHandler *ih)
-    : Interpreter(opts), interpreterHandler(ih), searcher(nullptr),
+    : Interpreter(opts),
+      annotationsData(opts.AnnotationsFile, opts.TaintAnnotationsFile),
+      interpreterHandler(ih), searcher(nullptr),
       externalDispatcher(new ExternalDispatcher(ctx)), statsTracker(0),
       pathWriter(0), symPathWriter(0),
       specialFunctionHandler(0), timers{time::Span(TimerInterval)},
@@ -636,7 +638,8 @@ llvm::Module *Executor::setModule(
       !opts.AnnotationsFile.empty()) {
     MockBuilder mockBuilder(kmodule->module.get(), opts, interpreterOpts,
                             ignoredExternals, redefinitions, interpreterHandler,
-                            mainModuleFunctions, mainModuleGlobals);
+                            mainModuleFunctions, mainModuleGlobals,
+                            annotationsData);
     std::unique_ptr<llvm::Module> mockModule = mockBuilder.build();
 
     std::vector<std::unique_ptr<llvm::Module>> mockModules;
@@ -5020,6 +5023,22 @@ void Executor::terminateStateOnTargetError(ExecutionState &state,
   }
   terminateStateOnProgramError(
       state, new ErrorEvent(locationOf(state), terminationType, messaget));
+}
+
+// TODO: add taint target errors to taint-annotations.json and change function
+void Executor::terminateStateOnTaintError(ExecutionState &state, size_t sink) {
+  //  reportStateOnTargetError(state, error);
+
+  const auto &sinks = annotationsData.taintAnnotation.sinks;
+  auto taintSink = std::find_if(sinks.begin(), sinks.end(),
+                                [&](const std::pair<std::string, size_t> &i) {
+                                  return i.second == sink;
+                                });
+  if (taintSink == std::end(sinks)) {
+    klee_error("Unknown sink index");
+  }
+  terminateStateOnProgramError(state, taintSink->first + " taint error",
+                               StateTerminationType::Taint);
 }
 
 void Executor::terminateStateOnError(ExecutionState &state,
