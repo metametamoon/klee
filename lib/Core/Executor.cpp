@@ -39,6 +39,7 @@
 #include "klee/Config/Version.h"
 #include "klee/Config/config.h"
 #include "klee/Core/Interpreter.h"
+#include "klee/Core/TerminationTypes.h"
 #include "klee/Expr/ArrayExprOptimizer.h"
 #include "klee/Expr/ArrayExprVisitor.h"
 #include "klee/Expr/Assignment.h"
@@ -1218,8 +1219,10 @@ void Executor::branch(ExecutionState &state,
   }
 
   for (unsigned i = 0; i < N; ++i)
-    if (result[i])
+    if (result[i]) {
+      result[i]->afterFork = true;
       addConstraint(*result[i], conditions[i]);
+    }
 }
 
 ref<Expr> Executor::maxStaticPctChecks(ExecutionState &current,
@@ -1539,6 +1542,8 @@ Executor::StatePair Executor::fork(ExecutionState &current, ref<Expr> condition,
       }
     }
 
+    trueState->afterFork = true;
+    falseState->afterFork = true;
     addConstraint(*trueState, condition);
     addConstraint(*falseState, Expr::createIsZero(condition));
 
@@ -1800,6 +1805,7 @@ void Executor::stepInstruction(ExecutionState &state) {
   state.prevPC = state.pc;
   state.constraints.advancePath(state.pc);
   ++state.pc;
+  state.afterFork = false;
 
   if (stats::instructions == MaxInstructions)
     haltExecution = HaltExecution::MaxInstructions;
@@ -4658,12 +4664,20 @@ void Executor::executeStep(ExecutionState &state) {
     targetManager->pullGlobal(state);
   }
 
-  if (targetManager && targetManager->isTargeted(state) &&
-      state.targets().empty()) {
+  if (targetCalculator && TrackCoverage != TrackCoverageBy::None &&
+      state.multiplexKF && functionsByModule.modules.size() > 1 &&
+      targetCalculator->isCovered(state.multiplexKF)) {
+    terminateStateEarly(state, "Multiplex function has been covered.",
+                        StateTerminationType::CoveredEntryPoint);
+  } else if (targetManager && targetManager->isTargeted(state) &&
+             state.targets().empty()) {
     terminateStateEarlyAlgorithm(state, "State missed all it's targets.",
                                  StateTerminationType::MissedAllTargets);
   } else if (state.isCycled(MaxCycles)) {
     terminateStateEarly(state, "max-cycles exceeded.",
+                        StateTerminationType::MaxCycles);
+  } else if (state.isSymbolicCycled(MaxSymbolicCycles)) {
+    terminateStateEarly(state, "max-sym-cycles exceeded.",
                         StateTerminationType::MaxCycles);
   } else {
     maxNewWriteableOSSize = 0;
