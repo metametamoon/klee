@@ -6389,13 +6389,13 @@ void Executor::executeMemoryOperation(
   address = optimizer.optimizeExpr(address, true);
   base = optimizer.optimizeExpr(base, true);
 
-  ref<Expr> uniqueBase = toUnique(estate, base);
+  // ref<Expr> uniqueBase = toUnique(estate, base);
 
   StatePair branches =
       forkInternal(estate, Expr::createIsZero(base), BranchType::MemOp);
   ExecutionState *bound = branches.first;
   if (bound) {
-    auto error = isReadFromSymbolicArray(uniqueBase)
+    auto error = (isReadFromSymbolicArray(base) && branches.second)
                      ? ReachWithError::MayBeNullPointerException
                      : ReachWithError::MustBeNullPointerException;
     terminateStateOnTargetError(*bound, error);
@@ -6748,33 +6748,33 @@ Executor::lazyInitializeObject(ExecutionState &state, ref<Expr> address,
   }
 
   ref<Expr> sizeExpr;
-  // if (!isa<ConstantExpr>(size) &&
-  //     (!MaxSymbolicAllocationSize ||
-  //      concreteSize < MaxSymbolicAllocationSize) &&
-  //     isSymbolic) {
-  sizeExpr = size;
-  ref<Expr> lowerBound =
-      UgeExpr::create(sizeExpr, Expr::createPointer(concreteSize));
-  ref<Expr> upperBound = Expr::createTrue();
-  if (MaxSymbolicAllocationSize) {
-    upperBound = UleExpr::create(
-        sizeExpr, Expr::createPointer(MaxSymbolicAllocationSize));
-  }
-  bool mayBeInBounds;
-  solver->setTimeout(coreSolverTimeout);
-  bool success = solver->mayBeTrue(state.constraints.cs(),
-                                   AndExpr::create(lowerBound, upperBound),
-                                   mayBeInBounds, state.queryMetaData);
-  solver->setTimeout(time::Span());
-  if (!success) {
-    return nullptr;
-  }
-  assert(mayBeInBounds);
+  if (!isa<ConstantExpr>(size) &&
+      (!MaxSymbolicAllocationSize ||
+       concreteSize < MaxSymbolicAllocationSize) &&
+      isSymbolic) {
+    sizeExpr = size;
+    ref<Expr> lowerBound =
+        UgeExpr::create(sizeExpr, Expr::createPointer(concreteSize));
+    ref<Expr> upperBound = Expr::createTrue();
+    if (MaxSymbolicAllocationSize) {
+      upperBound = UleExpr::create(
+          sizeExpr, Expr::createPointer(MaxSymbolicAllocationSize));
+    }
+    bool mayBeInBounds;
+    solver->setTimeout(coreSolverTimeout);
+    bool success = solver->mayBeTrue(state.constraints.cs(),
+                                     AndExpr::create(lowerBound, upperBound),
+                                     mayBeInBounds, state.queryMetaData);
+    solver->setTimeout(time::Span());
+    if (!success) {
+      return nullptr;
+    }
+    assert(mayBeInBounds);
 
-  addConstraint(state, AndExpr::create(lowerBound, upperBound));
-  // } else {
-  //   sizeExpr = Expr::createPointer(concreteSize);
-  // }
+    addConstraint(state, AndExpr::create(lowerBound, upperBound));
+  } else {
+    sizeExpr = Expr::createPointer(concreteSize);
+  }
 
   MemoryObject *mo = allocate(state, sizeExpr, isLocal,
                               /*isGlobal=*/false, nullptr,
