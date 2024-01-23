@@ -90,8 +90,8 @@ fi
       echo "Z3"
       KLEE_Z3_CONFIGURE_OPTION=(
         "-DENABLE_SOLVER_Z3=TRUE"
-        "-DZ3_INCLUDE_DIRS=${Z3_INSTALL_PATH}/include"
-        "-DZ3_LIBRARIES=${Z3_INSTALL_PATH}/lib/libz3.so"
+        "-DZ3_INCLUDE_DIRS=${BASE}/z3-4.12.4-install/include"
+        "-DZ3_LIBRARIES=/opt/homebrew/opt/z3/lib/libz3.dylib"
       )
       KLEE_FLOATING_POINT=(
         "-DENABLE_FLOATING_POINT=TRUE"

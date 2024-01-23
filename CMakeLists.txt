@@ -724,9 +724,11 @@ if (ENABLE_UNIT_TESTS OR ENABLE_SYSTEM_TESTS)
   find_program(
     LIT_TOOL
     NAMES ${LIT_TOOL_NAMES}
-    HINTS "${LLVM_TOOLS_BINARY_DIR}"
+    HINTS "/opt/homebrew/bin/"
     DOC "Path to lit tool"
   )
+
+  set(LIT_TOOL "/opt/homebrew/bin/lit")
 
   set(LIT_ARGS
     "-v;-s"
