@@ -2,7 +2,6 @@ install_build_dependencies_bitwuzla() {
   dependencies=(
     ninja
     python3
-    python3-pip
     cmake
     git
     pkg-config
