@@ -4837,7 +4837,7 @@ Executor::getMockInfo(ExecutionState &state, KCallable *f,
     if (!isExternal && MockInternalCalls == MockInternalCallsPolicy::Module) {
       if (state.multiplexKF && !f->getName().startswith("klee")) {
         result.doMock = true;
-        for (const auto &mod : functionsByModule.modules) {
+        for (const auto &mod : functionsByModule.setModules) {
           if (mod.count(state.multiplexKF->function()) &&
               mod.count(kf->function())) {
             result.doMock = false;

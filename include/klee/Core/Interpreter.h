@@ -96,7 +96,8 @@ public:
   };
 
   struct FunctionsByModule {
-    std::vector<std::unordered_set<llvm::Function *>> modules;
+    std::vector<std::vector<llvm::Function *>> modules;
+    std::vector<std::unordered_set<llvm::Function *>> setModules;
     std::unordered_map<llvm::Function *, unsigned> usesInModule;
   };
 
