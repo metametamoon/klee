@@ -393,14 +393,17 @@ bool klee::loadFileAsOneModule2(
     res = linkModules(modules.back().get(), modules2, 0, errorMsg);
     auto mainMod = modules.front().get();
     for (const auto &mod : namesByModule) {
-      std::unordered_set<llvm::Function *> fns;
+      std::unordered_set<llvm::Function *> setFns;
+      std::vector<llvm::Function *> fns;
       for (const auto &name : mod) {
         auto fn = mainMod->getFunction(name.first);
         if (fn) {
-          fns.insert(fn);
+          setFns.insert(fn);
+          fns.push_back(fn);
           functionsByModule.usesInModule[fn] = name.second;
         }
       }
+      functionsByModule.setModules.push_back(std::move(setFns));
       functionsByModule.modules.push_back(std::move(fns));
     }
   }
