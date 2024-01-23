@@ -23,7 +23,7 @@ task:
       - image: ghcr.io/cirruslabs/macos-sonoma-xcode:latest
   environment:
       BASE: /tmp
-      SOLVERS: STP
+      SOLVERS: STP:BITWUZLA
       UCLIBC_VERSION: 0
       USE_TCMALLOC: 0
       USE_LIBCXX: 0
