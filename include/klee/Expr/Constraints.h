@@ -10,6 +10,7 @@
 #ifndef KLEE_CONSTRAINTS_H
 #define KLEE_CONSTRAINTS_H
 
+#include "klee/ADT/ImmutableDAG.h"
 #include "klee/ADT/Ref.h"
 
 #include "klee/ADT/PersistentMap.h"
@@ -114,12 +115,12 @@ public:
 };
 
 class PathConstraints {
+  friend class ExecutionState;
 public:
-  using ordered_constraints_ty =
-      PersistentMap<Path::PathIndex, constraints_ty, Path::PathIndexCompare>;
+  // using ordered_constraints_ty =
+  //     PersistentMap<Path::PathIndex, constraints_ty, Path::PathIndexCompare>;
 
   void advancePath(KInstruction *ki);
-  void advancePath(const Path &path);
 
   ExprHashSet addConstraint(ref<Expr> e, Path::PathIndex currIndex);
   ExprHashSet addConstraint(ref<Expr> e);
@@ -131,18 +132,18 @@ public:
   const ExprHashMap<ExprHashSet> &simplificationMap() const;
   const ConstraintSet &cs() const;
   const Path &path() const;
-  const ExprHashMap<Path::PathIndex> &indexes() const;
-  const ordered_constraints_ty &orderedCS() const;
+  // const ExprHashMap<Path::PathIndex> &indexes() const;
+  // const ordered_constraints_ty &orderedCS() const;
 
   static PathConstraints concat(const PathConstraints &l,
                                 const PathConstraints &r);
 
 private:
-  Path _path;
+  ImmutableDAG _path;
   constraints_ty _original;
   ConstraintSet constraints;
-  ExprHashMap<Path::PathIndex> pathIndexes;
-  ordered_constraints_ty orderedConstraints;
+  // ExprHashMap<Path::PathIndex> pathIndexes;
+  // ordered_constraints_ty orderedConstraints;
   ExprHashMap<ExprHashSet> _simplificationMap;
 };
 

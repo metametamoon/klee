@@ -768,6 +768,12 @@ void StatsTracker::writeIStats() {
   istatsMask.set(sm.getStatisticID("InstructionTimes"));
   istatsMask.set(sm.getStatisticID("InstructionRealTimes"));
   istatsMask.set(sm.getStatisticID("Forks"));
+  istatsMask.set(sm.getStatisticID("Merges"));
+  istatsMask.set(sm.getStatisticID("FailedMerges"));
+  istatsMask.set(sm.getStatisticID("OpenMerges"));
+  istatsMask.set(sm.getStatisticID("CloseMerges"));
+  istatsMask.set(sm.getStatisticID("StatesWithMerge"));
+  istatsMask.set(sm.getStatisticID("ReachedMerge"));
   istatsMask.set(sm.getStatisticID("CoveredInstructions"));
   istatsMask.set(sm.getStatisticID("UncoveredInstructions"));
   istatsMask.set(sm.getStatisticID("States"));

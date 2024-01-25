@@ -35,6 +35,13 @@ extern Statistic externalCalls;
 /// The number of process forks.
 extern Statistic forks;
 
+extern Statistic merges;
+extern Statistic failedMerges;
+extern Statistic openMerges;
+extern Statistic closeMerges;
+extern Statistic statesWithMerge;
+extern Statistic reachedMerge;
+
 /// Number of inhibited forks.
 extern Statistic inhibitedForks;
 

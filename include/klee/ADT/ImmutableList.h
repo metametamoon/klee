@@ -116,6 +116,13 @@ public:
   ImmutableList() : node(){};
   ImmutableList(const ImmutableList<T> &il)
       : node(std::make_shared<ImmutableListNode>(il)) {}
+
+  ImmutableList &operator=(const ImmutableList<T> &il) {
+    if (this != &il) {
+      node = std::make_shared<ImmutableListNode>(il);
+    }
+    return *this;
+  }
 };
 
 } // namespace klee

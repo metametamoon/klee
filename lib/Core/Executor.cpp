@@ -411,6 +411,9 @@ cl::opt<bool> MockSymbolicIndirectCalls("mock-symbolic-indirect-calls",
                                         cl::init(false), cl::desc(""),
                                         cl::cat(ExecCat));
 
+cl::opt<bool> UseMerge("use-merge", cl::init(false), cl::desc(""),
+                       cl::cat(ExecCat));
+
 /*** Seeding options ***/
 
 cl::opt<bool> AlwaysOutputSeeds(
@@ -2764,6 +2767,33 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       KFunction *kf = state.stack.callStack().back().kf;
       auto ifTrueBlock = kf->blockMap[bi->getSuccessor(0)];
       auto ifFalseBlock = kf->blockMap[bi->getSuccessor(1)];
+
+      if (UseMerge && state.multiplexKF) {
+        KBlock *target = nullptr;
+        unsigned int maxDist = -1;
+
+        for (const auto &block : codeGraphInfo->getDistance(ifTrueBlock)) {
+          auto backDist = codeGraphInfo->getBackwardDistance(block.first);
+
+          if (backDist.count(ifFalseBlock)) {
+            auto dist = std::max(block.second, backDist[ifFalseBlock]);
+            if ((!target || dist < maxDist)) {
+              target = block.first;
+              maxDist = dist;
+            }
+          }
+        }
+
+        if (target) {
+          stats::openMerges += 1;
+          stats::statesWithMerge += 1;
+          auto handler = std::make_shared<MergeHandler>();
+          handler->target = ReachBlockTarget::create(target, false);
+          handler->open = 1;
+          state.mergers.push_back(handler);
+        }
+      }
+
       Executor::StatePair branches =
           fork(state, cond, ifTrueBlock, ifFalseBlock, BranchType::Conditional);
 
@@ -2995,6 +3025,45 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
           if (ret.second) {
             bbOrder.push_back(defaultDest);
           }
+        }
+      }
+
+      if (UseMerge && state.multiplexKF) {
+        std::vector<KBlock *> KBOrder;
+        for (const auto &block : bbOrder) {
+          KBOrder.push_back(kmodule->getKBlock(block));
+        }
+
+        KBlock *target = nullptr;
+        unsigned int maxDist = -1;
+
+        for (const auto &block : codeGraphInfo->getDistance(KBOrder.front())) {
+          unsigned int localDist = block.second;
+          bool allReachable = true;
+          auto backDist = codeGraphInfo->getBackwardDistance(block.first);
+          for (const auto &b : KBOrder) {
+            if (!backDist.count(b)) {
+              allReachable = false;
+              break;
+            } else {
+              localDist = std::max(localDist, backDist[b]);
+            }
+          }
+          if (allReachable) {
+            if (!target || localDist < maxDist) {
+              target = block.first;
+              maxDist = localDist;
+            }
+          }
+        }
+
+        if (target) {
+          stats::openMerges += 1;
+          stats::statesWithMerge += 1;
+          auto handler = std::make_shared<MergeHandler>();
+          handler->target = ReachBlockTarget::create(target, false);
+          handler->open = 1;
+          state.mergers.push_back(handler);
         }
       }
 
@@ -4206,9 +4275,83 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
 }
 
 void Executor::updateStates(ExecutionState *current) {
+
+  std::vector<ExecutionState *> paused;
+  std::vector<ExecutionState *> resumed;
+  std::vector<ExecutionState *> deleted;
+  std::unordered_set<std::shared_ptr<MergeHandler>> toMerge;
+
+  if (UseMerge) {
+    if (current && (std::find(removedStates.begin(), removedStates.end(),
+                              current) == removedStates.end())) {
+      if (!current->mergers.empty()) {
+        auto mergeHandler = current->mergers.back();
+        WeightResult targetResult;
+        targetManager->isReachedTarget(*current, mergeHandler->target, targetResult);
+        switch (targetResult) {
+        case WeightResult::Done: {
+          stats::reachedMerge += 1;
+          mergeStates[mergeHandler].push_back(current);
+          allPaused.insert(current);
+          paused.push_back(current);
+          mergeHandler->reached++;
+          if (mergeHandler->reached == mergeHandler->open) {
+            toMerge.insert(mergeHandler);
+          }
+          break;
+        }
+        case WeightResult::Miss: {
+          mergeHandler->open--;
+          current->mergers.pop_back();
+          if (mergeHandler->reached == mergeHandler->open) {
+            toMerge.insert(mergeHandler);
+          }
+          break;
+        }
+        default: {
+          break;
+        }
+        }
+      }
+    }
+
+    for (auto &state : addedStates) {
+      if (!state->mergers.empty()) {
+        auto mergeHandler = state->mergers.back();
+        WeightResult targetResult;
+        targetManager->isReachedTarget(*state, mergeHandler->target, targetResult);
+        switch (targetResult) {
+        case WeightResult::Done: {
+          stats::reachedMerge += 1;
+          mergeStates[mergeHandler].push_back(state);
+          allPaused.insert(state);
+          paused.push_back(state);
+          mergeHandler->reached++;
+          if (mergeHandler->reached == mergeHandler->open) {
+            toMerge.insert(mergeHandler);
+          }
+          break;
+        }
+        case WeightResult::Miss: {
+          mergeHandler->open--;
+          state->mergers.pop_back();
+          if (mergeHandler->reached == mergeHandler->open) {
+            toMerge.insert(mergeHandler);
+          }
+          break;
+        }
+        default: {
+          break;
+        }
+        }
+      }
+    }
+  }
+
   if (targetManager) {
     targetManager->update(current, addedStates, removedStates);
   }
+
   if (guidanceKind == GuidanceKind::ErrorGuidance && targetedExecutionManager) {
     targetedExecutionManager->update(current, addedStates, removedStates);
   }
@@ -4224,6 +4367,8 @@ void Executor::updateStates(ExecutionState *current) {
   states.insert(addedStates.begin(), addedStates.end());
   addedStates.clear();
 
+  std::unordered_set<ExecutionState *> removedMerge;
+
   for (std::vector<ExecutionState *>::iterator it = removedStates.begin(),
                                                ie = removedStates.end();
        it != ie; ++it) {
@@ -4236,9 +4381,101 @@ void Executor::updateStates(ExecutionState *current) {
     if (it3 != seedMap.end())
       seedMap.erase(it3);
     processForest->remove(es->ptreeNode);
+    if (!es->mergers.empty()) {
+      auto mergeHandler = es->mergers.back();
+      removedMerge.insert(es);
+      mergeHandler->open--;
+      if (mergeHandler->open == mergeHandler->reached) {
+        toMerge.insert(mergeHandler);
+      }
+    }
     delete es;
   }
+
+  if (UseMerge) {
+    for (auto mergeHandler : toMerge) {
+      stats::closeMerges += 1;
+      std::vector<ExecutionState *> states;
+      for (const auto &state : mergeStates[mergeHandler]) {
+        if (!removedMerge.count(state)) {
+          states.push_back(state);
+        }
+      }
+      if (states.size() > 0) {
+        auto base = states.front();
+        allPaused.erase(base);
+        for (size_t i = 1; i < states.size(); ++i) {
+          bool success = base->merge(*states[i]);
+          if (success) {
+            stats::merges += 1;
+            deleted.push_back(states[i]);
+          } else {
+            stats::failedMerges += 1;
+            states[i]->mergers.pop_back();
+            resumed.push_back(states[i]);
+          }
+          allPaused.erase(states[i]);
+        }
+        resumed.push_back(base);
+        base->mergers.pop_back();
+      }
+      mergeStates.erase(mergeHandler);
+    }
+  }
+
   removedStates.clear();
+
+  if (targetManager) {
+    targetManager->update(nullptr, {}, paused);
+  }
+
+  if (guidanceKind == GuidanceKind::ErrorGuidance && targetedExecutionManager) {
+    targetedExecutionManager->update(nullptr, {}, paused);
+  }
+
+  if (targetCalculator) {
+    targetCalculator->update(nullptr, {}, paused);
+  }
+
+  if (searcher) {
+    searcher->update(nullptr, {}, paused);
+  }
+
+  if (!resumed.empty()) {
+
+    if (targetManager) {
+      targetManager->update(nullptr, resumed, {});
+    }
+
+    if (guidanceKind == GuidanceKind::ErrorGuidance && targetedExecutionManager) {
+      targetedExecutionManager->update(nullptr, resumed, {});
+    }
+
+    if (targetCalculator) {
+      targetCalculator->update(nullptr, resumed, {});
+    }
+
+    if (searcher) {
+      searcher->update(nullptr, resumed, {});
+    }
+
+  }
+
+  for (std::vector<ExecutionState *>::iterator it = deleted.begin(),
+                                                   ie = deleted.end();
+       it != ie; ++it) {
+    ExecutionState *es = *it;
+    std::set<ExecutionState *>::iterator it2 = states.find(es);
+    assert(it2 != states.end());
+    states.erase(it2);
+    std::map<ExecutionState *, std::vector<SeedInfo>>::iterator it3 =
+        seedMap.find(es);
+    if (it3 != seedMap.end())
+      seedMap.erase(it3);
+    processForest->remove(es->ptreeNode);
+    delete es;
+  }
+
 }
 
 template <typename TypeIt>
@@ -4401,6 +4638,12 @@ void Executor::doDumpStates() {
       haltExecution != HaltExecution::Reason::ReachedTarget) {
     haltExecution = HaltExecution::UnreachedTarget;
   }
+
+  std::vector<ExecutionState *> newStates(allPaused.begin(), allPaused.end());
+  targetManager->update(0, newStates, std::vector<ExecutionState *>());
+  targetedExecutionManager->update(0, newStates,
+                                   std::vector<ExecutionState *>());
+  searcher->update(0, newStates, std::vector<ExecutionState *>());
 
   klee_message("halting execution, dumping remaining states");
   for (const auto &state : pausedStates)
@@ -6041,7 +6284,8 @@ bool Executor::resolveMemoryObjects(
         return false;
       } else if (mayLazyInitialize) {
         uint64_t minObjectSize = 0;
-        minObjectSize = MinNumberElementsLazyInit * MinElementSizeLazyInit;
+        minObjectSize = MinNumberElementsLazyInit * size;
+        // minObjectSize = MinNumberElementsLazyInit * MinElementSizeLazyInit;
 
         if (base) {
           base = Simplificator::simplifyExpr(state.constraints.cs(), base)

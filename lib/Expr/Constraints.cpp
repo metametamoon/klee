@@ -321,11 +321,11 @@ ConstraintSet::independentElements() const {
   return *_independentElements;
 }
 
-const Path &PathConstraints::path() const { return _path; }
+const Path &PathConstraints::path() const { return _path.getValue(); }
 
-const ExprHashMap<Path::PathIndex> &PathConstraints::indexes() const {
-  return pathIndexes;
-}
+// const ExprHashMap<Path::PathIndex> &PathConstraints::indexes() const {
+//   return pathIndexes;
+// }
 
 const Assignment &ConstraintSet::concretization() const {
   return *_concretization;
@@ -339,12 +339,12 @@ const ExprHashMap<ExprHashSet> &PathConstraints::simplificationMap() const {
 
 const ConstraintSet &PathConstraints::cs() const { return constraints; }
 
-const PathConstraints::ordered_constraints_ty &
-PathConstraints::orderedCS() const {
-  return orderedConstraints;
-}
+// const PathConstraints::ordered_constraints_ty &
+// PathConstraints::orderedCS() const {
+//   return orderedConstraints;
+// }
 
-void PathConstraints::advancePath(KInstruction *ki) { _path.advance(ki); }
+void PathConstraints::advancePath(KInstruction *ki) { _path.getValue().advance(ki); }
 
 ExprHashSet PathConstraints::addConstraint(ref<Expr> e,
                                            Path::PathIndex currIndex) {
@@ -362,11 +362,11 @@ ExprHashSet PathConstraints::addConstraint(ref<Expr> e,
     } else {
       _original.insert(expr);
       added.insert(expr);
-      pathIndexes.insert({expr, currIndex});
+      // pathIndexes.insert({expr, currIndex});
       _simplificationMap[expr].insert(expr);
-      auto indexConstraints = orderedConstraints[currIndex].second;
-      indexConstraints.insert(expr);
-      orderedConstraints.replace({currIndex, indexConstraints});
+      // auto indexConstraints = orderedConstraints[currIndex].second;
+      // indexConstraints.insert(expr);
+      // orderedConstraints.replace({currIndex, indexConstraints});
       constraints.addConstraint(expr);
     }
   }
@@ -386,7 +386,7 @@ ExprHashSet PathConstraints::addConstraint(ref<Expr> e,
 }
 
 ExprHashSet PathConstraints::addConstraint(ref<Expr> e) {
-  return addConstraint(e, _path.getCurrentIndex());
+  return addConstraint(e, _path.getValue().getCurrentIndex());
 }
 
 bool PathConstraints::isSymcretized(ref<Expr> expr) const {

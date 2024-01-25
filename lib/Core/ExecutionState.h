@@ -113,6 +113,13 @@ struct InfoStackFrame {
   ~InfoStackFrame() = default;
 };
 
+struct MergeHandler {
+public:
+  size_t open;
+  size_t reached;
+  ref<Target> target;
+};
+
 struct ExecutionStack {
 public:
   using value_stack_ty = std::vector<StackFrame>;
@@ -393,6 +400,8 @@ public:
   // Temp: to know which multiplex path this state has taken
   KFunction *multiplexKF = nullptr;
 
+  std::vector<std::shared_ptr<MergeHandler>> mergers;
+
 private:
   PersistentSet<ref<Target>> prevTargets_;
   PersistentSet<ref<Target>> targets_;
@@ -444,6 +453,8 @@ public:
 
   void addConstraint(ref<Expr> e);
   void addCexPreference(const ref<Expr> &cond);
+
+  bool merge(const ExecutionState &b);
 
   Query toQuery(ref<Expr> head) const;
   Query toQuery() const;

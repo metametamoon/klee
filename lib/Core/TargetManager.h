@@ -73,9 +73,6 @@ private:
 
   void collect(ExecutionState &state);
 
-  bool isReachedTarget(const ExecutionState &state, ref<Target> target,
-                       WeightResult &result);
-
 public:
   TargetManager(Interpreter::GuidanceKind _guidance,
                 DistanceCalculator &_distanceCalculator,
@@ -134,6 +131,9 @@ public:
   bool isTargeted(const ExecutionState &state) { return state.isTargeted(); }
 
   bool isReachedTarget(const ExecutionState &state, ref<Target> target);
+
+  bool isReachedTarget(const ExecutionState &state, ref<Target> target,
+                       WeightResult &result);
 
   void setReached(ref<Target> target) { reachedTargets.insert(target); }
 

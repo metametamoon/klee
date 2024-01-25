@@ -160,6 +160,12 @@ private:
   std::unique_ptr<TargetCalculator> targetCalculator;
   std::unique_ptr<TargetManager> targetManager;
 
+  std::unordered_map<std::shared_ptr<MergeHandler>,
+                     std::vector<ExecutionState *>>
+      mergeStates;
+
+  std::unordered_set<ExecutionState *> allPaused;
+
   /// Used to track states that have been added during the current
   /// instructions step.
   /// \invariant \ref addedStates is a subset of \ref states.

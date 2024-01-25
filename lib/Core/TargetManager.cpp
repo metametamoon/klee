@@ -275,8 +275,9 @@ bool TargetManager::isReachedTarget(const ExecutionState &state,
 
 bool TargetManager::isReachedTarget(const ExecutionState &state,
                                     ref<Target> target, WeightResult &result) {
+  result = Continue;
   if (state.constraints.path().KBlockSize() == 0) {
-    return false;
+    return true;
   }
 
   if (isa<ReachBlockTarget>(target)) {

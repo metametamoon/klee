@@ -9,6 +9,7 @@
 
 #include "ExecutionState.h"
 
+#include "CoreStats.h"
 #include "Memory.h"
 
 #include "klee/Expr/ArrayExprVisitor.h"
@@ -176,10 +177,14 @@ ExecutionState::ExecutionState(const ExecutionState &state)
       coveredNew(state.coveredNew), coveredNewError(state.coveredNewError),
       forkDisabled(state.forkDisabled), returnValue(state.returnValue),
       gepExprBases(state.gepExprBases), multiplexKF(state.multiplexKF),
-      prevTargets_(state.prevTargets_), targets_(state.targets_),
-      prevHistory_(state.prevHistory_), history_(state.history_),
-      isTargeted_(state.isTargeted_) {
+      mergers(state.mergers), prevTargets_(state.prevTargets_),
+      targets_(state.targets_), prevHistory_(state.prevHistory_),
+      history_(state.history_), isTargeted_(state.isTargeted_) {
   queryMetaData.id = state.id;
+  if (!state.mergers.empty()) {
+    stats::statesWithMerge += 1;
+    state.mergers.back()->open++;
+  }
 }
 
 ExecutionState *ExecutionState::branch() {
@@ -426,6 +431,123 @@ void ExecutionState::addConstraint(ref<Expr> e) {
 
 void ExecutionState::addCexPreference(const ref<Expr> &cond) {
   cexPreferences = cexPreferences.insert(cond);
+}
+
+bool ExecutionState::merge(const ExecutionState &b) {
+  if (pc != b.pc) {
+    return false;
+  }
+
+  if (stack.callStack() != b.stack.callStack()) {
+    return false;
+  }
+
+  std::set<const MemoryObject *> mutated;
+  auto ai = addressSpace.objects.begin();
+  auto bi = b.addressSpace.objects.begin();
+  auto ae = addressSpace.objects.end();
+  auto be = b.addressSpace.objects.end();
+
+  for (; ai != ae && bi != be; ++ai, ++bi) {
+    if (ai->first != bi->first) {
+      return false;
+    }
+    if (ai->second.get() != bi->second.get()) {
+      mutated.insert(ai->first);
+    }
+  }
+
+  if (ai != ae || bi != be) {
+    return false;
+  }
+
+  std::set<ref<Expr>> aConstraints(constraints.original().begin(),
+                                   constraints.original().end());
+
+  std::set<ref<Expr>> bConstraints(b.constraints.original().begin(),
+                                   b.constraints.original().end());
+
+  std::set<ref<Expr>> commonConstraints, aSuffix, bSuffix;
+
+  std::set_intersection(
+      aConstraints.begin(), aConstraints.end(), bConstraints.begin(),
+      bConstraints.end(),
+      std::inserter(commonConstraints, commonConstraints.begin()));
+
+  std::set_difference(aConstraints.begin(), aConstraints.end(),
+                      commonConstraints.begin(), commonConstraints.end(),
+                      std::inserter(aSuffix, aSuffix.end()));
+
+  std::set_difference(bConstraints.begin(), bConstraints.end(),
+                      commonConstraints.begin(), commonConstraints.end(),
+                      std::inserter(bSuffix, bSuffix.end()));
+
+  ref<Expr> inA = ConstantExpr::alloc(1, Expr::Bool);
+  ref<Expr> inB = ConstantExpr::alloc(1, Expr::Bool);
+
+  for (auto it = aSuffix.begin(), ie = aSuffix.end(); it != ie; ++it) {
+    inA = AndExpr::create(inA, *it);
+  }
+
+  for (auto it = bSuffix.begin(), ie = bSuffix.end(); it != ie; ++it) {
+    inB = AndExpr::create(inB, *it);
+  }
+
+  auto itA = stack.valueStack().begin();
+  auto itB = b.stack.valueStack().begin();
+
+  for (; itA != stack.valueStack().end(); ++itA, ++itB) {
+    StackFrame &af = *itA;
+    const StackFrame &bf = *itB;
+    for (unsigned i = 0; i < af.kf->getNumRegisters(); i++) {
+      auto &av = af.locals[i].value;
+      const ref<Expr> &bv = bf.locals[i].value;
+      if (!av || !bv) {
+        // if one is null then by implication (we are at same pc)
+        // we cannot reuse this local, so just ignore
+      } else {
+        af.locals.set(i, Cell(SelectExpr::create(inA, av, bv)));
+      }
+    }
+  }
+
+  for (std::set<const MemoryObject *>::iterator it = mutated.begin(),
+                                                ie = mutated.end();
+       it != ie; ++it) {
+    const MemoryObject *mo = *it;
+    auto op = addressSpace.findObject(mo);
+    auto otherOp = b.addressSpace.findObject(mo);
+    assert(op.second && !op.second->readOnly &&
+           "objects mutated but not writable in merging state");
+    assert(otherOp.second);
+
+    ObjectState *wos = addressSpace.getWriteable(mo, op.second);
+    auto size = cast<ConstantExpr>(mo->sizeExpr)->getZExtValue();
+    for (unsigned i = 0; i < size; i++) {
+      ref<Expr> av = wos->read8(i);
+      ref<Expr> bv = otherOp.second->read8(i);
+      wos->write(i, SelectExpr::create(inA, av, bv));
+    }
+  }
+
+  PathConstraints mergedConstraints;
+  for (const auto &constraint : commonConstraints) {
+    mergedConstraints.addConstraint(constraint);
+  }
+
+  mergedConstraints.addConstraint(OrExpr::create(inA, inB));
+
+  for (const auto &symcrete : constraints.cs().symcretes()) {
+    mergedConstraints.addSymcrete(symcrete);
+  }
+
+  mergedConstraints.rewriteConcretization(constraints.cs().concretization());
+
+  mergedConstraints._path = ImmutableDAG({constraints._path, b.constraints._path});
+
+  constraints = mergedConstraints;
+
+  return true;
 }
 
 BasicBlock *ExecutionState::getInitPCBlock() const {
