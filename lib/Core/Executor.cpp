@@ -6184,6 +6184,8 @@ bool Executor::checkResolvedMemoryObjects(
       if (base != address || size != bytes) {
         baseInBounds = AndExpr::create(baseInBounds,
                                        mo->getBoundsCheckPointer(base, size));
+        baseInBounds = AndExpr::create(
+            baseInBounds, Expr::createIsZero(mo->getOffsetExpr(base)));
       }
 
       if (hasLazyInitialized && i == mayBeResolvedMemoryObjects.size() - 1) {
@@ -6447,6 +6449,8 @@ void Executor::executeMemoryOperation(
     if (base != address || size != bytes) {
       baseInBounds =
           AndExpr::create(baseInBounds, mo->getBoundsCheckPointer(base, size));
+      baseInBounds = AndExpr::create(
+          baseInBounds, Expr::createIsZero(mo->getOffsetExpr(base)));
     }
 
     inBounds = AndExpr::create(inBounds, baseInBounds);
