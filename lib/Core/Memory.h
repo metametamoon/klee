@@ -186,6 +186,57 @@ public:
   bool equals(const MemoryObject &b) const { return compare(b) == 0; }
 };
 
+
+class CachedUList {
+public:
+  CachedUList(ArrayCache *arrayCache, const Array *array, ref<Expr> size,
+              ref<const MemoryObject> object)
+      : updates(UpdateList(array, nullptr)), arrayCache(arrayCache), size(size),
+        object(object) {}
+
+  CachedUList(const CachedUList &other)
+      : knownSymbolics(other.knownSymbolics),
+        unflushedMask(other.unflushedMask), updates(other.updates),
+        lastUpdate(other.lastUpdate), arrayCache(other.arrayCache),
+        size(other.size), object(other.object) {}
+
+  ref<Expr> read(ref<Expr> offset, Expr::Width width) const;
+  ref<Expr> read(unsigned offset, Expr::Width width) const;
+  ref<Expr> read8(unsigned offset) const;
+
+  void write(unsigned offset, ref<Expr> value);
+  void write(ref<Expr> offset, ref<Expr> value);
+
+  void write8(unsigned offset, uint8_t value);
+  void write16(unsigned offset, uint16_t value);
+  void write32(unsigned offset, uint32_t value);
+  void write64(unsigned offset, uint64_t value);
+  void print() const;
+
+  const UpdateList &getUpdates() const;
+  void flushForRead() const;
+  void flushForWrite();
+  void initializeToZero();
+
+  ref<Expr> read8(ref<Expr> offset) const;
+  void write8(unsigned offset, ref<Expr> value);
+  void write8(ref<Expr> offset, ref<Expr> value);
+
+  size_t getSparseStorageEntries() const {
+    return knownSymbolics.storage().size() + unflushedMask.storage().size();
+  }
+
+private:
+  mutable SparseStorage<ref<Expr>, OptionalRefEq<Expr>> knownSymbolics;
+  mutable SparseStorage<bool> unflushedMask;
+  mutable UpdateList updates;
+  ref<UpdateNode> lastUpdate;
+
+  ArrayCache *arrayCache;
+  ref<Expr> size;
+  ref<const MemoryObject> object;
+};
+
 class ObjectState {
 private:
   friend class AddressSpace;
@@ -199,18 +250,18 @@ private:
 
   ref<const MemoryObject> object;
 
-  /// knownSymbolics[byte] holds the expression for byte,
-  /// if byte is known
-  mutable SparseStorage<ref<Expr>, OptionalRefEq<Expr>> knownSymbolics;
+  // /// knownSymbolics[byte] holds the expression for byte,
+  // /// if byte is known
+  // mutable SparseStorage<ref<Expr>, OptionalRefEq<Expr>> knownSymbolics;
 
-  /// unflushedMask[byte] is set if byte is unflushed
-  /// mutable because may need flushed during read of const
-  mutable SparseStorage<bool> unflushedMask;
+  // /// unflushedMask[byte] is set if byte is unflushed
+  // /// mutable because may need flushed during read of const
+  // mutable SparseStorage<bool> unflushedMask;
 
-  // mutable because we may need flush during read of const
-  mutable UpdateList updates;
+  // // mutable because we may need flush during read of const
+  // mutable UpdateList updates;
 
-  ref<UpdateNode> lastUpdate;
+  // ref<UpdateNode> lastUpdate;
 
   ref<Expr> size;
 
@@ -219,6 +270,8 @@ private:
 public:
   bool readOnly;
   bool wasWritten = false;
+
+  std::map<ref<Expr>, std::shared_ptr<CachedUList>> lists;
 
 public:
   /// Create a new object state for the given memory
@@ -237,10 +290,12 @@ public:
   void initializeToZero();
 
   size_t getSparseStorageEntries() {
-    return knownSymbolics.storage().size() + unflushedMask.storage().size();
+    size_t result = 0;
+    for (auto i : lists) {
+      result = std::max(result, i.second->getSparseStorageEntries());
+    }
+    return result;
   }
-
-  void swapObjectHack(MemoryObject *mo) { object = mo; }
 
   ref<Expr> read(ref<Expr> offset, Expr::Width width) const;
   ref<Expr> read(unsigned offset, Expr::Width width) const;
@@ -254,7 +309,7 @@ public:
   void write16(unsigned offset, uint16_t value);
   void write32(unsigned offset, uint32_t value);
   void write64(unsigned offset, uint64_t value);
-  void print() const;
+  // void print() const;
 
   bool isAccessableFrom(KType *) const;
 

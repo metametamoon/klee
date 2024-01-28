@@ -10,12 +10,13 @@
 #ifndef KLEE_PRESISTENTVECTOR_H
 #define KLEE_PRESISTENTVECTOR_H
 
+#include <unordered_map>
 #ifndef IMMER_NO_EXCEPTIONS
 #define IMMER_NO_EXCEPTIONS
 #endif /* IMMER_NO_EXCEPTIONS */
 
 #include <immer/vector.hpp>
-// #include <immer/vector_transient.hpp>
+#include <immer/vector_transient.hpp>
 
 namespace klee {
 
@@ -57,6 +58,15 @@ public:
   const value_type &operator[](const size_t &index) const {
     return elts[index];
   }
+
+  void batch_update(const std::unordered_map<size_t, value_type> values) {
+    auto transient = elts.transient();
+    for (const auto &[index, value] : values) {
+      transient.set(index, value);
+    }
+    elts = transient.persistent();
+  }
+
   const value_type &at(const size_t &index) const { return elts[index]; }
 
   iterator begin() const { return elts.begin(); }

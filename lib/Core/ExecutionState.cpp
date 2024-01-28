@@ -499,6 +499,7 @@ bool ExecutionState::merge(const ExecutionState &b) {
   for (; itA != stack.valueStack().end(); ++itA, ++itB) {
     StackFrame &af = *itA;
     const StackFrame &bf = *itB;
+    std::unordered_map<size_t, Cell> updates;
     for (unsigned i = 0; i < af.kf->getNumRegisters(); i++) {
       auto &av = af.locals[i].value;
       const ref<Expr> &bv = bf.locals[i].value;
@@ -506,28 +507,30 @@ bool ExecutionState::merge(const ExecutionState &b) {
         // if one is null then by implication (we are at same pc)
         // we cannot reuse this local, so just ignore
       } else {
-        af.locals.set(i, Cell(SelectExpr::create(inA, av, bv)));
+        updates.insert({i, Cell(SelectExpr::create(inA, av, bv))});
       }
     }
+    af.locals.batch_update(updates);
   }
 
-  for (std::set<const MemoryObject *>::iterator it = mutated.begin(),
-                                                ie = mutated.end();
-       it != ie; ++it) {
-    const MemoryObject *mo = *it;
+  for (auto mo : mutated) {
     auto op = addressSpace.findObject(mo);
     auto otherOp = b.addressSpace.findObject(mo);
     assert(op.second && !op.second->readOnly &&
            "objects mutated but not writable in merging state");
     assert(otherOp.second);
 
-    ObjectState *wos = addressSpace.getWriteable(mo, op.second);
-    auto size = cast<ConstantExpr>(mo->sizeExpr)->getZExtValue();
-    for (unsigned i = 0; i < size; i++) {
-      ref<Expr> av = wos->read8(i);
-      ref<Expr> bv = otherOp.second->read8(i);
-      wos->write(i, SelectExpr::create(inA, av, bv));
+    ref<ObjectState> merged(new ObjectState(*op.second));
+    std::map<ref<Expr>, std::shared_ptr<CachedUList>> lists;
+    for (auto list : op.second->lists) {
+      lists.insert({AndExpr::create(list.first, inA), list.second});
     }
+    for (auto list : otherOp.second->lists) {
+      lists.insert({AndExpr::create(list.first, inB),
+                    std::make_shared<CachedUList>(*list.second)});
+    }
+    merged->lists = lists;
+    addressSpace.bindObject(op.first, merged.get());
   }
 
   PathConstraints mergedConstraints;
