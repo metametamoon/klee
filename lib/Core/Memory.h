@@ -251,6 +251,8 @@ public:
     return knownSymbolics.storage().size() + unflushedMask.storage().size();
   }
 
+  void swapObjectHack(MemoryObject *mo) { object = mo; }
+
   ref<Expr> read(ref<Expr> offset, Expr::Width width) const;
   ref<Expr> read(unsigned offset, Expr::Width width) const;
   ref<Expr> read8(unsigned offset) const;
