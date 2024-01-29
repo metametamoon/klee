@@ -401,8 +401,9 @@ cl::opt<MockPointerResolvePolicy> MockPointerResolve(
 cl::opt<bool> MockExternalGlobals("mock-external-globals", cl::init(false),
                                   cl::desc(""), cl::cat(ExecCat));
 
-cl::opt<bool> MockSymbolicIndirectCalls("mock-symbolic-indirect-calls", cl::init(false),
-                                        cl::desc(""), cl::cat(ExecCat));
+cl::opt<bool> MockSymbolicIndirectCalls("mock-symbolic-indirect-calls",
+                                        cl::init(false), cl::desc(""),
+                                        cl::cat(ExecCat));
 
 /*** Seeding options ***/
 
@@ -551,9 +552,9 @@ Executor::Executor(LLVMContext &ctx, const InterpreterOptions &opts,
                    InterpreterHandler *ih)
     : Interpreter(opts), interpreterHandler(ih), searcher(nullptr),
       externalDispatcher(new ExternalDispatcher(ctx)), statsTracker(0),
-      pathWriter(0), symPathWriter(0),
-      specialFunctionHandler(0), timers{time::Span(TimerInterval)},
-      guidanceKind(opts.Guidance), codeGraphInfo(new CodeGraphInfo()),
+      pathWriter(0), symPathWriter(0), specialFunctionHandler(0),
+      timers{time::Span(TimerInterval)}, guidanceKind(opts.Guidance),
+      codeGraphInfo(new CodeGraphInfo()),
       distanceCalculator(new DistanceCalculator(*codeGraphInfo)),
       targetCalculator(new TargetCalculator(*codeGraphInfo)),
       targetManager(new TargetManager(guidanceKind, *distanceCalculator,
@@ -4692,7 +4693,8 @@ Executor::getMockInfo(ExecutionState &state, KCallable *f,
       if (state.multiplexKF && !f->getName().startswith("klee")) {
         result.doMock = true;
         for (const auto &mod : functionsByModule.modules) {
-          if (mod.count(state.multiplexKF->function()) && mod.count(kf->function())) {
+          if (mod.count(state.multiplexKF->function()) &&
+              mod.count(kf->function())) {
             result.doMock = false;
             break;
           }
