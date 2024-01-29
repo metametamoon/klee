@@ -1610,9 +1610,6 @@ void multiplexEntryPoint(llvm::Module *m, LLVMContext &ctx,
   auto multiplexedEntry = llvm::Function::Create(
       type, GlobalVariable::ExternalLinkage, multiplexedEntryName, m);
 
-  multiplexedEntry->addFnAttr(Attribute::NoInline);
-  multiplexedEntry->addFnAttr(Attribute::OptimizeNone);
-
   auto entryBB = llvm::BasicBlock::Create(ctx, "entry", multiplexedEntry);
   auto exitBB = llvm::BasicBlock::Create(ctx, "exit", multiplexedEntry);
 
