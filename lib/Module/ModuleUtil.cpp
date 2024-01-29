@@ -377,13 +377,13 @@ bool klee::loadFileAsOneModule2(
   std::vector<std::unique_ptr<llvm::Module>> modules2;
   bool res = klee::loadFile(libraryName, context, modules2, errorMsg);
   if (res) {
-    std::vector<std::vector<std::pair<StringRef, unsigned>>> namesByModule;
+    std::vector<std::vector<std::pair<std::string, unsigned>>> namesByModule;
     for (const auto &mod : modules2) {
       llvm::CallGraph cg(*mod);
-      std::vector<std::pair<StringRef, unsigned>> names;
+      std::vector<std::pair<std::string, unsigned>> names;
       for (const auto &f : *mod) {
         if (!f.isDeclaration()) {
-          names.push_back({f.getName(), cg[&f]->getNumReferences()});
+          names.push_back({f.getName().str(), cg[&f]->getNumReferences()});
         }
       }
       namesByModule.push_back(std::move(names));
