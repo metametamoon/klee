@@ -12,9 +12,9 @@
 
 #ifndef IMMER_NO_EXCEPTIONS
 #define IMMER_NO_EXCEPTIONS
+#endif /* IMMER_NO_EXCEPTIONS */
 
 #include <immer/map.hpp>
-#endif /* IMMER_NO_EXCEPTIONS */
 
 namespace klee {
 
@@ -61,15 +61,16 @@ public:
   iterator end() const { return elts.end(); }
 
   const D &operator[](const key_type &key) {
-    auto value = lookup(key);
-    if (value) {
-      return *value;
-    } else {
-      value_type defVal;
-      defVal.first = key;
-      insert(defVal);
-      return *lookup(key);
-    }
+    return elts[key];
+    // auto value = lookup(key);
+    // if (value) {
+    //   return *value;
+    // } else {
+    //   value_type defVal;
+    //   defVal.first = key;
+    //   insert(defVal);
+    //   return *lookup(key);
+    // }
   }
 
   const D &at(const key_type &key) const { return elts.at(key); }
