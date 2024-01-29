@@ -4879,7 +4879,7 @@ void Executor::mockCallable(ExecutionState &state, KInstruction *ki,
       prepareMockValue(state, "mockedReturnValue", ki->inst()->getType(), ki);
     }
   } else {
-    if (!f->getFunctionType()->getReturnType()->isVoidTy()) {
+    if (ki->inst()->getType()->isSized()) {
       bool doNull = false;
       if (auto kf = dyn_cast<KFunction>(f)) {
         if (kf->function()->isDeclaration()) {
@@ -4891,7 +4891,7 @@ void Executor::mockCallable(ExecutionState &state, KInstruction *ki,
           }
         }
       }
-      prepareMockValue(state, "mockedReturnValue", ki);
+      prepareMockValue(state, "mockedReturnValue", ki->inst()->getType(), ki);
       if (doNull) {
         auto val = getDestCell(state, ki).value;
         ref<Expr> symExternCallsCanReturnNullExpr =
