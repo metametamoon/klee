@@ -713,9 +713,9 @@ void StatsTracker::writeInstructionUsage() {
 
   of.seek(0);
 
-
   for (auto &fn : *m) {
-    if (executor.kmodule->mainModuleFunctions.count(std::string(fn.getName()))) {
+    if (executor.kmodule->mainModuleFunctions.count(
+            std::string(fn.getName()))) {
       of << fn.getName().str() << ": ";
       unsigned covered = 0;
       unsigned total = 0;
@@ -977,8 +977,9 @@ void StatsTracker::computeReachableUncovered() {
                            cb, /*moduleIsFullyLinked=*/true)) {
               callTargets[inst].push_back(target);
             } else {
-              callTargets[inst] = std::vector<Function *>(
-                  km->escapingFunctions.begin(), km->escapingFunctions.end());
+              for (auto kf : km->escapingFunctions) {
+                callTargets[inst].push_back(kf->function());
+              }
             }
           }
         }
