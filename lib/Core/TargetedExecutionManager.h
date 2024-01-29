@@ -88,7 +88,7 @@ public:
 
 class TargetedExecutionManager {
 private:
-  using Blocks = std::unordered_set<KBlock *>;
+  using Blocks = KBlockSet;
   using LocationToBlocks = std::unordered_map<ref<Location>, Blocks,
                                               RefLocationHash, RefLocationCmp>;
   using Locations =
