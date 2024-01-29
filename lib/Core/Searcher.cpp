@@ -888,16 +888,9 @@ void DiscreteTimeFairSearcher::update(const states_ty &states) {
       removedKStates[function];
       addedKStates[statesToFunction[state]];
       removedKStates[statesToFunction[state]].push_back(state);
+      localFunction.insert(function);
+      localFunction.insert(statesToFunction[state]);
     }
-  }
-
-  for (const auto &pair : addedKStates) {
-    if (!pair.second.empty())
-      localFunction.insert(pair.first);
-  }
-  for (const auto &pair : removedKStates) {
-    if (!pair.second.empty())
-      localFunction.insert(pair.first);
   }
 
   for (auto function : localFunction) {
@@ -907,18 +900,13 @@ void DiscreteTimeFairSearcher::update(const states_ty &states) {
 
     searchers.at(function)->update(nullptr, addedKStates.at(function),
                                    removedKStates.at(function));
+    addedKStates.at(function).clear();
+    removedKStates.at(function).clear();
     if (searchers.at(function)->empty()) {
       removeKFunction(function);
     }
   }
   localFunction.clear();
-
-  for (auto &pair : addedKStates) {
-    pair.second.clear();
-  }
-  for (auto &pair : removedKStates) {
-    pair.second.clear();
-  }
 }
 
 bool DiscreteTimeFairSearcher::isThereKFunction(std::optional<KFunction *> kf) {
