@@ -516,12 +516,12 @@ private:
 
   void setArgumentCell(StackFrame &frame, const KFunction *kf, unsigned index,
                        ref<Expr> value) {
-    return frame.locals.replace({kf->getArgRegister(index), Cell(value)});
+    return frame.locals.set(kf->getArgRegister(index), Cell(value));
   }
 
   void setDestCell(StackFrame &frame, const KInstruction *target,
                    ref<Expr> value) {
-    return frame.locals.replace({target->getDest(), Cell(value)});
+    return frame.locals.set(target->getDest(), Cell(value));
   }
 
   const Cell &eval(const KInstruction *ki, unsigned index,

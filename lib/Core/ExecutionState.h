@@ -17,12 +17,14 @@
 #include "klee/ADT/PersistentHashMap.h"
 #include "klee/ADT/PersistentMap.h"
 #include "klee/ADT/PersistentSet.h"
+#include "klee/ADT/PersistentVector.h"
 #include "klee/ADT/TreeStream.h"
 #include "klee/Core/TerminationTypes.h"
 #include "klee/Expr/Assignment.h"
 #include "klee/Expr/Constraints.h"
 #include "klee/Expr/Expr.h"
 #include "klee/Expr/ExprHashMap.h"
+#include "klee/Module/Cell.h"
 #include "klee/Module/KInstIterator.h"
 #include "klee/Module/KInstruction.h"
 #include "klee/Module/Target.h"
@@ -91,7 +93,7 @@ struct CallStackFrame {
 struct StackFrame {
   KFunction *kf;
   std::vector<IDType> allocas;
-  PersistentHashMap<unsigned, Cell> locals;
+  PersistentVector<Cell> locals;
 
   // For vararg functions: arguments not passed via parameter are
   // stored (packed tightly) in a local (alloca) memory object. This
