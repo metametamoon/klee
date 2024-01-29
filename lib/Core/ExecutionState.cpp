@@ -101,8 +101,7 @@ bool CallStackFrame::equals(const CallStackFrame &other) const {
 }
 
 StackFrame::StackFrame(KFunction *kf) : kf(kf), varargs(nullptr) {
-  for (unsigned i = 0; i < kf->getNumRegisters(); i++)
-    locals.insert({i, Cell()});
+  locals.init(kf->getNumRegisters());
 }
 
 StackFrame::StackFrame(const StackFrame &s)
