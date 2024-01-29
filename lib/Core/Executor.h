@@ -798,7 +798,7 @@ public:
                         KInstruction *target);
 
   void prepareMockValue(ExecutionState &state, const std::string &name,
-                        KInstruction *target);
+                        llvm::Type *type, KInstruction *target);
 
   void prepareSymbolicRegister(ExecutionState &state, StackFrame &frame,
                                unsigned index);

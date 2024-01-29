@@ -4761,11 +4761,12 @@ void Executor::mockCallable(ExecutionState &state, KInstruction *ki,
                             Executor::CallableMockSignature mock) {
   if (!f) {
     if (ki->inst()->getType()->isSized()) {
-      prepareMockValue(state, "mockExternResult", ki);
+      prepareMockValue(state, "mockExternResult", ki->inst()->getType(), ki);
     }
   } else {
     if (!f->getFunctionType()->getReturnType()->isVoidTy()) {
-      prepareMockValue(state, "mockedReturnValue", ki);
+      prepareMockValue(state, "mockedReturnValue",
+                       f->getFunctionType()->getReturnType(), ki);
     }
   }
   for (const auto &mo : mock.MOsToMock) {
@@ -7194,9 +7195,8 @@ void Executor::prepareMockValue(ExecutionState &state, StackFrame &frame,
 }
 
 void Executor::prepareMockValue(ExecutionState &state, const std::string &name,
-                                KInstruction *target) {
-  Expr::Width width =
-      kmodule->targetData->getTypeSizeInBits(target->inst()->getType());
+                                llvm::Type *type, KInstruction *target) {
+  Expr::Width width = kmodule->targetData->getTypeSizeInBits(type);
   prepareMockValue(state, state.stack.valueStack().back(), name, width, target);
 }
 
