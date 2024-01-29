@@ -290,6 +290,11 @@ bool TargetManager::isReachedTarget(const ExecutionState &state,
         }
         return true;
       }
+    } else {
+      if (state.pc->parent == target->getBlock()){
+        result = Done;
+        return true;
+      }
     }
   }
 
