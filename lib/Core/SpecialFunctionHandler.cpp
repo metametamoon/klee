@@ -287,7 +287,7 @@ bool SpecialFunctionHandler::handle(ExecutionState &state, Function *f,
 // reads a concrete string from memory
 std::string SpecialFunctionHandler::readStringAtAddress(ExecutionState &state,
                                                         ref<Expr> addressExpr) {
-  IDType idStringAddress;
+  ObjectPair idStringAddress;
   addressExpr = executor.toUnique(state, addressExpr);
   if (!isa<ConstantExpr>(addressExpr)) {
     executor.terminateStateOnUserError(
@@ -302,7 +302,7 @@ std::string SpecialFunctionHandler::readStringAtAddress(ExecutionState &state,
         state, "Invalid string pointer passed to one of the klee_ functions");
     return "";
   }
-  ObjectPair op = state.addressSpace.findObject(idStringAddress);
+  ObjectPair op = idStringAddress;
   const MemoryObject *mo = op.first;
   const ObjectState *os = op.second;
 
@@ -312,7 +312,10 @@ std::string SpecialFunctionHandler::readStringAtAddress(ExecutionState &state,
 
   std::ostringstream buf;
   char c = 0;
-  for (size_t i = offset; i < mo->size; ++i) {
+  ref<ConstantExpr> sizeExpr = dyn_cast<ConstantExpr>(mo->getSizeExpr());
+  assert(sizeExpr);
+  size_t moSize = sizeExpr->getZExtValue();
+  for (size_t i = offset; i < moSize; ++i) {
     ref<Expr> cur = os->read8(i);
     cur = executor.toUnique(state, cur);
     assert(isa<ConstantExpr>(cur) &&
@@ -687,13 +690,8 @@ void SpecialFunctionHandler::handleGetObjSize(
                         "klee_get_obj_size");
   for (Executor::ExactResolutionList::iterator it = rl.begin(), ie = rl.end();
        it != ie; ++it) {
-    const MemoryObject *mo =
-        it->second->addressSpace.findObject(it->first).first;
-    executor.bindLocal(
-        target, *it->second,
-        ConstantExpr::create(mo->size,
-                             executor.kmodule->targetData->getTypeSizeInBits(
-                                 target->inst()->getType())));
+    const MemoryObject *mo = it->first;
+    executor.bindLocal(target, *it->second, mo->getSizeExpr());
   }
 }
 
@@ -710,7 +708,7 @@ void SpecialFunctionHandler::handleGetErrno(ExecutionState &state,
 #endif
 
   // Retrieve the memory object of the errno variable
-  IDType idErrnoObject;
+  ObjectPair idErrnoObject;
   llvm::Type *pointerErrnoAddr = llvm::PointerType::get(
       llvm::IntegerType::get(executor.kmodule->module->getContext(),
                              sizeof(*errno_addr) * CHAR_BIT),
@@ -723,7 +721,7 @@ void SpecialFunctionHandler::handleGetErrno(ExecutionState &state,
   if (!resolved)
     executor.terminateStateOnUserError(state,
                                        "Could not resolve address for errno");
-  const ObjectState *os = state.addressSpace.findObject(idErrnoObject).second;
+  const ObjectState *os = idErrnoObject.second;
   executor.bindLocal(target, state, os->read(0, Expr::Int32));
 }
 
@@ -822,7 +820,7 @@ void SpecialFunctionHandler::handleCheckMemoryAccess(
     executor.terminateStateOnUserError(
         state, "check_memory_access requires constant args");
   } else {
-    IDType idObject;
+    ObjectPair idObject;
 
     if (!state.addressSpace.resolveOne(
             cast<ConstantExpr>(address),
@@ -831,7 +829,7 @@ void SpecialFunctionHandler::handleCheckMemoryAccess(
           state, "check_memory_access: memory error", StateTerminationType::Ptr,
           executor.getAddressInfo(state, address));
     } else {
-      const MemoryObject *mo = state.addressSpace.findObject(idObject).first;
+      const MemoryObject *mo = idObject.first;
       ref<Expr> chk = mo->getBoundsCheckPointer(
           address, cast<ConstantExpr>(size)->getZExtValue());
       if (!chk->isTrue()) {
@@ -864,8 +862,9 @@ void SpecialFunctionHandler::handleDefineFixedObject(
 
   uint64_t address = cast<ConstantExpr>(arguments[0])->getZExtValue();
   uint64_t size = cast<ConstantExpr>(arguments[1])->getZExtValue();
-  MemoryObject *mo =
-      executor.memory->allocateFixed(address, size, state.prevPC->inst());
+  MemoryObject *mo = executor.memory->allocateFixed(
+      address, size, state.prevPC->inst(),
+      executor.typeSystemManager->getUnknownType());
   executor.bindObjectInState(
       state, mo, executor.typeSystemManager->getUnknownType(), false);
   mo->isUserSpecified = true; // XXX hack;
@@ -1028,8 +1027,7 @@ void SpecialFunctionHandler::handleMarkGlobal(
 
   for (Executor::ExactResolutionList::iterator it = rl.begin(), ie = rl.end();
        it != ie; ++it) {
-    const MemoryObject *mo =
-        it->second->addressSpace.findObject(it->first).first;
+    const MemoryObject *mo = it->first;
     assert(!mo->isLocal);
     mo->isGlobal = true;
   }
