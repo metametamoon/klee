@@ -189,8 +189,7 @@ public:
       const std::set<std::string> &ignoredExternals,
       std::vector<std::pair<std::string, std::string>> redefinitions) = 0;
 
-  virtual void setFunctionsByModule(
-      FunctionsByModule &&functionsByModule) = 0;
+  virtual void setFunctionsByModule(FunctionsByModule &&functionsByModule) = 0;
 
   // supply a tree stream writer which the interpreter will use
   // to record the concrete path (as a stream of '0' and '1' bytes).
