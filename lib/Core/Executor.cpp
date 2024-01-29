@@ -4794,8 +4794,28 @@ void Executor::mockCallable(ExecutionState &state, KInstruction *ki,
       prepareMockValue(state, "mockedReturnValue", ki->inst()->getType(), ki);
     }
   } else {
-    if (ki->inst()->getType()->isSized()) {
-      prepareMockValue(state, "mockedReturnValue", ki->inst()->getType(), ki);
+    if (!f->getFunctionType()->getReturnType()->isVoidTy()) {
+      bool doNull = false;
+      if (auto kf = dyn_cast<KFunction>(f)) {
+        if (kf->function()->isDeclaration()) {
+          auto width =
+              kmodule->targetData->getTypeSizeInBits(ki->inst()->getType());
+          if (ExternCallsCanReturnNull &&
+              width == Context::get().getPointerWidth()) {
+            doNull = true;
+          }
+        }
+      }
+      prepareMockValue(state, "mockedReturnValue", ki);
+      if (doNull) {
+        auto val = getDestCell(state, ki).value;
+        ref<Expr> symExternCallsCanReturnNullExpr =
+            makeMockValue(state, "symExternCallsCanReturnNull", Expr::Bool);
+        val = SelectExpr::create(
+            symExternCallsCanReturnNullExpr,
+            ConstantExpr::alloc(0, Context::get().getPointerWidth()), val);
+        bindLocal(ki, state, val);
+      }
     }
   }
   for (const auto &mo : mock.MOsToMock) {
@@ -5239,6 +5259,31 @@ void Executor::callExternalFunction(ExecutionState &state, KInstruction *target,
       klee_warning_once(callable->unwrap(), "%s", os.str().c_str());
 
     if (mock.doMock) {
+      mockCallable(state, target, callable, mock);
+      return;
+    }
+  }
+
+  // TODO: put all 3 "calling external" things in one place
+  if (ExternalCalls == ExternalCallPolicy::Concrete) {
+    auto mock = getMockInfo(state, callable, arguments);
+
+    if (mock.doMock) {
+      std::string TmpStr;
+      llvm::raw_string_ostream os(TmpStr);
+      os << "mocking external: " << callable->getName().str() << "(";
+      for (unsigned i = 0; i < arguments.size(); i++) {
+        os << arguments[i];
+        if (i != arguments.size() - 1)
+          os << ", ";
+      }
+      os << ") at " << state.pc->getSourceLocationString();
+
+      if (AllExternalWarnings)
+        klee_warning("%s", os.str().c_str());
+      else if (!SuppressExternalWarnings)
+        klee_warning_once(callable->unwrap(), "%s", os.str().c_str());
+
       mockCallable(state, target, callable, mock);
       return;
     }
