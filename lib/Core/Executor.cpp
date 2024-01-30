@@ -6105,13 +6105,17 @@ bool Executor::resolveMemoryObjects(
   ref<Expr> segment = address->getSegment();
   unsigned size = bytes;
   KType *baseTargetType = targetType;
-  ref<PointerExpr> basePointer = PointerExpr::create(segment, base);
 
   if (state.isGEPExpr(base)) {
     size = kmodule->targetData->getTypeStoreSize(state.gepExprBases[base]);
     baseTargetType = typeSystemManager->getWrappedType(llvm::PointerType::get(
         state.gepExprBases[base], kmodule->targetData->getAllocaAddrSpace()));
   }
+
+  segment =
+      Simplificator::simplifyExpr(state.constraints.cs(), segment).simplified;
+  base = Simplificator::simplifyExpr(state.constraints.cs(), base).simplified;
+  ref<PointerExpr> basePointer = PointerExpr::create(segment, base);
 
   auto mso = MemorySubobject(address, bytes);
   if (state.resolvedSubobjects.count(mso)) {
@@ -6185,10 +6189,6 @@ bool Executor::resolveMemoryObjects(
         // minObjectSize = MinNumberElementsLazyInit * MinElementSizeLazyInit;
         minObjectSize = MinNumberElementsLazyInit * size;
 
-        if (base) {
-          base = Simplificator::simplifyExpr(state.constraints.cs(), base)
-                     .simplified;
-        }
         const Array *lazyInstantiationSize = makeArray(
             Expr::createPointer(Context::get().getPointerWidth() / CHAR_BIT),
             SourceBuilder::lazyInitializationSize(base));
