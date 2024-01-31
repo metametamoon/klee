@@ -80,22 +80,27 @@ std::string MemoryObject::getAllocInfo() const {
 
 ObjectState::ObjectState(const MemoryObject *mo, const Array *array, KType *dt)
     : copyOnWriteOwner(0), object(mo), valueOS(ObjectStage(array, nullptr)),
-      segmentOS(
-          ObjectStage(array->size, Expr::createPointer(0), false, Context::get().getPointerWidth())),
-      baseOS(
-          ObjectStage(array->size, Expr::createPointer(0), false, Context::get().getPointerWidth())),
+      segmentOS(ObjectStage(array->size, nullptr, false,
+                            Context::get().getPointerWidth())),
+      baseOS(ObjectStage(array->size, nullptr, false,
+                         Context::get().getPointerWidth())),
       lastUpdate(nullptr), size(array->size), dynamicType(dt), readOnly(false) {
+  segmentOS.initializeToZero();
+  baseOS.initializeToZero();
 }
 
 ObjectState::ObjectState(const MemoryObject *mo, KType *dt)
     : copyOnWriteOwner(0), object(mo),
       valueOS(ObjectStage(mo->getSizeExpr(), nullptr)),
-      segmentOS(ObjectStage(mo->getSizeExpr(),
-                            Expr::createPointer(0), false, Context::get().getPointerWidth())),
-      baseOS(ObjectStage(mo->getSizeExpr(), Expr::createPointer(0),
-                         false, Context::get().getPointerWidth())),
+      segmentOS(ObjectStage(mo->getSizeExpr(), nullptr, false,
+                            Context::get().getPointerWidth())),
+      baseOS(ObjectStage(mo->getSizeExpr(), nullptr, false,
+                         Context::get().getPointerWidth())),
       lastUpdate(nullptr), size(mo->getSizeExpr()), dynamicType(dt),
-      readOnly(false) {}
+      readOnly(false) {
+  segmentOS.initializeToZero();
+  baseOS.initializeToZero();
+}
 
 ObjectState::ObjectState(const ObjectState &os)
     : copyOnWriteOwner(0), object(os.object), valueOS(os.valueOS),
@@ -440,8 +445,9 @@ const UpdateList &ObjectStage::getUpdates() const {
 }
 
 void ObjectStage::initializeToZero() {
-  SparseStorage<ref<ConstantExpr>> values(ConstantExpr::create(0, Expr::Int8));
-  auto array = Array::create(size, SourceBuilder::constant(values));
+  SparseStorage<ref<ConstantExpr>> values(ConstantExpr::create(0, width));
+  auto array =
+      Array::create(size, SourceBuilder::constant(values), Expr::Int32, width);
   updates = UpdateList(array, nullptr);
   knownSymbolics.reset();
   unflushedMask.reset();
@@ -460,7 +466,7 @@ void ObjectStage::flushForRead() const {
 void ObjectStage::flushForWrite() {
   flushForRead();
   // The write is symbolic offset and might overwrite any byte
-  knownSymbolics.reset(nullptr);
+  knownSymbolics.reset();
 }
 
 /***/
