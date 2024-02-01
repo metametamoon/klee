@@ -179,9 +179,9 @@ TargetHashSet TargetCalculator::calculate(ExecutionState &state) {
   KBlock *kb = kf->blockMap[bb];
   kb = !isa<KCallBlock>(kb) || (kb->getLastInstruction() != state.pc)
            ? kb
-           : kf->blockMap[state.pc->parent->basicBlock()
-                              ->getTerminator()
-                              ->getSuccessor(0)];
+           : kf->blockMap.at(
+                 state.pc->parent->basicBlock()->getTerminator()->getSuccessor(
+                     0));
   for (auto sfi = state.stack.callStack().rbegin(),
             sfe = state.stack.callStack().rend();
        sfi != sfe; sfi++) {
@@ -237,9 +237,8 @@ TargetHashSet TargetCalculator::calculate(ExecutionState &state) {
 
       kb = !isa<KCallBlock>(kb) || (kb->getLastInstruction() != sfi->caller)
                ? kb
-               : kf->blockMap[sfi->caller->parent->basicBlock()
-                                  ->getTerminator()
-                                  ->getSuccessor(0)];
+               : kb->parent->blockMap.at(
+                     kb->basicBlock()->getTerminator()->getSuccessor(0));
     }
   }
 
