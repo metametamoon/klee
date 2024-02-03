@@ -5724,10 +5724,8 @@ void Executor::executeAlloc(ExecutionState &state, ref<Expr> size, bool isLocal,
 void Executor::executeFree(ExecutionState &state, ref<PointerExpr> address,
                            KInstruction *target) {
   address = optimizer.optimizeExpr(address, true);
-  StatePair zeroPointer = forkInternal(
-      state,
-      EqExpr::create(address, PointerExpr::create(Expr::createPointer(0))),
-      BranchType::Free);
+  ref<Expr> isNullPointer = Expr::createIsZero(address->getBase());
+  StatePair zeroPointer = forkInternal(state, isNullPointer, BranchType::Free);
   if (zeroPointer.first) {
     if (target)
       bindLocal(
@@ -5794,8 +5792,8 @@ bool Executor::resolveExact(ExecutionState &estate, ref<Expr> address,
       Simplificator::simplifyExpr(estate.constraints.cs(), base).simplified;
   uniqueBase = toUnique(estate, uniqueBase);
 
-  StatePair branches = forkInternal(
-      estate, EqExpr::create(zeroPointer, basePointer), BranchType::MemOp);
+  ref<Expr> isNullPointer = Expr::createIsZero(base);
+  StatePair branches = forkInternal(estate, isNullPointer, BranchType::MemOp);
   ExecutionState *bound = branches.first;
   if (bound) {
     auto error = isReadFromSymbolicArray(uniqueBase)
@@ -6241,8 +6239,6 @@ bool Executor::checkResolvedMemoryObjects(
     if (hasLazyInitialized) {
       baseInBounds = AndExpr::create(
           baseInBounds, Expr::createIsZero(mo->getOffsetExpr(base)));
-      baseInBounds = AndExpr::create(
-          baseInBounds, Expr::createIsZero(mo->getSegmentDiff(segment)));
     }
 
     inBounds = AndExpr::create(inBounds, baseInBounds);
@@ -6288,8 +6284,6 @@ bool Executor::checkResolvedMemoryObjects(
         if (hasLazyInitialized /*&& !state.isolated*/) {
           notInBounds = AndExpr::create(
               notInBounds, Expr::createIsZero(mo->getOffsetExpr(base)));
-          notInBounds = AndExpr::create(
-              notInBounds, Expr::createIsZero(mo->getSegmentDiff(segment)));
         }
         checkOutOfBounds = notInBounds;
       }
@@ -6300,8 +6294,6 @@ bool Executor::checkResolvedMemoryObjects(
         if (hasLazyInitialized) {
           notInBounds = AndExpr::create(
               notInBounds, Expr::createIsZero(mo->getOffsetExpr(base)));
-          notInBounds = AndExpr::create(
-              notInBounds, Expr::createIsZero(mo->getSegmentDiff(segment)));
         }
         checkOutOfBounds = notInBounds;
       }
@@ -6329,8 +6321,6 @@ bool Executor::checkResolvedMemoryObjects(
         inBounds = AndExpr::create(inBounds, checkOutOfBounds);
         baseInBounds = AndExpr::create(
             baseInBounds, Expr::createIsZero(mo->getOffsetExpr(base)));
-        baseInBounds = AndExpr::create(
-            baseInBounds, Expr::createIsZero(mo->getSegmentDiff(segment)));
       }
 
       inBounds = AndExpr::create(inBounds, baseInBounds);
@@ -6365,8 +6355,6 @@ bool Executor::checkResolvedMemoryObjects(
       if (hasLazyInitialized && i == mayBeResolvedMemoryObjects.size() - 1) {
         notInBounds = AndExpr::create(
             notInBounds, Expr::createIsZero(mo->getOffsetExpr(base)));
-        notInBounds = AndExpr::create(
-            notInBounds, Expr::createIsZero(mo->getSegmentDiff(segment)));
       }
 
       if (mayBeOutOfBound) {
@@ -6467,6 +6455,13 @@ void Executor::executeMemoryOperation(
                            estate.roundingMode);
     }
   }
+  if (isWrite) {
+    auto valueOperand =
+        cast<const llvm::StoreInst>(ki->inst())->getValueOperand();
+    if (valueOperand->getType()->isPointerTy()) {
+      value = makePointer(value);
+    }
+  }
   Expr::Width type = (isWrite ? value->getWidth()
                               : getWidthForLLVMType(target->inst()->getType()));
   unsigned bytes = Expr::getMinBytesForWidth(type);
@@ -6496,10 +6491,8 @@ void Executor::executeMemoryOperation(
 
   base = optimizer.optimizeExpr(base, true);
 
-  // ref<Expr> uniqueBase = toUnique(estate, base);
-
-  StatePair branches = forkInternal(
-      estate, EqExpr::create(zeroPointer, basePointer), BranchType::MemOp);
+  ref<Expr> isNullPointer = Expr::createIsZero(base);
+  StatePair branches = forkInternal(estate, isNullPointer, BranchType::MemOp);
   ExecutionState *bound = branches.first;
   if (bound) {
     auto error = (isReadFromSymbolicArray(base) && branches.second)
@@ -7462,7 +7455,7 @@ void resolvePointer(const ExecutionState &state,
                        .simplified;
       }
     }
-    resolvedPointers[address] = std::make_pair(mo, moOffset);
+    resolvedPointers[pointer] = std::make_pair(mo, moOffset);
   }
 }
 

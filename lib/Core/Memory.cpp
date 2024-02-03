@@ -116,7 +116,7 @@ ref<Expr> ObjectState::read8(unsigned offset) const {
   ref<Expr> val = valueOS.readWidth(offset);
   ref<Expr> seg = segmentOS.readWidth(offset);
   ref<Expr> base = baseOS.readWidth(offset);
-  if (seg->isZero()) {
+  if (base->isZero()) {
     return val;
   } else {
     return PointerExpr::create(seg, base, val);
@@ -151,7 +151,7 @@ ref<Expr> ObjectState::read8(ref<Expr> offset) const {
   ref<Expr> seg = segmentOS.readWidth(offset);
   ref<Expr> val = valueOS.readWidth(offset);
   ref<Expr> base = baseOS.readWidth(offset);
-  if (seg->isZero()) {
+  if (base->isZero()) {
     return val;
   } else {
     return PointerExpr::create(seg, base, val);
@@ -167,7 +167,7 @@ void ObjectState::write8(unsigned offset, uint8_t value) {
 void ObjectState::write8(unsigned offset, ref<Expr> value) {
   wasWritten = true;
   if (auto pointer = dyn_cast<PointerExpr>(value)) {
-    if (pointer->getSegment()->isZero()) {
+    if (pointer->getBase()->isZero()) {
       segmentOS.writeWidth(offset, ConstantExpr::create(0, Context::get().getPointerWidth()));
       valueOS.writeWidth(offset, pointer->getValue());
       baseOS.writeWidth(offset, ConstantExpr::create(0, Context::get().getPointerWidth()));
@@ -206,7 +206,7 @@ void ObjectState::write8(ref<Expr> offset, ref<Expr> value) {
   }
 
   if (auto pointer = dyn_cast<PointerExpr>(value)) {
-    if (pointer->getSegment()->isZero()) {
+    if (pointer->getBase()->isZero()) {
       segmentOS.writeWidth(offset, ConstantExpr::create(0, Context::get().getPointerWidth()));
       valueOS.writeWidth(offset, pointer->getValue());
       baseOS.writeWidth(offset, ConstantExpr::create(0, Context::get().getPointerWidth()));

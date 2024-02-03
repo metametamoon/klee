@@ -135,9 +135,6 @@ public:
   bool hasSymbolicSize() const { return !isa<ConstantExpr>(getSizeExpr()); }
   ref<Expr> getBaseExpr() const { return addressExpr; }
   ref<Expr> getSizeExpr() const { return sizeExpr; }
-  ref<Expr> getSegmentDiff(ref<Expr> pointer) const {
-    return SubExpr::create(pointer, getBaseExpr());
-  }
   ref<Expr> getOffsetExpr(ref<Expr> pointer) const {
     return SubExpr::create(pointer, getBaseExpr());
   }
