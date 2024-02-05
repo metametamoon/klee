@@ -393,8 +393,7 @@ ref<Expr> Executor::evalConstantExpr(const llvm::ConstantExpr *ce,
   }
 
   case Instruction::IntToPtr: {
-    return PointerExpr::create(
-        ZExtExpr::create(op1, getWidthForLLVMType(type)));
+    ZExtExpr::create(op1, getWidthForLLVMType(type));
   }
 
   case Instruction::PtrToInt:
@@ -402,10 +401,9 @@ ref<Expr> Executor::evalConstantExpr(const llvm::ConstantExpr *ce,
 
   case Instruction::GetElementPtr: {
     if (!isPointer1) {
-      op1 = PointerExpr::create(Expr::createPointer(0), op1, op1);
+      op1 = PointerExpr::create(op1, op1);
     }
 
-    ref<Expr> segment = cast<PointerExpr>(op1)->getSegment();
     ref<Expr> base = cast<PointerExpr>(op1)->getBase();
     ref<Expr> offset = cast<PointerExpr>(op1)->getOffset();
 
@@ -414,7 +412,6 @@ ref<Expr> Executor::evalConstantExpr(const llvm::ConstantExpr *ce,
       auto iop = evalConstant(cast<Constant>(ii.getOperand()), rm, ki);
       ref<Expr> indexOp;
       if (auto ipointer = dyn_cast<PointerExpr>(iop)) {
-        segment = AddExpr::create(segment, ipointer->getSegment());
         base = AddExpr::create(base, ipointer->getBase());
         indexOp = ipointer->getOffset();
       } else
@@ -454,7 +451,7 @@ ref<Expr> Executor::evalConstantExpr(const llvm::ConstantExpr *ce,
                                         kmodule->targetData->getTypeAllocSize(
                                             ii.getIndexedType())))));
     }
-    return PointerExpr::create(segment, base, AddExpr::create(base, offset));
+    return PointerExpr::create(base, AddExpr::create(base, offset));
   }
 
   case Instruction::ICmp: {

@@ -113,9 +113,9 @@ ObjectState *AddressSpace::getWriteable(const MemoryObject *mo,
 
 bool AddressSpace::resolveOne(ref<ConstantPointerExpr> address,
                               KType *objectType, ObjectPair &result) const {
-  uint64_t segmentConst = address->getConstantSegment()->getZExtValue();
+  uint64_t baseConst = address->getConstantBase()->getZExtValue();
   uint64_t addressConst = address->getConstantValue()->getZExtValue();
-  MemoryObject hack(segmentConst);
+  MemoryObject hack(baseConst);
 
   if (const auto res = objects.lookup_previous(&hack)) {
     const auto &mo = res->first;

@@ -1639,20 +1639,16 @@ public:
 class PointerExpr : public NonConstantExpr {
 public:
   static const Kind kind = Expr::Pointer;
-  static const unsigned numKids = 3;
-  ref<Expr> segment;
+  static const unsigned numKids = 2;
   ref<Expr> base;
   ref<Expr> value;
-  static ref<Expr> alloc(const ref<Expr> &s, const ref<Expr> &b,
-                         const ref<Expr> &v) {
-    ref<Expr> r(new PointerExpr(s, b, v));
+  static ref<Expr> alloc(const ref<Expr> &b, const ref<Expr> &v) {
+    ref<Expr> r(new PointerExpr(b, v));
     r->computeHash();
     r->computeHeight();
     return createCachedExpr(r);
   }
-  static ref<Expr> create(const ref<Expr> &s, const ref<Expr> &b,
-                          const ref<Expr> &o);
-  static ref<Expr> create(const ref<Expr> &s, const ref<Expr> &b);
+  static ref<Expr> create(const ref<Expr> &b, const ref<Expr> &o);
   static ref<Expr> create(const ref<Expr> &v);
   static ref<Expr> createSymbolic(const ref<Expr> &expr,
                                   const ref<ReadExpr> &pointer,
@@ -1660,7 +1656,6 @@ public:
 
   Width getWidth() const { return value->getWidth(); }
   Kind getKind() const { return Expr::Pointer; }
-  ref<Expr> getSegment() const { return segment; }
   ref<Expr> getBase() const { return base; }
   ref<Expr> getValue() const { return value; }
   ref<Expr> getOffset() const {
@@ -1671,17 +1666,15 @@ public:
   unsigned getNumKids() const { return numKids; }
   ref<Expr> getKid(unsigned i) const {
     if (i == 0)
-      return segment;
-    if (i == 1)
       return base;
-    if (i == 2)
+    if (i == 1)
       return value;
     return 0;
   }
 
   int compareContents(const Expr &b) const { return 0; }
   virtual ref<Expr> rebuild(ref<Expr> kids[]) const {
-    return create(kids[0], kids[1], kids[2]);
+    return create(kids[0], kids[1]);
   }
   static bool classof(const Expr *E) {
     return E->getKind() == Expr::Pointer ||
@@ -1689,7 +1682,7 @@ public:
   }
   static bool classof(const PointerExpr *) { return true; }
 
-  bool isKnownValue() const { return getSegment()->isZero(); }
+  bool isKnownValue() const { return getBase()->isZero(); }
 
   ref<Expr> Add(const ref<PointerExpr> &RHS);
   ref<Expr> Sub(const ref<PointerExpr> &RHS);
@@ -1719,31 +1712,24 @@ public:
   ref<Expr> Not();
 
 protected:
-  PointerExpr(const ref<Expr> &s, const ref<Expr> &b, const ref<Expr> &v)
-      : segment(s), base(b), value(v) {}
+  PointerExpr(const ref<Expr> &b, const ref<Expr> &v) : base(b), value(v) {}
 };
 
 class ConstantPointerExpr : public PointerExpr {
 public:
   static const Kind kind = Expr::ConstantPointer;
-  static const unsigned numKids = 3;
-  static ref<Expr> alloc(const ref<ConstantExpr> &s, const ref<ConstantExpr> &b,
+  static const unsigned numKids = 2;
+  static ref<Expr> alloc(const ref<ConstantExpr> &b,
                          const ref<ConstantExpr> &o) {
-    ref<Expr> r(new ConstantPointerExpr(s, b, o));
+    ref<Expr> r(new ConstantPointerExpr(b, o));
     r->computeHash();
     r->computeHeight();
     return r;
   }
-  static ref<Expr> create(const ref<ConstantExpr> &s,
-                          const ref<ConstantExpr> &b,
+  static ref<Expr> create(const ref<ConstantExpr> &b,
                           const ref<ConstantExpr> &o);
-  static ref<Expr> create(const ref<ConstantExpr> &s,
-                          const ref<ConstantExpr> &b);
 
   Kind getKind() const { return Expr::ConstantPointer; }
-  ref<ConstantExpr> getConstantSegment() const {
-    return cast<ConstantExpr>(segment);
-  }
   ref<ConstantExpr> getConstantBase() const { return cast<ConstantExpr>(base); }
   ref<ConstantExpr> getConstantOffset() const {
     return getConstantValue()->Sub(getConstantBase());
@@ -1758,9 +1744,8 @@ public:
   static bool classof(const ConstantPointerExpr *) { return true; }
 
 private:
-  ConstantPointerExpr(const ref<ConstantExpr> &s, const ref<ConstantExpr> &b,
-                      const ref<ConstantExpr> &v)
-      : PointerExpr(s, b, v) {}
+  ConstantPointerExpr(const ref<ConstantExpr> &b, const ref<ConstantExpr> &v)
+      : PointerExpr(b, v) {}
 };
 
 // Implementations

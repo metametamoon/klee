@@ -45,7 +45,6 @@ public:
     SymbolicSizeConstantAddress,
     MakeSymbolic,
     LazyInitializationContent,
-    LazyInitializationSegment,
     LazyInitializationAddress,
     LazyInitializationSize,
     Instruction,
@@ -194,8 +193,7 @@ public:
   LazyInitializationSource(ref<Expr> _pointer) : pointer(_pointer) {}
 
   static bool classof(const SymbolicSource *S) {
-    return S->getKind() == Kind::LazyInitializationSegment ||
-           S->getKind() == Kind::LazyInitializationAddress ||
+    return S->getKind() == Kind::LazyInitializationAddress ||
            S->getKind() == Kind::LazyInitializationSize ||
            S->getKind() == Kind::LazyInitializationContent;
   }
@@ -215,21 +213,6 @@ public:
   }
 
   virtual std::set<const Array *> getRelatedArrays() const override;
-};
-
-class LazyInitializationSegmentSource : public LazyInitializationSource {
-public:
-  LazyInitializationSegmentSource(ref<Expr> pointer)
-      : LazyInitializationSource(pointer) {}
-  Kind getKind() const override { return Kind::LazyInitializationSegment; }
-  virtual std::string getName() const override {
-    return "lazyInitializationSegment";
-  }
-
-  static bool classof(const SymbolicSource *S) {
-    return S->getKind() == Kind::LazyInitializationSegment;
-  }
-  static bool classof(const LazyInitializationSegmentSource *) { return true; }
 };
 
 class LazyInitializationAddressSource : public LazyInitializationSource {

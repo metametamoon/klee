@@ -1596,8 +1596,6 @@ ref<Expr> ReadExpr::create(const UpdateList &ul, ref<Expr> index, bool safe) {
                  !safe) {
         assert(constantSource->constantValues.defaultV());
         return constantSource->constantValues.defaultV();
-      } else {
-        llvm::errs();
       }
     }
   }
@@ -1678,13 +1676,11 @@ ref<Expr> SelectExpr::create(ref<Expr> c, ref<Expr> t, ref<Expr> f) {
   } else if (isa<PointerExpr>(t) && isa<PointerExpr>(f)) {
     ref<PointerExpr> truePointer = cast<PointerExpr>(t);
     ref<PointerExpr> falsePointer = cast<PointerExpr>(f);
-    ref<Expr> segment = SelectExpr::create(c, truePointer->getSegment(),
-                                           falsePointer->getSegment());
     ref<Expr> base =
         SelectExpr::create(c, truePointer->getBase(), falsePointer->getBase());
     ref<Expr> value = SelectExpr::create(c, truePointer->getValue(),
                                          falsePointer->getValue());
-    return PointerExpr::create(segment, base, value);
+    return PointerExpr::create(base, value);
   } else if (!isa<ConstantExpr>(t) && isa<ConstantExpr>(f)) {
     return SelectExpr::alloc(Expr::createIsZero(c), f, t);
   }
@@ -1780,11 +1776,10 @@ ref<Expr> ConcatExpr::create(const ref<Expr> &l, const ref<Expr> &r) {
   if (PointerExpr *ee_left = dyn_cast<PointerExpr>(l)) {
     if (PointerExpr *ee_right = dyn_cast<PointerExpr>(r)) {
       return PointerExpr::create(
-          SelectExpr::create(EqExpr::create(ee_left->getSegment(), ee_right->getSegment()),
-          ee_left->getSegment(), ConstantExpr::create(0, ee_left->getSegment()->getWidth())),
-          
-          SelectExpr::create(EqExpr::create(ee_left->getBase(), ee_right->getBase()),
-          ee_left->getBase(), ConstantExpr::create(0, ee_left->getBase()->getWidth())),
+          SelectExpr::create(
+              EqExpr::create(ee_left->getBase(), ee_right->getBase()),
+              ee_left->getBase(),
+              ConstantExpr::create(0, ee_left->getBase()->getWidth())),
           ConcatExpr::create(ee_left->getValue(), ee_right->getValue()));
     }
   }
@@ -1836,8 +1831,7 @@ ref<Expr> ExtractExpr::create(ref<Expr> expr, unsigned off, Width w) {
   } else if (ConstantExpr *CE = dyn_cast<ConstantExpr>(expr)) {
     return CE->Extract(off, w);
   } else if (PointerExpr *pe = dyn_cast<PointerExpr>(expr)) {
-    return PointerExpr::create(pe->getSegment(),
-                               pe->getBase(),
+    return PointerExpr::create(pe->getBase(),
                                ExtractExpr::create(pe->getValue(), off, w));
   } else {
     // Extract(Concat)
@@ -1905,8 +1899,7 @@ ref<Expr> ZExtExpr::create(const ref<Expr> &e, Width w) {
   } else if (ConstantExpr *CE = dyn_cast<ConstantExpr>(e)) {
     return CE->ZExt(w);
   } else if (PointerExpr *pe = dyn_cast<PointerExpr>(e)) {
-    return PointerExpr::create(pe->getSegment(),
-                               pe->getBase(),
+    return PointerExpr::create(pe->getBase(),
                                ZExtExpr::create(pe->getValue(), w));
   } else if (SelectExpr *se = dyn_cast<SelectExpr>(e)) {
     if (isa<ConstantExpr>(se->trueExpr)) {
@@ -1927,8 +1920,7 @@ ref<Expr> SExtExpr::create(const ref<Expr> &e, Width w) {
   } else if (ConstantExpr *CE = dyn_cast<ConstantExpr>(e)) {
     return CE->SExt(w);
   } else if (PointerExpr *pe = dyn_cast<PointerExpr>(e)) {
-    return PointerExpr::create(pe->getSegment(),
-                               pe->getBase(),
+    return PointerExpr::create(pe->getBase(),
                                SExtExpr::create(pe->getValue(), w));
   } else if (SelectExpr *se = dyn_cast<SelectExpr>(e)) {
     if (isa<ConstantExpr>(se->trueExpr)) {
@@ -2040,8 +2032,7 @@ static ref<Expr> AddExpr_createPartial(Expr *l, const ref<ConstantExpr> &cr) {
 }
 
 static ref<Expr> AddExpr_createPointerR(const ref<PointerExpr> &pl, Expr *r) {
-  return PointerExpr::create(pl->getSegment(), pl->getBase(),
-                             AddExpr::create(pl->getValue(), r));
+  return PointerExpr::create(pl->getBase(), AddExpr::create(pl->getValue(), r));
 }
 
 static ref<Expr> AddExpr_createPointer(Expr *l, const ref<PointerExpr> &pr) {
@@ -2098,13 +2089,11 @@ static ref<Expr> SubExpr_createPartial(Expr *l, const ref<ConstantExpr> &cr) {
 }
 
 static ref<Expr> SubExpr_createPointerR(const ref<PointerExpr> &pl, Expr *r) {
-  return PointerExpr::create(pl->getSegment(), pl->getBase(),
-                             SubExpr::create(pl->getValue(), r));
+  return PointerExpr::create(pl->getBase(), SubExpr::create(pl->getValue(), r));
 }
 
 static ref<Expr> SubExpr_createPointer(Expr *l, const ref<PointerExpr> &pr) {
-  return PointerExpr::create(pr->getSegment(), pr->getBase(),
-                             SubExpr::create(l, pr->getValue()));
+  return PointerExpr::create(pr->getBase(), SubExpr::create(l, pr->getValue()));
 }
 
 static ref<Expr> SubExpr_create(Expr *l, Expr *r) {
@@ -2152,8 +2141,7 @@ static ref<Expr> MulExpr_createPartial(Expr *l, const ref<ConstantExpr> &cr) {
 }
 
 static ref<Expr> MulExpr_createPointerR(const ref<PointerExpr> &pl, Expr *r) {
-  return PointerExpr::create(pl->getSegment(), pl->getBase(),
-                             MulExpr::create(pl->getValue(), r));
+  return PointerExpr::create(pl->getBase(), MulExpr::create(pl->getValue(), r));
 }
 
 static ref<Expr> MulExpr_createPointer(Expr *l, const ref<PointerExpr> &pr) {
@@ -2184,8 +2172,7 @@ static ref<Expr> AndExpr_createPartialR(const ref<ConstantExpr> &cl, Expr *r) {
 }
 
 static ref<Expr> AndExpr_createPointerR(const ref<PointerExpr> &pl, Expr *r) {
-  return PointerExpr::create(pl->getSegment(), pl->getBase(),
-                             AndExpr::create(pl->getValue(), r));
+  return PointerExpr::create(pl->getBase(), AndExpr::create(pl->getValue(), r));
 }
 
 static ref<Expr> AndExpr_createPointer(Expr *l, const ref<PointerExpr> &pr) {
@@ -2213,8 +2200,7 @@ static ref<Expr> OrExpr_createPartialR(const ref<ConstantExpr> &cl, Expr *r) {
 }
 
 static ref<Expr> OrExpr_createPointerR(const ref<PointerExpr> &pl, Expr *r) {
-  return PointerExpr::create(pl->getSegment(), pl->getBase(),
-                             OrExpr::create(pl->getValue(), r));
+  return PointerExpr::create(pl->getBase(), OrExpr::create(pl->getValue(), r));
 }
 
 static ref<Expr> OrExpr_createPointer(Expr *l, const ref<PointerExpr> &pr) {
@@ -2243,8 +2229,7 @@ static ref<Expr> XorExpr_createPartial(Expr *l, const ref<ConstantExpr> &cr) {
 }
 
 static ref<Expr> XorExpr_createPointerR(const ref<PointerExpr> &pl, Expr *r) {
-  return PointerExpr::create(pl->getSegment(), pl->getBase(),
-                             XorExpr::create(pl->getValue(), r));
+  return PointerExpr::create(pl->getBase(), XorExpr::create(pl->getValue(), r));
 }
 
 static ref<Expr> XorExpr_createPointer(Expr *l, const ref<PointerExpr> &pr) {
@@ -2390,17 +2375,6 @@ BCREATE(SRemExpr, SRem)
 BCREATE(ShlExpr, Shl)
 BCREATE(LShrExpr, LShr)
 BCREATE(AShrExpr, AShr)
-
-static ref<Expr> EqExpr_createPointerR(const ref<PointerExpr> &pl, Expr *r) {
-  return pl->Eq(
-      PointerExpr::create(ConstantExpr::create(0, pl->getWidth()), r, r));
-}
-
-static ref<Expr> EqExpr_createPointer(Expr *l, const ref<PointerExpr> &pr) {
-  return cast<PointerExpr>(
-             PointerExpr::create(ConstantExpr::create(0, pr->getWidth()), l, l))
-      ->Eq(pr);
-}
 
 #define CMPCREATE(_e_op, _op)                                                  \
   ref<Expr> _e_op ::create(const ref<Expr> &l, const ref<Expr> &r) {           \
@@ -2812,25 +2786,15 @@ ref<Expr> IsSubnormalExpr::either(const ref<Expr> &e0, const ref<Expr> &e1) {
 
 /***/
 
-ref<Expr> PointerExpr::create(const ref<Expr> &s, const ref<Expr> &b,
-                              const ref<Expr> &v) {
-  assert(!isa<PointerExpr>(s));
+ref<Expr> PointerExpr::create(const ref<Expr> &b, const ref<Expr> &v) {
   assert(!isa<PointerExpr>(b));
   assert(!isa<PointerExpr>(v));
-  assert(s->getWidth() == b->getWidth());
-  if (s->isZero() && !b->isZero()) {
-    llvm::errs();
-  }
-  if (isa<ConstantExpr>(s) && isa<ConstantExpr>(b) && isa<ConstantExpr>(v)) {
-    return ConstantPointerExpr::create(
-        cast<ConstantExpr>(s), cast<ConstantExpr>(b), cast<ConstantExpr>(v));
+  if (isa<ConstantExpr>(b) && isa<ConstantExpr>(v)) {
+    return ConstantPointerExpr::create(cast<ConstantExpr>(b),
+                                       cast<ConstantExpr>(v));
   } else {
-    return PointerExpr::alloc(s, b, v);
+    return PointerExpr::alloc(b, v);
   }
-}
-
-ref<Expr> PointerExpr::create(const ref<Expr> &s, const ref<Expr> &b) {
-  return PointerExpr::create(s, b, b);
 }
 
 ref<Expr> PointerExpr::createSymbolic(const ref<Expr> &expr,
@@ -2838,15 +2802,15 @@ ref<Expr> PointerExpr::createSymbolic(const ref<Expr> &expr,
                                       const ref<Expr> &off) {
   ref<Expr> pointer;
   auto updates = read->updates;
-  if (isa<LazyInitializationSegmentSource>(updates.root->source)) {
+  if (isa<LazyInitializationAddressSource>(updates.root->source)) {
     pointer = PointerExpr::create(expr, expr);
   } else {
-    auto segmentArray = Array::create(
+    auto baseArray = Array::create(
         ConstantExpr::create(expr->getWidth() / CHAR_BIT, expr->getWidth()),
-        SourceBuilder::lazyInitializationSegment(expr));
-    ref<Expr> segmentExpr = Expr::createTempRead(
-        segmentArray, expr->getWidth(), SubExpr::create(read->index, off));
-    pointer = PointerExpr::create(segmentExpr, expr);
+        SourceBuilder::lazyInitializationAddress(expr));
+    ref<Expr> baseExpr = Expr::createTempRead(
+        baseArray, expr->getWidth(), SubExpr::create(read->index, off));
+    pointer = PointerExpr::create(baseExpr, expr);
   }
   return pointer;
 }
@@ -2864,25 +2828,16 @@ ref<Expr> PointerExpr::create(const ref<Expr> &expr) {
              read->updates.root->getSize()->getWidth() == expr->getWidth()) {
     pointer = PointerExpr::createSymbolic(expr, read, read->index);
   } else {
-    pointer = PointerExpr::create(ConstantExpr::create(0, expr->getWidth()),
-                                  expr, expr);
+    pointer = PointerExpr::create(expr, expr);
   }
   return pointer;
 }
 
-ref<Expr> ConstantPointerExpr::create(const ref<ConstantExpr> &s,
-                                      const ref<ConstantExpr> &b,
+ref<Expr> ConstantPointerExpr::create(const ref<ConstantExpr> &b,
                                       const ref<ConstantExpr> &v) {
-  assert(!isa<PointerExpr>(s));
   assert(!isa<PointerExpr>(b));
   assert(!isa<PointerExpr>(v));
-  assert(s->getWidth() == b->getWidth());
-  return ConstantPointerExpr::alloc(s, b, v);
-}
-
-ref<Expr> ConstantPointerExpr::create(const ref<ConstantExpr> &s,
-                                      const ref<ConstantExpr> &b) {
-  return ConstantPointerExpr::create(s, b, b);
+  return ConstantPointerExpr::alloc(b, v);
 }
 
 #define BCREATE_P(_e_op, _op)                                                  \
@@ -2893,11 +2848,10 @@ ref<Expr> ConstantPointerExpr::create(const ref<ConstantExpr> &s,
         return _e_op::create(getValue(), RHS->getValue());                     \
       } else {                                                                 \
         return PointerExpr::create(                                            \
-            getSegment(), getBase(),                                           \
-            _e_op::create(getValue(), RHS->getValue()));                       \
+            getBase(), _e_op::create(getValue(), RHS->getValue()));            \
       }                                                                        \
     } else if (!RHS->isKnownValue()) {                                         \
-      return PointerExpr::create(RHS->getSegment(), RHS->getBase(),            \
+      return PointerExpr::create(RHS->getBase(),                               \
                                  _e_op::create(getValue(), RHS->getValue()));  \
     } else {                                                                   \
       return _e_op::create(getValue(), RHS->getValue());                       \
@@ -2919,41 +2873,21 @@ BCREATE_P(LShrExpr, LShr)
 BCREATE_P(AShrExpr, AShr)
 
 ref<Expr> PointerExpr::Not() {
-  return PointerExpr::create(getSegment(), getBase(),
-                             NotExpr::create(getValue()));
+  return PointerExpr::create(getBase(), NotExpr::create(getValue()));
 }
 
 ref<Expr> PointerExpr::Eq(const ref<PointerExpr> &RHS) {
-  if (!isKnownValue() && !RHS->isKnownValue()) {
-    return AndExpr::create(EqExpr::create(getSegment(), RHS->getSegment()),
-                           EqExpr::create(getValue(), RHS->getValue()));
-  } else {
-    return EqExpr::create(getValue(), RHS->getValue());
-  }
+  return EqExpr::create(getValue(), RHS->getValue());
 }
 ref<Expr> PointerExpr::Ne(const ref<PointerExpr> &RHS) {
   return Expr::createIsZero(Eq(RHS));
 }
 
 ref<Expr> PointerExpr::Ult(const ref<PointerExpr> &RHS) {
-  if (!isKnownValue() && !RHS->isKnownValue()) {
-    return OrExpr::create(
-        UltExpr::create(segment, RHS->getSegment()),
-        AndExpr::create(EqExpr::create(segment, RHS->getSegment()),
-                        UltExpr::create(getValue(), RHS->getValue())));
-  } else {
-    return UltExpr::create(getValue(), RHS->getValue());
-  }
+  return UltExpr::create(getValue(), RHS->getValue());
 }
 ref<Expr> PointerExpr::Ule(const ref<PointerExpr> &RHS) {
-  if (!isKnownValue() && !RHS->isKnownValue()) {
-    return OrExpr::create(
-        UltExpr::create(segment, RHS->getSegment()),
-        AndExpr::create(EqExpr::create(segment, RHS->getSegment()),
-                        UleExpr::create(getValue(), RHS->getValue())));
-  } else {
-    return UleExpr::create(getValue(), RHS->getValue());
-  }
+  return UleExpr::create(getValue(), RHS->getValue());
 }
 ref<Expr> PointerExpr::Ugt(const ref<PointerExpr> &RHS) {
   return RHS->Ult(this);
@@ -2962,24 +2896,10 @@ ref<Expr> PointerExpr::Uge(const ref<PointerExpr> &RHS) {
   return RHS->Ule(this);
 }
 ref<Expr> PointerExpr::Slt(const ref<PointerExpr> &RHS) {
-  if (!isKnownValue() && !RHS->isKnownValue()) {
-    return OrExpr::create(
-        SltExpr::create(segment, RHS->getSegment()),
-        AndExpr::create(EqExpr::create(segment, RHS->getSegment()),
-                        SltExpr::create(getValue(), RHS->getValue())));
-  } else {
-    return SltExpr::create(getValue(), RHS->getValue());
-  }
+  return SltExpr::create(getValue(), RHS->getValue());
 }
 ref<Expr> PointerExpr::Sle(const ref<PointerExpr> &RHS) {
-  if (!isKnownValue() && !RHS->isKnownValue()) {
-    return OrExpr::create(
-        SltExpr::create(segment, RHS->getSegment()),
-        AndExpr::create(EqExpr::create(segment, RHS->getSegment()),
-                        SleExpr::create(getValue(), RHS->getValue())));
-  } else {
-    return SleExpr::create(getValue(), RHS->getValue());
-  }
+  return SleExpr::create(getValue(), RHS->getValue());
 }
 ref<Expr> PointerExpr::Sgt(const ref<PointerExpr> &RHS) {
   return RHS->Slt(this);
