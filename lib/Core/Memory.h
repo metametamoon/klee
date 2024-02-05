@@ -142,16 +142,16 @@ public:
     return SubExpr::create(pointer->getValue(), getBaseExpr());
   }
   ref<Expr> getBoundsCheckPointer(ref<PointerExpr> pointer) const {
-    ref<Expr> segment = pointer->getSegment();
+    ref<Expr> base = pointer->getBase();
     ref<Expr> address = pointer->getValue();
-    return AndExpr::create(EqExpr::create(getBaseExpr(), segment),
+    return AndExpr::create(EqExpr::create(getBaseExpr(), base),
                            getBoundsCheckOffset(getOffsetExpr(address)));
   }
   ref<Expr> getBoundsCheckPointer(ref<PointerExpr> pointer,
                                   unsigned bytes) const {
-    ref<Expr> segment = pointer->getSegment();
+    ref<Expr> base = pointer->getBase();
     ref<Expr> address = pointer->getValue();
-    return AndExpr::create(EqExpr::create(getBaseExpr(), segment),
+    return AndExpr::create(EqExpr::create(getBaseExpr(), base),
                            getBoundsCheckOffset(getOffsetExpr(address), bytes));
   }
 
@@ -260,7 +260,6 @@ private:
   ref<const MemoryObject> object;
 
   ObjectStage valueOS;
-  ObjectStage segmentOS;
   ObjectStage baseOS;
 
   ref<UpdateNode> lastUpdate;
@@ -289,9 +288,7 @@ public:
   void initializeToZero();
 
   size_t getSparseStorageEntries() {
-    return valueOS.getSparseStorageEntries() +
-           segmentOS.getSparseStorageEntries() +
-           baseOS.getSparseStorageEntries();
+    return valueOS.getSparseStorageEntries() + baseOS.getSparseStorageEntries();
   }
 
   void swapObjectHack(MemoryObject *mo) { object = mo; }

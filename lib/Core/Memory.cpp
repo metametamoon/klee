@@ -76,50 +76,42 @@ void MemoryObject::getAllocInfo(std::string &result) const {
 
 ObjectState::ObjectState(const MemoryObject *mo, const Array *array, KType *dt)
     : copyOnWriteOwner(0), object(mo), valueOS(ObjectStage(array, nullptr)),
-      segmentOS(ObjectStage(array->size, nullptr, false,
-                            Context::get().getPointerWidth())),
       baseOS(ObjectStage(array->size, nullptr, false,
                          Context::get().getPointerWidth())),
       lastUpdate(nullptr), size(array->size), dynamicType(dt), readOnly(false) {
-  segmentOS.initializeToZero();
   baseOS.initializeToZero();
 }
 
 ObjectState::ObjectState(const MemoryObject *mo, KType *dt)
     : copyOnWriteOwner(0), object(mo),
       valueOS(ObjectStage(mo->getSizeExpr(), nullptr)),
-      segmentOS(ObjectStage(mo->getSizeExpr(), nullptr, false,
-                            Context::get().getPointerWidth())),
       baseOS(ObjectStage(mo->getSizeExpr(), nullptr, false,
                          Context::get().getPointerWidth())),
       lastUpdate(nullptr), size(mo->getSizeExpr()), dynamicType(dt),
       readOnly(false) {
-  segmentOS.initializeToZero();
   baseOS.initializeToZero();
 }
 
 ObjectState::ObjectState(const ObjectState &os)
     : copyOnWriteOwner(0), object(os.object), valueOS(os.valueOS),
-      segmentOS(os.segmentOS), baseOS(os.baseOS), lastUpdate(os.lastUpdate),
-      size(os.size), dynamicType(os.dynamicType), readOnly(os.readOnly),
+      baseOS(os.baseOS), lastUpdate(os.lastUpdate), size(os.size),
+      dynamicType(os.dynamicType), readOnly(os.readOnly),
       wasWritten(os.wasWritten) {}
 
 /***/
 
 void ObjectState::initializeToZero() {
   valueOS.initializeToZero();
-  segmentOS.initializeToZero();
   baseOS.initializeToZero();
 }
 
 ref<Expr> ObjectState::read8(unsigned offset) const {
   ref<Expr> val = valueOS.readWidth(offset);
-  ref<Expr> seg = segmentOS.readWidth(offset);
   ref<Expr> base = baseOS.readWidth(offset);
   if (base->isZero()) {
     return val;
   } else {
-    return PointerExpr::create(seg, base, val);
+    return PointerExpr::create(base, val);
   }
 }
 
@@ -148,18 +140,16 @@ ref<Expr> ObjectState::read8(ref<Expr> offset) const {
       }
     }
   }
-  ref<Expr> seg = segmentOS.readWidth(offset);
   ref<Expr> val = valueOS.readWidth(offset);
   ref<Expr> base = baseOS.readWidth(offset);
   if (base->isZero()) {
     return val;
   } else {
-    return PointerExpr::create(seg, base, val);
+    return PointerExpr::create(base, val);
   }
 }
 
 void ObjectState::write8(unsigned offset, uint8_t value) {
-  segmentOS.writeWidth(offset, ConstantExpr::create(0, Context::get().getPointerWidth()));
   valueOS.writeWidth(offset, value);
   baseOS.writeWidth(offset, ConstantExpr::create(0, Context::get().getPointerWidth()));
 }
@@ -168,16 +158,13 @@ void ObjectState::write8(unsigned offset, ref<Expr> value) {
   wasWritten = true;
   if (auto pointer = dyn_cast<PointerExpr>(value)) {
     if (pointer->getBase()->isZero()) {
-      segmentOS.writeWidth(offset, ConstantExpr::create(0, Context::get().getPointerWidth()));
       valueOS.writeWidth(offset, pointer->getValue());
       baseOS.writeWidth(offset, ConstantExpr::create(0, Context::get().getPointerWidth()));
     } else {
-      segmentOS.writeWidth(offset, pointer->getSegment());
       valueOS.writeWidth(offset, pointer->getValue());
       baseOS.writeWidth(offset, pointer->getBase());
     }
   } else {
-    segmentOS.writeWidth(offset, ConstantExpr::create(0, Context::get().getPointerWidth()));
     valueOS.writeWidth(offset, value);
     baseOS.writeWidth(offset, ConstantExpr::create(0, Context::get().getPointerWidth()));
   }
@@ -207,16 +194,13 @@ void ObjectState::write8(ref<Expr> offset, ref<Expr> value) {
 
   if (auto pointer = dyn_cast<PointerExpr>(value)) {
     if (pointer->getBase()->isZero()) {
-      segmentOS.writeWidth(offset, ConstantExpr::create(0, Context::get().getPointerWidth()));
       valueOS.writeWidth(offset, pointer->getValue());
       baseOS.writeWidth(offset, ConstantExpr::create(0, Context::get().getPointerWidth()));
     } else {
-      segmentOS.writeWidth(offset, pointer->getSegment());
       valueOS.writeWidth(offset, pointer->getValue());
       baseOS.writeWidth(offset, pointer->getBase());
     }
   } else {
-    segmentOS.writeWidth(offset, ConstantExpr::create(0, Context::get().getPointerWidth()));
     valueOS.writeWidth(offset, value);
     baseOS.writeWidth(offset, ConstantExpr::create(0, Context::get().getPointerWidth()));
   }
@@ -224,7 +208,6 @@ void ObjectState::write8(ref<Expr> offset, ref<Expr> value) {
 
 void ObjectState::write(ref<const ObjectState> os) {
   wasWritten = true;
-  segmentOS.write(os->segmentOS);
   valueOS.write(os->valueOS);
   baseOS.write(os->baseOS);
   lastUpdate = os->lastUpdate;
@@ -378,8 +361,6 @@ void ObjectState::print() const {
   llvm::errs() << "-- ObjectState --\n";
   llvm::errs() << "\tBase ObjectStage:\n";
   valueOS.print();
-  llvm::errs() << "\tSegment ObjectStage:\n";
-  segmentOS.print();
   llvm::errs() << "\tOffset ObjectStage:\n";
   baseOS.print();
 }

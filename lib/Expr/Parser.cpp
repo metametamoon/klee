@@ -588,7 +588,7 @@ SourceResult ParserImpl::ParseLazyInitializationContentSource() {
 
 SourceResult ParserImpl::ParseLazyInitializationAddressSource() {
   auto pointer = ParseExpr(TypeResult()).get();
-  return SourceBuilder::lazyInitializationSegment(pointer);
+  return SourceBuilder::lazyInitializationAddress(pointer);
 }
 
 SourceResult ParserImpl::ParseLazyInitializationSizeSource() {

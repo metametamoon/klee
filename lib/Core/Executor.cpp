@@ -861,7 +861,7 @@ MemoryObject *Executor::addExternalObject(ExecutionState &state, void *addr,
   ref<ConstantExpr> seg = Expr::createPointer(reinterpret_cast<std::uint64_t>(addr));
   for (unsigned i = 0; i < size; i++) {
     ref<Expr> byte = ConstantExpr::create(((uint8_t *)addr)[i], Expr::Int8);
-    os->write(i, PointerExpr::create(seg, seg, byte));
+    os->write(i, PointerExpr::create(seg, byte));
   }
   if (isReadOnly)
     os->setReadOnly(true);
@@ -2015,7 +2015,7 @@ MemoryObject *Executor::serializeLandingpad(ExecutionState &state,
     ref<ConstantExpr> sec = ConstantExpr::create(serialized[i], Expr::Int8);
     if (pointerMask.at(i)) {
       ref<ConstantExpr> seg = Expr::createPointer(pointerMask.at(i));
-      os->write(i, PointerExpr::create(seg, seg, sec));
+      os->write(i, PointerExpr::create(seg, sec));
     } else {
       os->write(i, sec);
     }
@@ -3517,7 +3517,6 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     ref<Expr> base = eval(ki, 0, state).value;
     ref<PointerExpr> pointer = makePointer(base);
     base = pointer->getBase();
-    ref<Expr> segment = pointer->getSegment();
     ref<Expr> offset = pointer->getOffset();
 
     for (std::vector<std::pair<unsigned, uint64_t>>::iterator
@@ -3534,11 +3533,10 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       offset = AddExpr::create(offset, Expr::createPointer(kgepi->offset));
     ref<Expr> address;
     if (ref<PointerExpr> pointerOffset = dyn_cast<PointerExpr>(offset)) {
-      address = cast<PointerExpr>(PointerExpr::create(segment, base))
+      address = cast<PointerExpr>(PointerExpr::create(base, base))
                     ->Add(pointerOffset);
     } else {
-      address =
-          PointerExpr::create(segment, base, AddExpr::create(base, offset));
+      address = PointerExpr::create(base, AddExpr::create(base, offset));
     }
 
     state.gepExprBases[base] = {gepInst->getSourceElementType()};
@@ -4981,10 +4979,8 @@ std::string Executor::getAddressInfo(ExecutionState &state,
   llvm::raw_string_ostream info(Str);
   address =
       Simplificator::simplifyExpr(state.constraints.cs(), address).simplified;
-  ref<Expr> segment = address->getSegment();
   ref<Expr> base = address->getBase();
   ref<Expr> offset = address->getOffset();
-  info << "\tsegment: " << segment << "\n";
   info << "\tbase: " << base << "\n";
   info << "\toffset: " << offset << "\n";
   if (size) {
@@ -5772,8 +5768,7 @@ bool Executor::resolveExact(ExecutionState &estate, ref<Expr> address,
   ref<PointerExpr> pointer = makePointer(address);
   address = pointer->getValue();
   ref<Expr> base = pointer->getBase();
-  ref<Expr> segment = pointer->getSegment();
-  ref<PointerExpr> basePointer = PointerExpr::create(segment, base);
+  ref<PointerExpr> basePointer = PointerExpr::create(base, base);
   ref<Expr> zeroPointer = PointerExpr::create(Expr::createPointer(0));
 
   if (SimplifySymIndices) {
@@ -6100,7 +6095,6 @@ bool Executor::resolveMemoryObjects(
   incomplete = false;
 
   ref<Expr> base = address->getBase();
-  ref<Expr> segment = address->getSegment();
   unsigned size = bytes;
   KType *baseTargetType = targetType;
 
@@ -6110,10 +6104,8 @@ bool Executor::resolveMemoryObjects(
         state.gepExprBases[base], kmodule->targetData->getAllocaAddrSpace()));
   }
 
-  segment =
-      Simplificator::simplifyExpr(state.constraints.cs(), segment).simplified;
   base = Simplificator::simplifyExpr(state.constraints.cs(), base).simplified;
-  ref<PointerExpr> basePointer = PointerExpr::create(segment, base);
+  ref<PointerExpr> basePointer = PointerExpr::create(base, base);
 
   auto mso = MemorySubobject(address, bytes);
   if (state.resolvedSubobjects.count(mso)) {
@@ -6210,9 +6202,8 @@ bool Executor::checkResolvedMemoryObjects(
     std::vector<ref<Expr>> &unboundConditions, ref<Expr> &checkOutOfBounds,
     bool &mayBeOutOfBound) {
 
-  ref<Expr> segment = address->getSegment();
   ref<Expr> base = address->getBase();
-  ref<PointerExpr> basePointer = PointerExpr::create(segment, base);
+  ref<PointerExpr> basePointer = PointerExpr::create(base, base);
   unsigned size = bytes;
 
   if (state.isGEPExpr(base)) {
@@ -6466,9 +6457,8 @@ void Executor::executeMemoryOperation(
                               : getWidthForLLVMType(target->inst()->getType()));
   unsigned bytes = Expr::getMinBytesForWidth(type);
 
-  ref<Expr> segment = address->getSegment();
   ref<Expr> base = address->getBase();
-  ref<PointerExpr> basePointer = PointerExpr::create(segment, base);
+  ref<PointerExpr> basePointer = PointerExpr::create(base, base);
   ref<Expr> zeroPointer = PointerExpr::create(Expr::createPointer(0));
   unsigned size = bytes;
   KType *baseTargetType = targetType;
@@ -6869,7 +6859,7 @@ Executor::lazyInitializeObject(ExecutionState &state, ref<PointerExpr> address,
     sizeExpr = Expr::createPointer(concreteSize);
   }
 
-  ref<Expr> addressExpr = address->getSegment();
+  ref<Expr> addressExpr = address->getBase();
   MemoryObject *mo = allocate(state, sizeExpr, isLocal,
                               /*isGlobal=*/false, nullptr,
                               /*allocationAlignment=*/8, targetType,
@@ -7758,12 +7748,18 @@ bool Executor::getSymbolicSolution(const ExecutionState &state, KTest &res) {
                             response, state.queryMetaData);
     solver->setTimeout(time::Span());
 
-    if (auto invalidResponse = dyn_cast<InvalidResponse>(response)) {
-      fullModel = invalidResponse->initialValues();
-    }
-
     for (auto addr : addresses) {
       free(addr);
+    }
+
+    if (auto invalidResponse = dyn_cast<InvalidResponse>(response)) {
+      fullModel = invalidResponse->initialValues();
+    } else {
+      klee_warning("unable to inshure initial values by allocator (invalid "
+                   "constraints?)!");
+      ExprPPrinter::printQuery(llvm::errs(), state.constraints.cs(),
+                               ConstantExpr::alloc(0, Expr::Bool));
+      return false;
     }
   }
 

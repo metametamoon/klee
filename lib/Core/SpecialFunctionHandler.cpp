@@ -310,10 +310,7 @@ SpecialFunctionHandler::readStringAtAddress(ExecutionState &state,
   const ObjectState *os = op.second;
 
   // the relativeOffset must be concrete as the address is concrete
-  size_t offset = pointerConst->getConstantBase()
-                      ->Sub(pointerConst->getConstantSegment())
-                      ->Add(pointerConst->getConstantOffset())
-                      ->getZExtValue();
+  size_t offset = pointerConst->getConstantOffset()->getZExtValue();
 
   std::ostringstream buf;
   char c = 0;
@@ -919,7 +916,7 @@ void SpecialFunctionHandler::handleMakeSymbolic(
   }
 
   ref<PointerExpr> pointer = PointerExpr::create(arguments[2]);
-  name = pointer->getSegment()->isZero() && pointer->getValue()->isZero()
+  name = pointer->getBase()->isZero() && pointer->getValue()->isZero()
              ? ""
              : readStringAtAddress(state, executor.makePointer(arguments[2]));
 
