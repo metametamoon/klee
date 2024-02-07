@@ -9,6 +9,8 @@
 // RUN: %replay %t.klee-out %t_runner > %t_runner.log
 // RUN: FileCheck -input-file=%t_runner.log %s
 
+#include "klee/klee.h"
+#include <stdio.h>
 #include <stdlib.h>
 
 struct Data {
