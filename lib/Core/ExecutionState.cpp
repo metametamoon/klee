@@ -269,32 +269,21 @@ ExecutionState::findMemoryObject(const Array *array) const {
 bool ExecutionState::getBase(
     ref<Expr> expr,
     std::pair<ref<const MemoryObject>, ref<Expr>> &resolution) const {
-  switch (expr->getKind()) {
-  case Expr::Read: {
-    ref<ReadExpr> base = dyn_cast<ReadExpr>(expr);
-    auto parent = findMemoryObject(base->updates.root);
-    if (!parent) {
-      return false;
-    }
-    resolution = std::make_pair(parent, base->index);
-    return true;
-  }
-  case Expr::Concat: {
-    ref<ReadExpr> base = expr->hasOrderedReads();
-    if (!base) {
-      return false;
-    }
-    auto parent = findMemoryObject(base->updates.root);
-    if (!parent) {
-      return false;
-    }
-    resolution = std::make_pair(parent, base->index);
-    return true;
-  }
-  default: {
+  ref<ReadExpr> base = expr->hasOrderedReads();
+  if (!base) {
     return false;
   }
+  if (ref<LazyInitializationAddressSource> liaSource =
+          dyn_cast<LazyInitializationAddressSource>(
+              base->updates.root->source)) {
+    return getBase(liaSource->pointer, resolution);
   }
+  auto parent = findMemoryObject(base->updates.root);
+  if (!parent) {
+    return false;
+  }
+  resolution = std::make_pair(parent, base->index);
+  return true;
 }
 
 void ExecutionState::removePointerResolutions(const MemoryObject *mo) {

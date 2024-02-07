@@ -6023,8 +6023,6 @@ MemoryObject *Executor::allocate(ExecutionState &state, ref<Expr> size,
           updateNameVersion(state, "const_arr"), kgb, size);
     }
   } else {
-    // sourceAddressArray =
-    //     SourceBuilder::lazyInitializationAddress(lazyInitializationSource);
     sourceAddressArray =
         lazyInitializationSource->hasOrderedReads()->updates.root->source;
   }
@@ -7714,6 +7712,8 @@ bool Executor::getSymbolicSolution(const ExecutionState &state, KTest &res) {
         continue;
       }
 
+      ref<Expr> symcretizedAddress = sizeSymcrete->addressSymcrete.symcretized;
+
       /* Receive address array linked with this size array to request address
        * concretization. */
       ref<Expr> condcretized = concretizations.at(symcrete->symcretized);
@@ -7727,11 +7727,10 @@ bool Executor::getSymbolicSolution(const ExecutionState &state, KTest &res) {
       SparseStorage<unsigned char> storage(0);
       storage.store(0, charAddressIterator,
                     charAddressIterator + sizeof(address));
+      ref<ConstantExpr> constantAddress = ConstantExpr::create(
+          reinterpret_cast<uint64_t>(address), symcretizedAddress->getWidth());
 
-      concretizations[sizeSymcrete->addressSymcrete.symcretized] =
-          ConstantExpr::create(
-              reinterpret_cast<uint64_t>(address),
-              sizeSymcrete->addressSymcrete.symcretized->getWidth());
+      concretizations[symcretizedAddress] = constantAddress;
     }
 
     ref<Expr> concretizationCondition = Expr::createFalse();
@@ -7755,11 +7754,11 @@ bool Executor::getSymbolicSolution(const ExecutionState &state, KTest &res) {
     if (auto invalidResponse = dyn_cast<InvalidResponse>(response)) {
       fullModel = invalidResponse->initialValues();
     } else {
-      klee_warning("unable to inshure initial values by allocator (invalid "
-                   "constraints?)!");
-      ExprPPrinter::printQuery(llvm::errs(), state.constraints.cs(),
-                               ConstantExpr::alloc(0, Expr::Bool));
-      return false;
+      // klee_warning("unable to inshure initial values by allocator (invalid "
+      //              "constraints?)!");
+      // ExprPPrinter::printQuery(llvm::errs(), state.constraints.cs(),
+      //                          ConstantExpr::alloc(0, Expr::Bool));
+      // return false;
     }
   }
 

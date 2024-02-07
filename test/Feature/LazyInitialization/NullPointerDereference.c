@@ -9,11 +9,15 @@ int main() {
   klee_make_symbolic(&x, sizeof(x), "*x");
   if ((uintptr_t)x < (uintptr_t)10) {
     // CHECK: NullPointerDereference.c:[[@LINE+1]]: memory error: null pointer exception
-    *x = 20;
+    x[0] = 20;
+  } else {
+    // CHECK: NullPointerDereference.c:[[@LINE+1]]: memory error: null pointer exception
+    x[0] = 30;
   }
+
   // CHECK-NOT: NullPointerDereference.c:[[@LINE+1]]: memory error: null pointer exception
-  *x = 30;
+  x[1] = 40;
 }
 
 // CHECK: KLEE: done: completed paths = 2
-// CHECK: KLEE: done: generated tests = 3
+// CHECK: KLEE: done: generated tests = 7
