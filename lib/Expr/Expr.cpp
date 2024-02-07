@@ -2057,6 +2057,10 @@ static ref<Expr> AddExpr_create(Expr *l, Expr *r) {
     } else if (rk == Expr::Sub &&
                isa<ConstantExpr>(r->getKid(0))) { // a + (k-b) = k+(a-b)
       return AddExpr::create(r->getKid(0), SubExpr::create(l, r->getKid(1)));
+    } else if (rk == Expr::Sub && *r->getKid(1) == *l) { // a + (b - a) = b
+      return r->getKid(0);
+    } else if (lk == Expr::Sub && *l->getKid(1) == *r) { // (b - a) + a = b
+      return l->getKid(0);
     } else {
       return AddExpr::alloc(l, r);
     }
@@ -2116,6 +2120,18 @@ static ref<Expr> SubExpr_create(Expr *l, Expr *r) {
     } else if (rk == Expr::Sub &&
                isa<ConstantExpr>(r->getKid(0))) { // a - (k-b) = (a+b) - k
       return SubExpr::create(AddExpr::create(l, r->getKid(1)), r->getKid(0));
+    } else if (rk == Expr::Add &&
+               *r->getKid(0) == *l) { // a - (a+b) = -b, a - (b+a) = -b
+      return NotExpr::create(r->getKid(1));
+    } else if (rk == Expr::Add &&
+               *r->getKid(1) == *l) { // a - (a+b) = -b, a - (b+a) = -b
+      return NotExpr::create(r->getKid(0));
+    } else if (lk == Expr::Add &&
+               (*l->getKid(0) == *r)) { // (a + b) - a = b, (b + a) - a = b
+      return l->getKid(1);
+    } else if (lk == Expr::Add &&
+               (*l->getKid(1) == *r)) { // (a + b) - a = b, (b + a) - a = b
+      return l->getKid(0);
     } else {
       return SubExpr::alloc(l, r);
     }

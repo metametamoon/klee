@@ -50,6 +50,7 @@
 #include "klee/Expr/ExprUtil.h"
 #include "klee/Expr/IndependentConstraintSetUnion.h"
 #include "klee/Expr/IndependentSet.h"
+#include "klee/Expr/SymbolicSource.h"
 #include "klee/Expr/Symcrete.h"
 #include "klee/Module/Cell.h"
 #include "klee/Module/CodeGraphInfo.h"
@@ -5820,9 +5821,7 @@ bool Executor::resolveExact(ExecutionState &estate, ref<Expr> address,
   for (unsigned i = 0; i < rl.size(); ++i) {
     const MemoryObject *mo = rl.at(i).get();
     ref<Expr> inBounds;
-    ref<PointerExpr> moPointer =
-        PointerExpr::create(mo->getBaseExpr(), mo->getBaseExpr());
-    inBounds = EqExpr::create(pointer, moPointer);
+    inBounds = EqExpr::create(pointer->getValue(), mo->getBaseExpr());
     StatePair branches =
         forkInternal(*unbound, inBounds, BranchType::ResolvePointer);
 
@@ -6157,9 +6156,7 @@ bool Executor::resolveMemoryObjects(
            ++i) {
         const MemoryObject *mo = i->first;
         ref<Expr> inBounds = mo->getBoundsCheckPointer(address, bytes);
-        ref<Expr> baseInBounds = mo->getBoundsCheckPointer(basePointer, size);
-        ref<Expr> notInBounds = AndExpr::create(
-            Expr::createIsZero(inBounds), Expr::createIsZero(baseInBounds));
+        ref<Expr> notInBounds = Expr::createIsZero(inBounds);
         mayBeResolvedMemoryObjects.push_back(mo);
         checkOutOfBounds = AndExpr::create(checkOutOfBounds, notInBounds);
       }
@@ -6220,16 +6217,6 @@ bool Executor::checkResolvedMemoryObjects(
     ref<Expr> addressNotInBounds =
         Expr::createIsZero(mo->getBoundsCheckPointer(address));
 
-    if (base != address->getValue() || size != bytes) {
-      baseInBounds = AndExpr::create(
-          baseInBounds, mo->getBoundsCheckPointer(basePointer, size));
-    }
-
-    if (hasLazyInitialized) {
-      baseInBounds = AndExpr::create(
-          baseInBounds, Expr::createIsZero(mo->getOffsetExpr(base)));
-    }
-
     inBounds = AndExpr::create(inBounds, baseInBounds);
     inBounds = optimizer.optimizeExpr(inBounds, true);
     inBounds = Simplificator::simplifyExpr(state.constraints.cs(), inBounds)
@@ -6270,20 +6257,12 @@ bool Executor::checkResolvedMemoryObjects(
       } else {
         resolveConditions.push_back(inBounds);
         unboundConditions.push_back(addressNotInBounds);
-        if (hasLazyInitialized /*&& !state.isolated*/) {
-          notInBounds = AndExpr::create(
-              notInBounds, Expr::createIsZero(mo->getOffsetExpr(base)));
-        }
         checkOutOfBounds = notInBounds;
       }
     } else if (mayBeOutOfBound) {
       if (mustBeOutOfBound) {
         checkOutOfBounds = Expr::createTrue();
       } else {
-        if (hasLazyInitialized) {
-          notInBounds = AndExpr::create(
-              notInBounds, Expr::createIsZero(mo->getOffsetExpr(base)));
-        }
         checkOutOfBounds = notInBounds;
       }
     }
@@ -6299,17 +6278,8 @@ bool Executor::checkResolvedMemoryObjects(
       ref<Expr> addressNotInBounds =
           Expr::createIsZero(mo->getBoundsCheckPointer(address));
 
-      if (base != address->getValue() || size != bytes) {
-        baseInBounds = AndExpr::create(
-            baseInBounds, mo->getBoundsCheckPointer(basePointer, size));
-        baseInBounds = AndExpr::create(
-            baseInBounds, Expr::createIsZero(mo->getOffsetExpr(base)));
-      }
-
       if (hasLazyInitialized && i == mayBeResolvedMemoryObjects.size() - 1) {
         inBounds = AndExpr::create(inBounds, checkOutOfBounds);
-        baseInBounds = AndExpr::create(
-            baseInBounds, Expr::createIsZero(mo->getOffsetExpr(base)));
       }
 
       inBounds = AndExpr::create(inBounds, baseInBounds);
@@ -6340,11 +6310,6 @@ bool Executor::checkResolvedMemoryObjects(
       resolveConditions.push_back(inBounds);
       resolvedMemoryObjects.push_back(mo);
       unboundConditions.push_back(addressNotInBounds);
-
-      if (hasLazyInitialized && i == mayBeResolvedMemoryObjects.size() - 1) {
-        notInBounds = AndExpr::create(
-            notInBounds, Expr::createIsZero(mo->getOffsetExpr(base)));
-      }
 
       if (mayBeOutOfBound) {
         checkOutOfBounds = AndExpr::create(checkOutOfBounds, notInBounds);
@@ -6532,11 +6497,6 @@ void Executor::executeMemoryOperation(
 
     ref<Expr> inBounds = mo->getBoundsCheckPointer(address, bytes);
     ref<Expr> baseInBounds = Expr::createTrue();
-
-    if (base != address->getValue() || size != bytes) {
-      baseInBounds = AndExpr::create(
-          baseInBounds, mo->getBoundsCheckPointer(basePointer, size));
-    }
 
     inBounds = AndExpr::create(inBounds, baseInBounds);
 
@@ -7456,6 +7416,9 @@ void Executor::setInitializationGraph(
 
   for (const auto &symbolic : symbolics) {
     KType *symbolicType = symbolic.type;
+    size_t constantSize =
+        cast<ConstantExpr>(model.evaluate(symbolic.array->size))
+            ->getZExtValue();
     if (!symbolicType->getRawType()) {
       continue;
     }
@@ -7469,29 +7432,37 @@ void Executor::setInitializationGraph(
           symbolicType->getRawType()->isStructTy())) {
       continue;
     }
-    for (const auto &innerTypeOffset : symbolicType->getInnerTypes()) {
-      if ((innerTypeOffset.first->getRawType()->isArrayTy() &&
-           innerTypeOffset.first->getRawType()
-               ->getArrayElementType()
-               ->isPointerTy())) {
-        for (const auto &offset : innerTypeOffset.second) {
-          auto arrayType =
-              cast<llvm::ArrayType>(innerTypeOffset.first->getRawType());
-          for (unsigned arrayIdx = 0;
-               arrayIdx < arrayType->getArrayNumElements(); ++arrayIdx) {
-            unsigned newOffset =
-                offset + arrayIdx * kmodule->targetData->getTypeAllocSize(
-                                        innerTypeOffset.first->getRawType()
-                                            ->getArrayElementType());
-            resolvePointer(state, symbolics, model, resolvedPointers, symbolic,
-                           newOffset);
+
+    size_t elementSize =
+        kmodule->targetData->getTypeAllocSize(symbolicType->getRawType());
+    for (size_t elemIdx = 0; (elemIdx + 1) * elementSize <= constantSize;
+         ++elemIdx) {
+      size_t elemOffset = elemIdx * elementSize;
+      for (const auto &innerTypeOffset : symbolicType->getInnerTypes()) {
+        if ((innerTypeOffset.first->getRawType()->isArrayTy() &&
+             innerTypeOffset.first->getRawType()
+                 ->getArrayElementType()
+                 ->isPointerTy())) {
+          for (const auto &offset : innerTypeOffset.second) {
+            auto arrayType =
+                cast<llvm::ArrayType>(innerTypeOffset.first->getRawType());
+            for (unsigned arrayIdx = 0;
+                 arrayIdx < arrayType->getArrayNumElements(); ++arrayIdx) {
+              unsigned newOffset =
+                  elemOffset + offset +
+                  arrayIdx * kmodule->targetData->getTypeAllocSize(
+                                 innerTypeOffset.first->getRawType()
+                                     ->getArrayElementType());
+              resolvePointer(state, symbolics, model, resolvedPointers,
+                             symbolic, newOffset);
+            }
           }
         }
-      }
-      if (innerTypeOffset.first->getRawType()->isPointerTy()) {
-        for (const auto &offset : innerTypeOffset.second) {
-          resolvePointer(state, symbolics, model, resolvedPointers, symbolic,
-                         offset);
+        if (innerTypeOffset.first->getRawType()->isPointerTy()) {
+          for (const auto &offset : innerTypeOffset.second) {
+            resolvePointer(state, symbolics, model, resolvedPointers, symbolic,
+                           elemOffset + offset);
+          }
         }
       }
     }
@@ -7735,30 +7706,29 @@ bool Executor::getSymbolicSolution(const ExecutionState &state, KTest &res) {
 
     ref<Expr> concretizationCondition = Expr::createFalse();
     for (const auto &concretization : concretizations) {
-      concretizationCondition =
+      solver->setTimeout(coreSolverTimeout);
+      success = solver->getResponse(
+          extendedConstraints.cs(),
           OrExpr::create(Expr::createIsZero(EqExpr::create(
                              concretization.first, concretization.second)),
-                         concretizationCondition);
-    }
+                         concretizationCondition),
+          response, state.queryMetaData);
+      solver->setTimeout(time::Span());
 
-    solver->setTimeout(coreSolverTimeout);
-    success =
-        solver->getResponse(extendedConstraints.cs(), concretizationCondition,
-                            response, state.queryMetaData);
-    solver->setTimeout(time::Span());
+      if (auto invalidResponse = dyn_cast<InvalidResponse>(response)) {
+        concretizationCondition =
+            OrExpr::create(Expr::createIsZero(EqExpr::create(
+                               concretization.first, concretization.second)),
+                           concretizationCondition);
+        fullModel = invalidResponse->initialValues();
+        model = invalidResponse->initialValuesFor(objects);
+      } else {
+        llvm::errs();
+      }
+    }
 
     for (auto addr : addresses) {
       free(addr);
-    }
-
-    if (auto invalidResponse = dyn_cast<InvalidResponse>(response)) {
-      fullModel = invalidResponse->initialValues();
-    } else {
-      // klee_warning("unable to inshure initial values by allocator (invalid "
-      //              "constraints?)!");
-      // ExprPPrinter::printQuery(llvm::errs(), state.constraints.cs(),
-      //                          ConstantExpr::alloc(0, Expr::Bool));
-      // return false;
     }
   }
 
