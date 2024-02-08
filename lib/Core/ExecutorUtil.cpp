@@ -410,7 +410,6 @@ ref<Expr> Executor::evalConstantExpr(const llvm::ConstantExpr *ce,
       auto iop = evalConstant(cast<Constant>(ii.getOperand()), rm, ki);
       ref<Expr> indexOp;
       if (auto ipointer = dyn_cast<PointerExpr>(iop)) {
-        base = AddExpr::create(base, ipointer->getBase());
         indexOp = ipointer->getOffset();
       } else
         indexOp = iop;
