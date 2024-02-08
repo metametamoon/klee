@@ -6182,6 +6182,9 @@ bool Executor::resolveMemoryObjects(
         ref<const MemoryObject> idLazyInitialization = lazyInitializeObject(
             state, basePointer, target, baseTargetType, minObjectSize, sizeExpr,
             false, UseSymbolicSizeLazyInit);
+        RefObjectPair op = state.addressSpace.findOrLazyInitializeObject(
+            idLazyInitialization.get());
+        state.addressSpace.bindObject(op.first, op.second.get());
         mayBeResolvedMemoryObjects.push_back(idLazyInitialization);
       }
     }
@@ -6822,6 +6825,7 @@ Executor::lazyInitializeObject(ExecutionState &state, ref<PointerExpr> address,
                               /*isGlobal=*/false, nullptr,
                               /*allocationAlignment=*/8, targetType,
                               addressExpr, timestamp, isSymbolic);
+
   return mo;
 }
 
