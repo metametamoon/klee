@@ -161,7 +161,11 @@ public:
   const Array *visitArray(const Array *arr) {
     ref<SymbolicSource> source = visitSource(arr->source);
     ref<Expr> size = visit(arr->getSize());
-    return Array::create(size, source, arr->getDomain(), arr->getRange());
+    if (source != arr->source || size != arr->getSize()) {
+      return Array::create(size, source, arr->getDomain(), arr->getRange());
+    } else {
+      return arr;
+    }
   }
 
   UpdateList visitUpdateList(UpdateList u) {
@@ -183,10 +187,14 @@ public:
   }
 
   Action visitRead(const ReadExpr &re) override {
-    ref<Expr> v = visit(re.index);
-    UpdateList u = visitUpdateList(re.updates);
-    ref<Expr> e = ReadExpr::create(u, v);
-    return Action::changeTo(e);
+    // ref<Expr> v = visit(re.index);
+    // UpdateList u = visitUpdateList(re.updates);
+    // // UpdateList u = re.updates;
+    // if (v != re.index || u != re.updates) {
+    //   return Action::changeTo(ReadExpr::create(u, v));
+    // }
+    // return Action::skipChildren();
+    return Action::doChildren();
   }
 
 public:

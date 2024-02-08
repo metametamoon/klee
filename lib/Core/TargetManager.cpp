@@ -231,10 +231,7 @@ void TargetManager::update(ExecutionState *current,
 
   for (auto state : localStates) {
     updateReached(*state);
-    if (std::find(removedStates.begin(), removedStates.end(), state) ==
-        removedStates.end()) {
-      updateTargets(*state);
-    }
+    updateTargets(*state);
     if (state->areTargetsChanged()) {
       changedStates.insert(state);
     }

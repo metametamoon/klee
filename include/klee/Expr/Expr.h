@@ -706,6 +706,8 @@ public:
   int compare(const UpdateList &b) const;
 
   bool operator<(const UpdateList &rhs) const { return compare(rhs) < 0; }
+  bool operator==(const UpdateList &rhs) const { return compare(rhs) == 0; }
+  bool operator!=(const UpdateList &rhs) const { return compare(rhs) != 0; }
 
   unsigned hash() const;
   unsigned height() const;
