@@ -217,17 +217,15 @@ ExecutionState &GuidedSearcher::selectState() {
 void GuidedSearcher::update(
     ExecutionState *current, const std::vector<ExecutionState *> &addedStates,
     const std::vector<ExecutionState *> &removedStates) {
-  if (current) {
-    if (current && (std::find(removedStates.begin(), removedStates.end(),
-                              current) == removedStates.end())) {
-      localStates.insert(current);
-    }
-    for (const auto state : removedStates) {
-      localStates.insert(state);
-    }
-    update(localStates);
-    localStates.clear();
+  if (current && (std::find(removedStates.begin(), removedStates.end(),
+                            current) == removedStates.end())) {
+    localStates.insert(current);
   }
+  for (const auto state : removedStates) {
+    localStates.insert(state);
+  }
+  update(localStates);
+  localStates.clear();
 
   if (current) {
     ref<const TargetsHistory> history = current->history();

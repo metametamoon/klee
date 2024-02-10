@@ -245,10 +245,7 @@ void TargetManager::update(ExecutionState *current,
   }
 
   for (auto state : changedStates) {
-    if (std::find(addedStates.begin(), addedStates.end(), state) ==
-        addedStates.end()) {
-      collect(*state);
-    }
+    collect(*state);
     state->stepTargetsAndHistory();
   }
 
