@@ -154,7 +154,8 @@ ref<Expr> ObjectState::read8(ref<Expr> offset) const {
 
 void ObjectState::write8(unsigned offset, uint8_t value) {
   valueOS.writeWidth(offset, value);
-  baseOS.writeWidth(offset, ConstantExpr::create(0, Context::get().getPointerWidth()));
+  baseOS.writeWidth(offset,
+                    ConstantExpr::create(0, Context::get().getPointerWidth()));
 }
 
 void ObjectState::write8(unsigned offset, ref<Expr> value) {
@@ -162,14 +163,16 @@ void ObjectState::write8(unsigned offset, ref<Expr> value) {
   if (auto pointer = dyn_cast<PointerExpr>(value)) {
     if (pointer->getBase()->isZero()) {
       valueOS.writeWidth(offset, pointer->getValue());
-      baseOS.writeWidth(offset, ConstantExpr::create(0, Context::get().getPointerWidth()));
+      baseOS.writeWidth(
+          offset, ConstantExpr::create(0, Context::get().getPointerWidth()));
     } else {
       valueOS.writeWidth(offset, pointer->getValue());
       baseOS.writeWidth(offset, pointer->getBase());
     }
   } else {
     valueOS.writeWidth(offset, value);
-    baseOS.writeWidth(offset, ConstantExpr::create(0, Context::get().getPointerWidth()));
+    baseOS.writeWidth(
+        offset, ConstantExpr::create(0, Context::get().getPointerWidth()));
   }
 }
 
@@ -197,14 +200,16 @@ void ObjectState::write8(ref<Expr> offset, ref<Expr> value) {
   if (auto pointer = dyn_cast<PointerExpr>(value)) {
     if (pointer->getBase()->isZero()) {
       valueOS.writeWidth(offset, pointer->getValue());
-      baseOS.writeWidth(offset, ConstantExpr::create(0, Context::get().getPointerWidth()));
+      baseOS.writeWidth(
+          offset, ConstantExpr::create(0, Context::get().getPointerWidth()));
     } else {
       valueOS.writeWidth(offset, pointer->getValue());
       baseOS.writeWidth(offset, pointer->getBase());
     }
   } else {
     valueOS.writeWidth(offset, value);
-    baseOS.writeWidth(offset, ConstantExpr::create(0, Context::get().getPointerWidth()));
+    baseOS.writeWidth(
+        offset, ConstantExpr::create(0, Context::get().getPointerWidth()));
   }
 }
 
@@ -376,17 +381,21 @@ bool ObjectState::isAccessableFrom(KType *accessingType) const {
 
 /***/
 
-ObjectStage::ObjectStage(const Array *array, ref<Expr> defaultValue, bool safe, Expr::Width width)
+ObjectStage::ObjectStage(const Array *array, ref<Expr> defaultValue, bool safe,
+                         Expr::Width width)
     : knownSymbolics(defaultValue), unflushedMask(false),
-      updates(array, nullptr), size(array->size), safeRead(safe), width(width) {}
+      updates(array, nullptr), size(array->size), safeRead(safe), width(width) {
+}
 
-ObjectStage::ObjectStage(ref<Expr> size, ref<Expr> defaultValue, bool safe, Expr::Width width)
+ObjectStage::ObjectStage(ref<Expr> size, ref<Expr> defaultValue, bool safe,
+                         Expr::Width width)
     : knownSymbolics(defaultValue), unflushedMask(false),
       updates(nullptr, nullptr), size(size), safeRead(safe), width(width) {}
 
 ObjectStage::ObjectStage(const ObjectStage &os)
     : knownSymbolics(os.knownSymbolics), unflushedMask(os.unflushedMask),
-      updates(os.updates), size(os.size), safeRead(os.safeRead), width(os.width) {}
+      updates(os.updates), size(os.size), safeRead(os.safeRead),
+      width(os.width) {}
 
 /***/
 
@@ -394,8 +403,7 @@ const UpdateList &ObjectStage::getUpdates() const {
   if (auto sizeExpr = dyn_cast<ConstantExpr>(size)) {
     auto size = sizeExpr->getZExtValue();
     if (knownSymbolics.storage().size() == size) {
-      SparseStorage<ref<ConstantExpr>> values(
-          ConstantExpr::create(0, width));
+      SparseStorage<ref<ConstantExpr>> values(ConstantExpr::create(0, width));
       UpdateList symbolicUpdates = UpdateList(nullptr, nullptr);
       for (unsigned i = 0; i < size; i++) {
         auto value = knownSymbolics.load(i);
@@ -406,7 +414,8 @@ const UpdateList &ObjectStage::getUpdates() const {
           symbolicUpdates.extend(ConstantExpr::create(i, Expr::Int32), value);
         }
       }
-      auto array = Array::create(sizeExpr, SourceBuilder::constant(values), Expr::Int32, width);
+      auto array = Array::create(sizeExpr, SourceBuilder::constant(values),
+                                 Expr::Int32, width);
       updates = UpdateList(array, symbolicUpdates.head);
       knownSymbolics.reset();
       unflushedMask.reset();
@@ -414,9 +423,9 @@ const UpdateList &ObjectStage::getUpdates() const {
   }
 
   if (!updates.root) {
-    SparseStorage<ref<ConstantExpr>> values(
-        ConstantExpr::create(0, width));
-    auto array = Array::create(size, SourceBuilder::constant(values), Expr::Int32, width);
+    SparseStorage<ref<ConstantExpr>> values(ConstantExpr::create(0, width));
+    auto array = Array::create(size, SourceBuilder::constant(values),
+                               Expr::Int32, width);
     updates = UpdateList(array, updates.head);
   }
 
