@@ -128,6 +128,7 @@ protected:
   };
 
   static ExprCacheSet cachedExpressions;
+  static ExprCacheSet cachedConstantExpressions;
   static ref<Expr> createCachedExpr(ref<Expr> e);
   bool isCached = false;
   bool toBeCleared = false;
@@ -1450,8 +1451,7 @@ private:
   ConstantExpr(const llvm::APFloat &v);
 
 public:
-  ~ConstantExpr() {}
-
+  ~ConstantExpr();
   Width getWidth() const { return value.getBitWidth(); }
   Kind getKind() const { return Constant; }
 
@@ -1719,6 +1719,7 @@ protected:
 
 class ConstantPointerExpr : public PointerExpr {
 public:
+  ~ConstantPointerExpr();
   static const Kind kind = Expr::ConstantPointer;
   static const unsigned numKids = 2;
   static ref<Expr> alloc(const ref<ConstantExpr> &b,
@@ -1726,7 +1727,7 @@ public:
     ref<Expr> r(new ConstantPointerExpr(b, o));
     r->computeHash();
     r->computeHeight();
-    return r;
+    return createCachedExpr(r);
   }
   static ref<Expr> create(const ref<ConstantExpr> &b,
                           const ref<ConstantExpr> &o);
