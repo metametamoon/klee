@@ -572,20 +572,42 @@ std::string Expr::toString() const {
 /***/
 
 Expr::ExprCacheSet Expr::cachedExpressions;
+Expr::ExprCacheSet Expr::cachedConstantExpressions;
 
 Expr::~Expr() {
   Expr::count--;
   if (isCached) {
     toBeCleared = true;
     cachedExpressions.cache.erase(this);
+    isCached = false;
+  }
+}
+
+ConstantExpr::~ConstantExpr() {
+  Expr::count--;
+  if (isCached) {
+    toBeCleared = true;
+    cachedConstantExpressions.cache.erase(this);
+    isCached = false;
+  }
+}
+
+ConstantPointerExpr::~ConstantPointerExpr() {
+  Expr::count--;
+  if (isCached) {
+    toBeCleared = true;
+    cachedConstantExpressions.cache.erase(this);
+    isCached = false;
   }
 }
 
 ref<Expr> Expr::createCachedExpr(ref<Expr> e) {
-
-  std::pair<CacheType::const_iterator, bool> success =
-      cachedExpressions.cache.insert(e.get());
-
+  std::pair<CacheType::const_iterator, bool> success;
+  if (isa<ConstantExpr>(e) || isa<ConstantPointerExpr>(e)) {
+    success = cachedConstantExpressions.cache.insert(e.get());
+  } else {
+    success = cachedExpressions.cache.insert(e.get());
+  }
   if (success.second) {
     // Cache miss
     e->isCached = true;
