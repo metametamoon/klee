@@ -21,6 +21,7 @@ DISABLE_WARNING_DEPRECATED_DECLARATIONS
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/DenseSet.h"
+#include "llvm/ADT/Hashing.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/raw_ostream.h"
@@ -42,6 +43,7 @@ namespace klee {
 class Array;
 class ArrayCache;
 class ConstantExpr;
+class ConstantPointerExpr;
 class Expr;
 class ReadExpr;
 class ObjectState;
@@ -102,6 +104,15 @@ Todo: Shouldn't bool \c Xor just be written as not equal?
 class Expr {
 public:
   static void splitAnds(ref<Expr> e, std::vector<ref<Expr>> &exprs);
+  static unsigned count;
+  static const unsigned MAGIC_HASH_CONSTANT = 39;
+
+  /// The type of an expression is simply its width, in bits.
+  typedef unsigned Width;
+
+  /// Width of an expression in bytes.
+  /// ByteWidth = (Width + CHAR_BIT - 1) / CHAR_BIT
+  typedef unsigned ByteWidth;
 
 protected:
   struct ExprHash {
@@ -127,23 +138,40 @@ protected:
     }
   };
 
+  struct APIntHash {
+    unsigned operator()(const llvm::APInt &e) const {
+      return llvm::hash_value(e);
+    }
+  };
+
+  struct APIntPairHash {
+    unsigned operator()(const std::pair<llvm::APInt, llvm::APInt> &e) const {
+      return llvm::hash_value(e.first) ^
+             (llvm::hash_value(e.second) * MAGIC_HASH_CONSTANT);
+    }
+  };
+
+  struct ConstantExprCacheSet {
+    std::unordered_map<llvm::APInt, ConstantExpr *, APIntHash> cache;
+    ~ConstantExprCacheSet();
+  };
+
+  struct ConstantPointerExprCacheSet {
+    std::unordered_map<std::pair<llvm::APInt, llvm::APInt>,
+                       ConstantPointerExpr *, APIntPairHash>
+        cache;
+    ~ConstantPointerExprCacheSet();
+  };
+
   static ExprCacheSet cachedExpressions;
-  static ExprCacheSet cachedConstantExpressions;
+  static ConstantExprCacheSet cachedConstantExpressions;
+  static ConstantPointerExprCacheSet cachedConstantPointerExpressions;
   static ref<Expr> createCachedExpr(ref<Expr> e);
   bool isCached = false;
   bool toBeCleared = false;
+  void setIsCached(bool value) { isCached = value; }
 
 public:
-  static unsigned count;
-  static const unsigned MAGIC_HASH_CONSTANT = 39;
-
-  /// The type of an expression is simply its width, in bits.
-  typedef unsigned Width;
-
-  /// Width of an expression in bytes.
-  /// ByteWidth = (Width + CHAR_BIT - 1) / CHAR_BIT
-  typedef unsigned ByteWidth;
-
   // NOTE: The prefix "Int" in no way implies the integer type of expression.
   // For example, Int64 can indicate i64, double or <2 * i32> in different
   // cases.
@@ -1447,8 +1475,13 @@ private:
 
   bool mIsFloat;
 
-  ConstantExpr(const llvm::APInt &v) : value(v), mIsFloat(false) {}
-  ConstantExpr(const llvm::APFloat &v);
+  ConstantExpr(const llvm::APInt &v, bool isFloat = false)
+      : value(v), mIsFloat(isFloat) {
+    if (mIsFloat) {
+      assert(&(v.getSemantics()) == &(getFloatSemantics()) &&
+             "float semantics mismatch");
+    }
+  }
 
 public:
   ~ConstantExpr();
@@ -1515,14 +1548,21 @@ public:
   void toMemory(void *address);
 
   static ref<ConstantExpr> alloc(const llvm::APInt &v) {
-    ref<ConstantExpr> r(new ConstantExpr(v));
-    r->computeHash();
-    r->computeHeight();
-    return createCachedExpr(r);
+    auto success = cachedConstantExpressions.cache.find(v);
+    if (success == cachedConstantExpressions.cache.end()) {
+      // Cache miss
+      ref<ConstantExpr> r = new ConstantExpr(v);
+      r->computeHash();
+      r->computeHeight();
+      r->isCached = true;
+      cachedConstantExpressions.cache[v] = r.get();
+      return r;
+    }
+    return success->second;
   }
 
   static ref<ConstantExpr> alloc(const llvm::APFloat &f) {
-    ref<ConstantExpr> r(new ConstantExpr(f));
+    ref<ConstantExpr> r(new ConstantExpr(f.bitcastToAPInt(), true));
     r->computeHash();
     r->computeHeight();
     return createCachedExpr(r);
@@ -1719,19 +1759,35 @@ protected:
 
 class ConstantPointerExpr : public PointerExpr {
 public:
-  ~ConstantPointerExpr();
   static const Kind kind = Expr::ConstantPointer;
   static const unsigned numKids = 2;
-  static ref<Expr> alloc(const ref<ConstantExpr> &b,
-                         const ref<ConstantExpr> &o) {
-    ref<Expr> r(new ConstantPointerExpr(b, o));
-    r->computeHash();
-    r->computeHeight();
-    return createCachedExpr(r);
+  static ref<ConstantPointerExpr> alloc(const ref<ConstantExpr> &b,
+                                        const ref<ConstantExpr> &o) {
+    if (!b->isFloat() && !o->isFloat()) {
+      auto success = Expr::cachedConstantPointerExpressions.cache.find(
+          {b->getAPValue(), o->getAPValue()});
+      if (success == Expr::cachedConstantPointerExpressions.cache.end()) {
+        // Cache miss
+        ref<ConstantPointerExpr> r = new ConstantPointerExpr(b, o);
+        r->computeHash();
+        r->computeHeight();
+        r->isCached = true;
+        cachedConstantPointerExpressions
+            .cache[{b->getAPValue(), o->getAPValue()}] = r.get();
+        return r;
+      }
+      return success->second;
+    } else {
+      ref<ConstantPointerExpr> r = new ConstantPointerExpr(b, o);
+      r->computeHash();
+      r->computeHeight();
+      return createCachedExpr(r);
+    }
   }
   static ref<Expr> create(const ref<ConstantExpr> &b,
                           const ref<ConstantExpr> &o);
 
+  ~ConstantPointerExpr();
   Kind getKind() const { return Expr::ConstantPointer; }
   ref<ConstantExpr> getConstantBase() const { return cast<ConstantExpr>(base); }
   ref<ConstantExpr> getConstantOffset() const {
