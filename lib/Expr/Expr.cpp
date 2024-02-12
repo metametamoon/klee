@@ -571,7 +571,8 @@ std::string Expr::toString() const {
 /***/
 
 Expr::ExprCacheSet Expr::cachedExpressions;
-Expr::ExprCacheSet Expr::cachedConstantExpressions;
+Expr::ConstantExprCacheSet Expr::cachedConstantExpressions;
+Expr::ConstantPointerExprCacheSet Expr::cachedConstantPointerExpressions;
 
 Expr::~Expr() {
   Expr::count--;
@@ -583,30 +584,51 @@ Expr::~Expr() {
 }
 
 ConstantExpr::~ConstantExpr() {
-  Expr::count--;
   if (isCached) {
     toBeCleared = true;
-    cachedConstantExpressions.cache.erase(this);
+    if (mIsFloat) {
+      cachedExpressions.cache.erase(this);
+    } else {
+      cachedConstantExpressions.cache.erase(value);
+    }
     isCached = false;
   }
 }
 
 ConstantPointerExpr::~ConstantPointerExpr() {
-  Expr::count--;
   if (isCached) {
     toBeCleared = true;
-    cachedConstantExpressions.cache.erase(this);
+    if (!cast<ConstantExpr>(base)->isFloat() &&
+        !cast<ConstantExpr>(value)->isFloat()) {
+      cachedConstantPointerExpressions.cache.erase(
+          {cast<ConstantExpr>(base)->getAPValue(),
+           cast<ConstantExpr>(value)->getAPValue()});
+    } else {
+      cachedExpressions.cache.erase(this);
+    }
     isCached = false;
+  }
+}
+
+Expr::ConstantExprCacheSet::~ConstantExprCacheSet() {
+  while (cache.size() != 0) {
+    auto tmp = *cache.begin();
+    tmp.second->isCached = false;
+    cache.erase(cache.begin());
+  }
+}
+
+Expr::ConstantPointerExprCacheSet::~ConstantPointerExprCacheSet() {
+  while (cache.size() != 0) {
+    auto tmp = *cache.begin();
+    tmp.second->isCached = false;
+    cache.erase(cache.begin());
   }
 }
 
 ref<Expr> Expr::createCachedExpr(ref<Expr> e) {
   std::pair<CacheType::const_iterator, bool> success;
-  if (isa<ConstantExpr>(e) || isa<ConstantPointerExpr>(e)) {
-    success = cachedConstantExpressions.cache.insert(e.get());
-  } else {
-    success = cachedExpressions.cache.insert(e.get());
-  }
+  success = cachedExpressions.cache.insert(e.get());
   if (success.second) {
     // Cache miss
     e->isCached = true;
@@ -732,12 +754,6 @@ void ConstantExpr::toString(std::string &Res, unsigned radix) const {
 #else
   Res = value.toString(radix, false);
 #endif
-}
-
-ConstantExpr::ConstantExpr(const llvm::APFloat &v)
-    : value(v.bitcastToAPInt()), mIsFloat(true) {
-  assert(&(v.getSemantics()) == &(getFloatSemantics()) &&
-         "float semantics mismatch");
 }
 
 const llvm::fltSemantics &ConstantExpr::widthToFloatSemantics(Width width) {
