@@ -4346,22 +4346,44 @@ void Executor::updateStates(ExecutionState *current) {
         }
       }
     }
+
+    for (auto &state : removedStates) {
+      if (!state->mergers.empty()) {
+        auto mergeHandler = state->mergers.back();
+        if (allPaused.count(state)) {
+          mergeHandler->reached--;
+        }
+        mergeHandler->open--;
+        state->mergers.pop_back();
+        if (mergeHandler->reached == mergeHandler->open) {
+          toMerge.insert(mergeHandler);
+        }
+      }
+    }
+  }
+
+  std::vector<ExecutionState *> notPausedHotFix;
+
+  for (auto &state : removedStates) {
+    if (!allPaused.count(state)) {
+      notPausedHotFix.push_back(state);
+    }
   }
 
   if (targetManager) {
-    targetManager->update(current, addedStates, removedStates);
+    targetManager->update(current, addedStates, notPausedHotFix);
   }
 
   if (guidanceKind == GuidanceKind::ErrorGuidance && targetedExecutionManager) {
-    targetedExecutionManager->update(current, addedStates, removedStates);
+    targetedExecutionManager->update(current, addedStates, notPausedHotFix);
   }
 
   if (targetCalculator) {
-    targetCalculator->update(current, addedStates, removedStates);
+    targetCalculator->update(current, addedStates, notPausedHotFix);
   }
 
   if (searcher) {
-    searcher->update(current, addedStates, removedStates);
+    searcher->update(current, addedStates, notPausedHotFix);
   }
 
   states.insert(addedStates.begin(), addedStates.end());
@@ -4391,6 +4413,8 @@ void Executor::updateStates(ExecutionState *current) {
     }
     delete es;
   }
+
+  removedStates.clear();
 
   if (UseMerge) {
     for (auto mergeHandler : toMerge) {
@@ -4422,8 +4446,6 @@ void Executor::updateStates(ExecutionState *current) {
       mergeStates.erase(mergeHandler);
     }
   }
-
-  removedStates.clear();
 
   if (targetManager) {
     targetManager->update(nullptr, {}, paused);
