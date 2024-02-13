@@ -73,6 +73,8 @@ public:
   /// size in bytes
   ref<Expr> sizeExpr;
 
+  ref<Expr> conditionExpr;
+
   uint64_t alignment;
 
   mutable std::string name;
@@ -101,22 +103,24 @@ public:
   // XXX this is just a temp hack, should be removed
   explicit MemoryObject(uint64_t _address)
       : id(0), timestamp(0), addressExpr(Expr::createPointer(_address)),
-        sizeExpr(Expr::createPointer(0)), alignment(0), isFixed(true),
-        isLazyInitialized(false), parent(nullptr), type(nullptr),
-        content(nullptr), allocSite(nullptr) {}
+        sizeExpr(Expr::createPointer(0)), conditionExpr(Expr::createTrue()),
+        alignment(0), isFixed(true), isLazyInitialized(false), parent(nullptr),
+        type(nullptr), content(nullptr), allocSite(nullptr) {}
 
   MemoryObject(
       ref<Expr> _address, ref<Expr> _size, uint64_t alignment, bool _isLocal,
       bool _isGlobal, bool _isFixed, bool _isLazyInitialized,
       ref<CodeLocation> _allocSite, MemoryManager *_parent, KType *_type,
+      ref<Expr> _condition = Expr::createTrue(),
       unsigned _timestamp = 0 /* unused if _isLazyInitialized is false*/,
       const Array *_content =
           nullptr /* unused if _isLazyInitialized is false*/)
       : id(counter++), timestamp(_timestamp), addressExpr(_address),
-        sizeExpr(_size), alignment(alignment), name("unnamed"),
-        isLocal(_isLocal), isGlobal(_isGlobal), isFixed(_isFixed),
-        isLazyInitialized(_isLazyInitialized), isUserSpecified(false),
-        parent(_parent), type(_type), content(_content), allocSite(_allocSite) {
+        sizeExpr(_size), conditionExpr(_condition), alignment(alignment),
+        name("unnamed"), isLocal(_isLocal), isGlobal(_isGlobal),
+        isFixed(_isFixed), isLazyInitialized(_isLazyInitialized),
+        isUserSpecified(false), parent(_parent), type(_type), content(_content),
+        allocSite(_allocSite) {
     if (isLazyInitialized) {
       timestamp = _timestamp;
     } else {
@@ -136,24 +140,12 @@ public:
   bool hasSymbolicSize() const { return !isa<ConstantExpr>(getSizeExpr()); }
   ref<Expr> getBaseExpr() const { return addressExpr; }
   ref<Expr> getSizeExpr() const { return sizeExpr; }
+  ref<Expr> getConditionExpr() const { return conditionExpr; }
   ref<Expr> getOffsetExpr(ref<Expr> pointer) const {
     return SubExpr::create(pointer, getBaseExpr());
   }
   ref<Expr> getOffsetExpr(ref<PointerExpr> pointer) const {
     return SubExpr::create(pointer->getValue(), getBaseExpr());
-  }
-  ref<Expr> getBoundsCheckPointer(ref<PointerExpr> pointer) const {
-    ref<Expr> base = pointer->getBase();
-    ref<Expr> address = pointer->getValue();
-    return AndExpr::create(EqExpr::create(getBaseExpr(), base),
-                           getBoundsCheckOffset(getOffsetExpr(address)));
-  }
-  ref<Expr> getBoundsCheckPointer(ref<PointerExpr> pointer,
-                                  unsigned bytes) const {
-    ref<Expr> base = pointer->getBase();
-    ref<Expr> address = pointer->getValue();
-    return AndExpr::create(EqExpr::create(getBaseExpr(), base),
-                           getBoundsCheckOffset(getOffsetExpr(address), bytes));
   }
 
   ref<Expr> getBoundsCheckOffset(ref<Expr> offset) const {
@@ -172,6 +164,32 @@ public:
                     SubExpr::create(getSizeExpr(), Expr::createPointer(bytes)),
                     Expr::createPointer(1)));
     return SelectExpr::create(offsetSizeCheck, trueExpr, Expr::createFalse());
+  }
+
+  ref<Expr> getBoundsCheckAddress(ref<Expr> address) const {
+    return getBoundsCheckOffset(getOffsetExpr(address));
+  }
+  ref<Expr> getBoundsCheckAddress(ref<Expr> address, unsigned bytes) const {
+    return getBoundsCheckOffset(getOffsetExpr(address), bytes);
+  }
+  ref<Expr> getBaseCheck(ref<Expr> base) const {
+    return EqExpr::create(base, getBaseExpr());
+  }
+
+  ref<Expr> getBoundsCheckPointer(ref<PointerExpr> pointer) const {
+    ref<Expr> condition = getBaseCheck(pointer->getBase());
+    condition =
+        AndExpr::create(condition, getBoundsCheckAddress(pointer->getValue()));
+    // condition = AndExpr::create(condition, getConditionExpr());
+    return condition;
+  }
+  ref<Expr> getBoundsCheckPointer(ref<PointerExpr> pointer,
+                                  unsigned bytes) const {
+    ref<Expr> condition = getBaseCheck(pointer->getBase());
+    condition = AndExpr::create(
+        condition, getBoundsCheckAddress(pointer->getValue(), bytes));
+    // condition = AndExpr::create(condition, getConditionExpr());
+    return condition;
   }
 
   /// Compare this object with memory object b.
@@ -215,8 +233,10 @@ private:
   Expr::Width width;
 
 public:
-  ObjectStage(const Array *array, ref<Expr> defaultValue, bool safe = true, Expr::Width width = Expr::Int8);
-  ObjectStage(ref<Expr> size, ref<Expr> defaultValue, bool safe = true, Expr::Width width = Expr::Int8);
+  ObjectStage(const Array *array, ref<Expr> defaultValue, bool safe = true,
+              Expr::Width width = Expr::Int8);
+  ObjectStage(ref<Expr> size, ref<Expr> defaultValue, bool safe = true,
+              Expr::Width width = Expr::Int8);
 
   ObjectStage(const ObjectStage &os);
   ~ObjectStage() = default;

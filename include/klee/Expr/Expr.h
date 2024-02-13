@@ -152,14 +152,27 @@ protected:
     }
   };
 
+  struct APIntEq {
+    bool operator()(const llvm::APInt &l, const llvm::APInt &r) const {
+      return l.getBitWidth() == r.getBitWidth() && l == r;
+    }
+  };
+
+  struct APIntPairEq {
+    bool operator()(const std::pair<llvm::APInt, llvm::APInt> &l,
+                    const std::pair<llvm::APInt, llvm::APInt> &r) const {
+      return APIntEq()(l.first, r.first) && APIntEq()(l.second, r.second);
+    }
+  };
+
   struct ConstantExprCacheSet {
-    std::unordered_map<llvm::APInt, ConstantExpr *, APIntHash> cache;
+    std::unordered_map<llvm::APInt, ConstantExpr *, APIntHash, APIntEq> cache;
     ~ConstantExprCacheSet();
   };
 
   struct ConstantPointerExprCacheSet {
     std::unordered_map<std::pair<llvm::APInt, llvm::APInt>,
-                       ConstantPointerExpr *, APIntPairHash>
+                       ConstantPointerExpr *, APIntPairHash, APIntPairEq>
         cache;
     ~ConstantPointerExprCacheSet();
   };
@@ -1478,7 +1491,7 @@ private:
   ConstantExpr(const llvm::APInt &v, bool isFloat = false)
       : value(v), mIsFloat(isFloat) {
     if (mIsFloat) {
-      assert(&(v.getSemantics()) == &(getFloatSemantics()) &&
+      assert(&(getAPFloatValue().getSemantics()) == &(getFloatSemantics()) &&
              "float semantics mismatch");
     }
   }
@@ -1701,7 +1714,8 @@ public:
   ref<Expr> getBase() const { return base; }
   ref<Expr> getValue() const { return value; }
   ref<Expr> getOffset() const {
-    assert(value->getWidth() == base->getWidth() && "Invalid getOffset() call!");
+    assert(value->getWidth() == base->getWidth() &&
+           "Invalid getOffset() call!");
     return SubExpr::create(value, base);
   }
 

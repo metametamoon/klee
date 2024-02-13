@@ -379,10 +379,12 @@ bool CexCachingSolver::computeValue(const Query &query, ref<Expr> &result) {
   assert((isa<ConstantExpr>(result) || isa<ConstantPointerExpr>(result)) &&
          "assignment evaluation did not result in constant");
 
-  if (cast<ConstantExpr>(result)->isTrue()) {
-    setResponse(query.negateExpr(), a);
-  } else if (cast<ConstantExpr>(result)->isFalse()) {
-    setResponse(query, a);
+  if (ref<ConstantExpr> constResult = dyn_cast<ConstantExpr>(result)) {
+    if (constResult->isTrue()) {
+      setResponse(query.negateExpr(), a);
+    } else if (constResult->isFalse()) {
+      setResponse(query, a);
+    }
   }
   return true;
 }

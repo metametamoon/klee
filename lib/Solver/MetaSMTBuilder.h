@@ -655,6 +655,13 @@ MetaSMTBuilder<SolverContext>::constructActual(ref<Expr> e, int *width_out) {
   //     llvm::errs() << "\n";
 
   switch (e->getKind()) {
+  case Expr::Pointer:
+  case Expr::ConstantPointer: {
+    PointerExpr *pe = cast<PointerExpr>(e);
+    assert(pe);
+    res = construct(pe->getValue(), width_out);
+    break;
+  }
 
   case Expr::Constant: {
     ConstantExpr *coe = cast<ConstantExpr>(e);
