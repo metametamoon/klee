@@ -1013,6 +1013,8 @@ static bool LookupExprInfo(const Token &Tok, unsigned &Kind, bool &IsFixed,
       return SetOK(eMacroKind_ReadLSB, true, -1);
     if (memcmp(Tok.start, "ReadMSB", 7) == 0)
       return SetOK(eMacroKind_ReadMSB, true, -1);
+    if (memcmp(Tok.start, "Pointer", 7) == 0)
+      return SetOK(Expr::Pointer, true, 2);
     break;
   }
 
@@ -1236,6 +1238,10 @@ ExprResult ParserImpl::ParseBinaryParenExpr(const Token &Name, unsigned Kind,
   }
 
   switch (Kind) {
+  case Expr::Pointer:
+  case Expr::ConstantPointer:
+    return Builder->Pointer(LHS_E, RHS_E);
+
   case Expr::Add:
     return Builder->Add(LHS_E, RHS_E);
   case Expr::Sub:
