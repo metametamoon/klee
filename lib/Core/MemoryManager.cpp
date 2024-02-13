@@ -135,6 +135,7 @@ MemoryObject *MemoryManager::allocate(ref<Expr> size, bool isLocal,
                                       bool isGlobal, bool isLazyInitialized,
                                       const llvm::Value *allocSite,
                                       size_t alignment, KType *type,
+                                      ref<Expr> conditionExpr,
                                       ref<Expr> addressExpr, unsigned timestamp,
                                       const Array *content) {
   if (ref<ConstantExpr> sizeExpr = dyn_cast<ConstantExpr>(size)) {
@@ -201,6 +202,9 @@ MemoryObject *MemoryManager::allocate(ref<Expr> size, bool isLocal,
   if (auto symMO = symbolicAddresses.find(addressExpr);
       symMO != symbolicAddresses.end()) {
     res = symMO->second;
+    if (size != res->getSizeExpr()) {
+      size = res->getSizeExpr();
+    }
     assert(size == res->getSizeExpr() && isLocal == res->isLocal &&
            isGlobal == res->isGlobal &&
            isLazyInitialized == res->isLazyInitialized &&
@@ -209,7 +213,7 @@ MemoryObject *MemoryManager::allocate(ref<Expr> size, bool isLocal,
     ++stats::allocations;
     res = new MemoryObject(addressExpr, size, alignment, isLocal, isGlobal,
                            false, isLazyInitialized, allocSite, this, type,
-                           timestamp, content);
+                           conditionExpr, timestamp, content);
     if (!isa<ConstantExpr>(addressExpr)) {
       symbolicAddresses[addressExpr] = res;
     }

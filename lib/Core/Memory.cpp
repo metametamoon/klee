@@ -76,7 +76,7 @@ void MemoryObject::getAllocInfo(std::string &result) const {
 
 ObjectState::ObjectState(const MemoryObject *mo, const Array *array, KType *dt)
     : copyOnWriteOwner(0), object(mo), valueOS(ObjectStage(array, nullptr)),
-      baseOS(ObjectStage(array->size, nullptr, false,
+      baseOS(ObjectStage(array->size, Expr::createPointer(0), false,
                          Context::get().getPointerWidth())),
       lastUpdate(nullptr), size(array->size), dynamicType(dt), readOnly(false) {
   baseOS.initializeToZero();
@@ -85,7 +85,7 @@ ObjectState::ObjectState(const MemoryObject *mo, const Array *array, KType *dt)
 ObjectState::ObjectState(const MemoryObject *mo, KType *dt)
     : copyOnWriteOwner(0), object(mo),
       valueOS(ObjectStage(mo->getSizeExpr(), nullptr)),
-      baseOS(ObjectStage(mo->getSizeExpr(), nullptr, false,
+      baseOS(ObjectStage(mo->getSizeExpr(), Expr::createPointer(0), false,
                          Context::get().getPointerWidth())),
       lastUpdate(nullptr), size(mo->getSizeExpr()), dynamicType(dt),
       readOnly(false) {

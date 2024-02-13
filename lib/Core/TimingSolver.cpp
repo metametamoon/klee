@@ -205,7 +205,7 @@ bool TimingSolver::getValue(const ConstraintSet &constraints,
   ref<Expr> tmp;
   bool success = getValue(constraints, pointer, tmp, metaData);
 
-  assert(<ConstantPointerExpr>(tmp));
+  assert(isa<ConstantPointerExpr>(tmp));
   result = cast<ConstantPointerExpr>(tmp);
 
   return success;

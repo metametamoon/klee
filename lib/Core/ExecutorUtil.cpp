@@ -19,9 +19,9 @@
 #include "klee/Support/ErrorHandling.h"
 
 #include "klee/Support/CompilerWarning.h"
-#include <llvm-14/llvm/ADT/APInt.h>
 DISABLE_WARNING_PUSH
 DISABLE_WARNING_DEPRECATED_DECLARATIONS
+#include "llvm/ADT/APInt.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/Function.h"
@@ -160,16 +160,14 @@ ref<klee::Expr> Executor::evalConstant(const Constant *c,
       }
       assert(Context::get().isLittleEndian() && "FIXME:Broken for big endian");
       ref<Expr> res = ConcatExpr::createN(numOperands, kids.data());
-      assert(isa<ConstantExpr>(res) &&
-             "result of constant vector built is not a constant");
-      return cast<ConstantExpr>(res);
+      return res;
     } else if (const BlockAddress *ba = dyn_cast<BlockAddress>(c)) {
       // return the address of the specified basic block in the specified
       // function
       const auto arg_bb = (BasicBlock *)ba->getOperand(1);
-      const auto res =
-          Expr::createPointer(reinterpret_cast<std::uint64_t>(arg_bb));
-      return cast<ConstantExpr>(res);
+      const auto res = PointerExpr::create(
+          Expr::createPointer(reinterpret_cast<std::uint64_t>(arg_bb)));
+      return res;
     } else {
       std::string msg("Cannot handle constant ");
       llvm::raw_string_ostream os(msg);

@@ -276,6 +276,12 @@ Z3ASTHandle Z3BitvectorBuilder::constructActual(ref<Expr> e, int *width_out) {
     width_out = &width;
   ++stats::queryConstructs;
   switch (e->getKind()) {
+  case Expr::Pointer:
+  case Expr::ConstantPointer: {
+    PointerExpr *pe = cast<PointerExpr>(e);
+    return construct(pe->getValue(), width_out);
+  }
+
   case Expr::Constant: {
     ConstantExpr *CE = cast<ConstantExpr>(e);
     *width_out = CE->getWidth();
