@@ -135,6 +135,7 @@ MemoryObject *MemoryManager::allocate(ref<Expr> size, bool isLocal,
                                       bool isGlobal, bool isLazyInitialized,
                                       ref<CodeLocation> allocSite,
                                       size_t alignment, KType *type,
+                                      ref<Expr> conditionExpr,
                                       ref<Expr> addressExpr, unsigned timestamp,
                                       const Array *content) {
   if (ref<ConstantExpr> sizeExpr = dyn_cast<ConstantExpr>(size)) {

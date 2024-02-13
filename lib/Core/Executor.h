@@ -326,6 +326,7 @@ private:
   MemoryObject *allocate(ExecutionState &state, ref<Expr> size, bool isLocal,
                          bool isGlobal, ref<CodeLocation> allocSite,
                          size_t allocationAlignment, KType *type,
+                         ref<Expr> conditionExpr = Expr::createTrue(),
                          ref<Expr> lazyInitializationSource = ref<Expr>(),
                          unsigned timestamp = 0, bool isSymbolic = false);
 
@@ -414,7 +415,7 @@ private:
   lazyInitializeObject(ExecutionState &state, ref<PointerExpr> address,
                        const KInstruction *target, KType *targetType,
                        uint64_t concreteSize, ref<Expr> size, bool isLocal,
-                       bool isConstant = true);
+                       ref<Expr> conditionExpr, bool isConstant = true);
 
   void lazyInitializeLocalObject(ExecutionState &state, StackFrame &sf,
                                  ref<Expr> address, const KInstruction *target);

@@ -2880,7 +2880,8 @@ ref<Expr> PointerExpr::create(const ref<Expr> &expr) {
         SelectExpr::create(se->cond, PointerExpr::create(se->trueExpr),
                            PointerExpr::create(se->falseExpr)));
   } else if (read &&
-             read->updates.root->getSize()->getWidth() == expr->getWidth()) {
+             read->updates.root->getSize()->getWidth() == expr->getWidth() &&
+             read->updates.getSize() == 0) {
     pointer = PointerExpr::createSymbolic(expr, read, read->index);
   } else {
     pointer = PointerExpr::create(expr, expr);
@@ -2932,8 +2933,21 @@ ref<Expr> PointerExpr::Not() {
 }
 
 ref<Expr> PointerExpr::Eq(const ref<PointerExpr> &RHS) {
-  return EqExpr::create(getValue(), RHS->getValue());
+  ref<Expr> areValuesEq = EqExpr::create(getValue(), RHS->getValue());
+  ref<Expr> areBasesEq = EqExpr::create(getBase(), RHS->getBase());
+  // ref<Expr> areBasesNotNull = NotExpr::create(OrExpr::create(
+  //     Expr::createIsZero(getBase()), Expr::createIsZero(RHS->getBase())));
+  // ref<Expr> cond = SelectExpr::create(areBasesNotNull, areBasesEq,
+  // Expr::createTrue());
+
+  // return AndExpr::create(areValuesEq, cond);
+  if (!isKnownValue() && !RHS->isKnownValue()) {
+    return AndExpr::create(areValuesEq, areBasesEq);
+  }
+
+  return areValuesEq;
 }
+
 ref<Expr> PointerExpr::Ne(const ref<PointerExpr> &RHS) {
   return Expr::createIsZero(Eq(RHS));
 }

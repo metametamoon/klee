@@ -50,6 +50,7 @@ public:
   MemoryObject *allocate(ref<Expr> size, bool isLocal, bool isGlobal,
                          bool isLazyInitialiazed, ref<CodeLocation> allocSite,
                          size_t alignment, KType *type,
+                         ref<Expr> conditionExpr = Expr::createTrue(),
                          ref<Expr> addressExpr = ref<Expr>(),
                          unsigned timestamp = 0,
                          const Array *content = nullptr);
