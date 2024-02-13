@@ -231,8 +231,8 @@ bool AddressSpace::resolveOne(ExecutionState &state, TimingSolver *solver,
   // try cheap search, will succeed for any inbounds pointer
 
   ref<ConstantPointerExpr> addressCex;
-  if (!solver->getPointer(state.constraints.cs(), address, addressCex,
-                          state.queryMetaData))
+  if (!solver->getValue(state.constraints.cs(), address, addressCex,
+                        state.queryMetaData))
     return false;
 
   if (resolveOne(addressCex, objectType, result)) {

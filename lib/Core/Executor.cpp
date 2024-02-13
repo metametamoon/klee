@@ -1753,16 +1753,16 @@ Executor::toConstantPointer(ExecutionState &state, ref<PointerExpr> e,
   if (ConstantPointerExpr *CE = dyn_cast<ConstantPointerExpr>(e))
     return CE;
 
-  ref<ConstantPointerExpr> value;
+  ref<ConstantPointerExpr> pointer;
   bool success =
-      solver->getPointer(state.constraints.cs(), e, value, state.queryMetaData);
+      solver->getValue(state.constraints.cs(), e, pointer, state.queryMetaData);
   assert(success && "FIXME: Unhandled solver failure");
   (void)success;
 
   std::string str;
   llvm::raw_string_ostream os(str);
   os << "silently concretizing (reason: " << reason << ") expression " << e
-     << " to value " << value << " (" << state.pc->getSourceFilepath() << ":"
+     << " to value " << pointer << " (" << state.pc->getSourceFilepath() << ":"
      << state.pc->getLine() << ")";
 
   if (AllExternalWarnings)
@@ -1770,9 +1770,9 @@ Executor::toConstantPointer(ExecutionState &state, ref<PointerExpr> e,
   else
     klee_warning_once(reason, "%s", os.str().c_str());
 
-  addConstraint(state, EqExpr::create(e, value));
+  addConstraint(state, EqExpr::create(e, pointer));
 
-  return value;
+  return pointer;
 }
 
 void Executor::executeGetValue(ExecutionState &state, ref<Expr> e,
@@ -1784,21 +1784,10 @@ void Executor::executeGetValue(ExecutionState &state, ref<Expr> e,
       isa<ConstantPointerExpr>(e)) {
     ref<Expr> value;
     e = optimizer.optimizeExpr(e, true);
-    if (auto poiner = dyn_cast<PointerExpr>(e)) {
-      ref<ConstantPointerExpr> cpointer;
-      bool success = solver->getPointer(state.constraints.cs(), poiner,
-                                        cpointer, state.queryMetaData);
-      assert(success && "FIXME: Unhandled solver failure");
-      (void)success;
-      value = cpointer;
-    } else {
-      ref<ConstantExpr> cvalue;
-      bool success = solver->getValue(state.constraints.cs(), e, cvalue,
-                                      state.queryMetaData);
-      assert(success && "FIXME: Unhandled solver failure");
-      (void)success;
-      value = cvalue;
-    }
+    bool success =
+        solver->getValue(state.constraints.cs(), e, value, state.queryMetaData);
+    assert(success && "FIXME: Unhandled solver failure");
+    (void)success;
     bindLocal(target, state, value);
   } else {
     std::set<ref<Expr>> values;
