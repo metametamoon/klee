@@ -14,6 +14,7 @@
 #include "klee/ADT/Ref.h"
 #include "klee/Expr/SymbolicSource.h"
 #include "klee/Support/CompilerWarning.h"
+#include <variant>
 
 DISABLE_WARNING_PUSH
 DISABLE_WARNING_DEPRECATED_DECLARATIONS
@@ -40,6 +41,7 @@ class raw_ostream;
 namespace klee {
 
 class Array;
+class UpdateNode;
 class ArrayCache;
 class ConstantExpr;
 class Expr;
@@ -166,6 +168,7 @@ public:
     // Primitive
 
     Constant = 0,
+    Var,
 
     // Special
 
@@ -560,7 +563,136 @@ public:
   static bool classof(const NotOptimizedExpr *) { return true; }
 };
 
-/// Class representing a byte update of an array.
+class ExprLambda {
+public:
+  ExprLambda(ref<Expr> param, ref<Expr> body) : param(param), body(body) {}
+
+  ref<Expr> apply(ref<Expr> arg) const;
+  ExprLambda addCondition(ref<Expr> cond) const;
+  static ExprLambda merge(ExprLambda a, ExprLambda b);
+  static ExprLambda constantTrue();
+
+  bool operator==(const ExprLambda &other) const {
+    return std::tie(param, body) == std::tie(other.param, other.body);
+  }
+
+  bool operator!=(const ExprLambda &other) const { return !(*this == other); }
+
+  bool operator<(const ExprLambda &other) const {
+    return std::tie(param, body) < std::tie(other.param, other.body);
+  }
+
+  bool isConstantTrue() const {
+    return body->isTrue();
+  }
+
+  ref<Expr> getParam() const {
+    return param;
+  }
+
+  ref<Expr> getBody() const { return body; }
+
+private:
+  ref<Expr> param;
+  ref<Expr> body;
+};
+
+struct SimpleWrite;
+struct RangeWrite;
+using Write = std::variant<SimpleWrite, RangeWrite>;
+
+/// Class representing a complete list of updates into an array.
+class UpdateList {
+  friend class ReadExpr; // for default constructor
+
+public:
+  const Array *root = nullptr;
+  bool isSimple = true;
+
+  /// pointer to the most recent update node
+  ref<UpdateNode> head;
+
+public:
+  UpdateList() = default;
+  UpdateList(const Array *_root, const ref<UpdateNode> &_head);
+  UpdateList(const UpdateList &b) = default;
+  ~UpdateList() = default;
+
+  UpdateList &operator=(const UpdateList &b) = default;
+
+  /// size of this update list
+  unsigned getSize() const;
+
+  void extend(const SimpleWrite &write);
+  void extend(const RangeWrite &write);
+  void extend(const Write &write);
+
+  std::vector<std::pair<ExprLambda, std::variant<ref<Expr>, UpdateList>>>
+  flatten() const;
+
+  int compare(const UpdateList &b) const;
+
+  bool operator<(const UpdateList &rhs) const { return compare(rhs) < 0; }
+
+  unsigned hash() const;
+  unsigned height() const;
+};
+
+struct SimpleWrite {
+  SimpleWrite(ref<Expr> index, ref<Expr> value)
+      : index(index), value(value) {}
+
+  unsigned hash() const {
+    unsigned res = index->hash();
+    res = (res * Expr::MAGIC_HASH_CONSTANT) + value->hash();
+    return res;
+  }
+
+  bool operator==(const SimpleWrite &other) const {
+    return std::tie(index, value) == std::tie(other.index, other.value);
+  }
+
+  bool operator!=(const SimpleWrite &other) const {
+    return !(*this == other);
+  }
+
+  bool operator<(const SimpleWrite &other) const {
+    return std::tie(index, value) < std::tie(other.index, other.value);
+  }
+
+  ref<Expr> index, value;
+};
+
+struct RangeWrite {
+  RangeWrite(ExprLambda guard, UpdateList rangeList) : guard(guard), rangeList(rangeList) {}
+
+  unsigned hash() const {
+    unsigned res = guard.getBody()->hash();
+    res = (res * Expr::MAGIC_HASH_CONSTANT) + rangeList.hash();
+    return res;
+  }
+
+  bool operator==(const RangeWrite &other) const {
+    return guard == other.guard && rangeList.compare(other.rangeList) == 0;
+  }
+
+  bool operator!=(const RangeWrite &other) const {
+    return !(*this == other);
+  }
+
+  bool operator<(const RangeWrite &other) const {
+    if (guard != other.guard) {
+      return guard < other.guard;
+    } else {
+      return rangeList.compare(other.rangeList) == -1;
+    }
+  }
+
+  ExprLambda guard;
+  UpdateList rangeList;
+};
+
+/// Class representing an update of an array.
 class UpdateNode {
   friend class UpdateList;
 
@@ -570,7 +702,7 @@ class UpdateNode {
 
 public:
   const ref<UpdateNode> next;
-  ref<Expr> index, value;
+  Write write;
 
   /// @brief Required by klee::ref-managed objects
   mutable class ReferenceCounter _refCount;
@@ -580,8 +712,8 @@ private:
   unsigned size;
 
 public:
-  UpdateNode(const ref<UpdateNode> &_next, const ref<Expr> &_index,
-             const ref<Expr> &_value);
+  UpdateNode(const ref<UpdateNode> &_next, const SimpleWrite &write);
+  UpdateNode(const ref<UpdateNode> &_next, const RangeWrite &write);
 
   unsigned getSize() const { return size; }
 
@@ -589,6 +721,26 @@ public:
   bool equals(const UpdateNode &b) const;
   unsigned hash() const { return hashValue; }
   unsigned height() const { return heightValue; }
+
+  bool isSimple() const {
+    return std::holds_alternative<SimpleWrite>(write);
+  }
+
+  SimpleWrite *asSimple() {
+    return std::get_if<SimpleWrite>(&write);
+  }
+
+  RangeWrite *asRange() {
+    return std::get_if<RangeWrite>(&write);
+  }
+
+  const SimpleWrite *asSimple() const {
+    return std::get_if<SimpleWrite>(&write);
+  }
+
+  const RangeWrite *asRange() const {
+    return std::get_if<RangeWrite>(&write);
+  }
 
   UpdateNode() = delete;
   ~UpdateNode() = default;
@@ -658,36 +810,9 @@ public:
   friend class ArrayCache;
 };
 
-/// Class representing a complete list of updates into an array.
-class UpdateList {
-  friend class ReadExpr; // for default constructor
+using ReadRanges = std::vector<std::pair<ExprLambda, std::variant<ref<Expr>, UpdateList>>>;
 
-public:
-  const Array *root = nullptr;
-
-  /// pointer to the most recent update node
-  ref<UpdateNode> head;
-
-public:
-  UpdateList() = default;
-  UpdateList(const Array *_root, const ref<UpdateNode> &_head);
-  UpdateList(const UpdateList &b) = default;
-  ~UpdateList() = default;
-
-  UpdateList &operator=(const UpdateList &b) = default;
-
-  /// size of this update list
-  unsigned getSize() const { return head ? head->getSize() : 0; }
-
-  void extend(const ref<Expr> &index, const ref<Expr> &value);
-
-  int compare(const UpdateList &b) const;
-
-  bool operator<(const UpdateList &rhs) const { return compare(rhs) < 0; }
-
-  unsigned hash() const;
-  unsigned height() const;
-};
+ref<Expr> rangesToSelect(const ReadRanges &ranges, ref<Expr> index);
 
 /// Class representing a one byte read from an array.
 class ReadExpr : public NonConstantExpr {
@@ -708,6 +833,13 @@ public:
   }
 
   static ref<Expr> create(const UpdateList &updates, ref<Expr> i);
+
+  static ReadRanges getRanges(const UpdateList &range, ref<Expr> i,
+                              bool hasSymbolicIndex);
+
+  static UpdateList stripUnneded(const UpdateList &ul, ref<Expr> index);
+
+  static ref<Expr> readOrExpr(std::variant<ref<Expr>, UpdateList> v, ref<Expr> index);
 
   Width getWidth() const {
     assert(updates.root);
@@ -1611,6 +1743,48 @@ public:
   // binary representations for NaN but we need try to use the same
   // representation for consistency with the solver.
   static ref<ConstantExpr> GetNaN(Expr::Width w);
+};
+
+class VarExpr : public Expr {
+public:
+  static const Kind kind = Var;
+  static const unsigned numKids = 0;
+
+private:
+  unsigned index;
+  Width width;
+
+  VarExpr(unsigned index, Width width) : index(index), width(width) {}
+
+public:
+  Width getWidth() const { return width; }
+  Kind getKind() const { return Var; }
+
+  static bool classof(const Expr *E) { return E->getKind() == Expr::Var; }
+  static bool classof(const VarExpr *) { return true; }
+
+  unsigned getNumKids() const { return 0; }
+  ref<Expr> getKid(unsigned i) const { return 0; }
+
+  unsigned getIndex() { return index; }
+
+  int compareContents(const Expr &b) const {
+    const VarExpr &vb = static_cast<const VarExpr &>(b);
+    if (getWidth() != vb.getWidth()) {
+      return getWidth() < vb.getWidth() ? -1 : 1;
+    }
+    if (index == vb.index) {
+      return 0;
+    }
+    return index < vb.index ? -1 : 1;
+  }
+
+  virtual ref<Expr> rebuild(ref<Expr> kids[]) const {
+    assert(0 && "rebuild() on VarExpr");
+    return const_cast<VarExpr *>(this);
+  }
+
+  virtual unsigned computeHash();
 };
 
 // Implementations
