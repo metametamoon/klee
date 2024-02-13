@@ -141,8 +141,9 @@ public:
   /// satisfying assignment.
   ///
   /// \return True on success.
+  bool getValue(const Query &, ref<Expr> &result);
   bool getValue(const Query &, ref<ConstantExpr> &result);
-  bool getPointer(const Query &, ref<ConstantPointerExpr> &result);
+  bool getValue(const Query &, ref<ConstantPointerExpr> &result);
 
   /// getValue - Compute the minimal possible non-negative value for the given
   /// expression.

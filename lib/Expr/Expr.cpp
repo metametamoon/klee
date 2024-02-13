@@ -1786,8 +1786,9 @@ ref<ReadExpr> Expr::hasOrderedReads() const {
   return result;
 }
 
-ref<Expr> Expr::getValue() {
-  return isa<PointerExpr>(this) ? cast<PointerExpr>(this)->getValue() : this;
+ref<Expr> Expr::getValue() const {
+  return isa<PointerExpr>(this) ? cast<PointerExpr>(this)->getValue()
+                                : const_cast<Expr *>(this);
 }
 
 ref<Expr> ConcatExpr::create(const ref<Expr> &l, const ref<Expr> &r) {
