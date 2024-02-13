@@ -47,6 +47,7 @@ class ConstantPointerExpr;
 class Expr;
 class ReadExpr;
 class ObjectState;
+class PointerExpr;
 
 template <class T> class ref;
 
@@ -169,7 +170,6 @@ protected:
   static ref<Expr> createCachedExpr(ref<Expr> e);
   bool isCached = false;
   bool toBeCleared = false;
-  void setIsCached(bool value) { isCached = value; }
 
 public:
   // NOTE: The prefix "Int" in no way implies the integer type of expression.
@@ -398,7 +398,7 @@ public:
   /// null.
   ref<ReadExpr> hasOrderedReads(bool stride) const;
   ref<ReadExpr> hasOrderedReads() const;
-  ref<Expr> getValue();
+  ref<Expr> getValue() const;
 
   /* Static utility methods */
 
