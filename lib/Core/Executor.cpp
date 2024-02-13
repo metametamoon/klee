@@ -2707,29 +2707,35 @@ void Executor::transferToBasicBlock(BasicBlock *dst, BasicBlock *src,
   transferToBasicBlock(kdst, src, state);
 }
 
-void Executor::checkNullCheckAfterDeref(ref<Expr> cond, ExecutionState &state,
-                                        ExecutionState *fstate,
-                                        ExecutionState *sstate) {
+void Executor::checkNullCheckAfterDeref(ref<Expr> cond, ExecutionState &state) {
+  std::vector<ref<Expr>> conditions;
+  Expr::splitAnds(cond, conditions);
   ref<EqExpr> eqPointerCheck = nullptr;
-  if (isa<EqExpr>(cond) && cast<EqExpr>(cond)->left->getWidth() ==
-                               Context::get().getPointerWidth()) {
-    eqPointerCheck = cast<EqExpr>(cond);
-  }
-  if (isa<EqExpr>(Expr::createIsZero(cond)) &&
-      cast<EqExpr>(Expr::createIsZero(cond))->left->getWidth() ==
-          Context::get().getPointerWidth()) {
-    eqPointerCheck = cast<EqExpr>(Expr::createIsZero(cond));
+  for (auto &primitiveCond : conditions) {
+    if (isa<EqExpr>(primitiveCond) &&
+        cast<EqExpr>(primitiveCond)->left->getWidth() ==
+            Context::get().getPointerWidth()) {
+      eqPointerCheck = cast<EqExpr>(primitiveCond);
+    }
+    if (isa<EqExpr>(Expr::createIsZero(primitiveCond)) &&
+        cast<EqExpr>(Expr::createIsZero(primitiveCond))->left->getWidth() ==
+            Context::get().getPointerWidth()) {
+      eqPointerCheck = cast<EqExpr>(Expr::createIsZero(primitiveCond));
+    }
+    if (eqPointerCheck && eqPointerCheck->left->isZero()) {
+      llvm::errs();
+    }
+    if (eqPointerCheck && eqPointerCheck->left->isZero() &&
+        state.resolvedPointers.count(
+            makePointer(eqPointerCheck->right)->getBase())) {
+      break;
+    }
   }
   if (eqPointerCheck && eqPointerCheck->left->isZero() &&
-      state.resolvedPointers.count(eqPointerCheck->right)) {
-    if (isa<EqExpr>(cond) && !fstate && sstate) {
-      reportStateOnTargetError(*sstate,
-                               ReachWithError::NullCheckAfterDerefException);
-    }
-    if (isa<EqExpr>(Expr::createIsZero(cond)) && !sstate && fstate) {
-      reportStateOnTargetError(*fstate,
-                               ReachWithError::NullCheckAfterDerefException);
-    }
+      state.resolvedPointers.count(
+          makePointer(eqPointerCheck->right)->getBase())) {
+    reportStateOnTargetError(state,
+                             ReachWithError::NullCheckAfterDerefException);
   }
 }
 
@@ -2927,7 +2933,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
         }
       }
       if (guidanceKind == GuidanceKind::ErrorGuidance) {
-        checkNullCheckAfterDeref(cond, state, branches.first, branches.second);
+        checkNullCheckAfterDeref(cond, state);
       }
     }
     break;

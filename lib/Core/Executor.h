@@ -663,8 +663,7 @@ private:
       const SetOfStates &leftStates,
       HaltExecution::Reason reason = HaltExecution::NotHalt);
 
-  void checkNullCheckAfterDeref(ref<Expr> cond, ExecutionState &state,
-                                ExecutionState *fstate, ExecutionState *sstate);
+  void checkNullCheckAfterDeref(ref<Expr> cond, ExecutionState &state);
 
   template <typename TypeIt>
   void computeOffsetsSeqTy(KGEPInstruction *kgepi,
