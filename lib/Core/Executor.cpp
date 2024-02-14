@@ -4291,7 +4291,7 @@ void Executor::updateStates(ExecutionState *current) {
         switch (targetResult) {
         case WeightResult::Done: {
           stats::reachedMerge += 1;
-          mergeStates[mergeHandler].push_back(current);
+          mergeStates[mergeHandler].insert(current);
           allPaused.insert(current);
           paused.push_back(current);
           mergeHandler->reached++;
@@ -4323,7 +4323,7 @@ void Executor::updateStates(ExecutionState *current) {
         switch (targetResult) {
         case WeightResult::Done: {
           stats::reachedMerge += 1;
-          mergeStates[mergeHandler].push_back(state);
+          mergeStates[mergeHandler].insert(state);
           allPaused.insert(state);
           paused.push_back(state);
           mergeHandler->reached++;
@@ -4352,10 +4352,11 @@ void Executor::updateStates(ExecutionState *current) {
         auto mergeHandler = state->mergers.back();
         if (allPaused.count(state)) {
           mergeHandler->reached--;
+          mergeStates[mergeHandler].erase(state);
         }
         mergeHandler->open--;
         state->mergers.pop_back();
-        if (mergeHandler->reached == mergeHandler->open) {
+        if (!allPaused.count(state) && mergeHandler->reached == mergeHandler->open) {
           toMerge.insert(mergeHandler);
         }
       }

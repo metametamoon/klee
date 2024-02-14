@@ -161,7 +161,7 @@ private:
   std::unique_ptr<TargetManager> targetManager;
 
   std::unordered_map<std::shared_ptr<MergeHandler>,
-                     std::vector<ExecutionState *>>
+                     std::set<ExecutionState *, ExecutionStateIDCompare>>
       mergeStates;
 
   std::unordered_set<ExecutionState *> allPaused;
