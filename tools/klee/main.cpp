@@ -1657,8 +1657,7 @@ void multiplexEntryPoint(llvm::Module *m, LLVMContext &ctx,
     for (size_t arg_i = 0; arg_i < entryFns[i]->arg_size(); ++arg_i) {
       std::string argName = "__klee_arg" + llvm::utostr(arg_i);
       auto type = (entryFns[i]->arg_begin() + arg_i)->getType();
-      auto byteWidth =
-          m->getDataLayout().getTypeSizeInBits(type) / 8; // check that
+      auto byteWidth = m->getDataLayout().getTypeAllocSize(type); // check that
       auto alloca = builder.CreateAlloca(type);
       auto bitcast =
           builder.CreateBitCast(alloca, llvm::Type::getInt8PtrTy(ctx));
