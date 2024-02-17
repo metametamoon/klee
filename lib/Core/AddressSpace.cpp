@@ -460,14 +460,5 @@ bool AddressSpace::copyInConcrete(const MemoryObject *mo, const ObjectState *os,
 
 bool MemoryObjectLT::operator()(const MemoryObject *a,
                                 const MemoryObject *b) const {
-  if (isa<ConstantExpr>(a->getBaseExpr()) &&
-      isa<ConstantExpr>(b->getBaseExpr())) {
-    return cast<ConstantExpr>(a->getBaseExpr())->getZExtValue() <
-           cast<ConstantExpr>(b->getBaseExpr())->getZExtValue();
-  } else if (isa<ConstantExpr>(a->getBaseExpr())) {
-    return true;
-  } else if (isa<ConstantExpr>(b->getBaseExpr())) {
-    return false;
-  }
   return a->getBaseExpr() < b->getBaseExpr();
 }
