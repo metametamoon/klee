@@ -1701,7 +1701,7 @@ public:
     ref<Expr> r(new PointerExpr(b, v));
     r->computeHash();
     r->computeHeight();
-    return createCachedExpr(r);
+    return r;
   }
   static ref<Expr> create(const ref<Expr> &b, const ref<Expr> &o);
   static ref<Expr> create(const ref<Expr> &v);
@@ -1777,26 +1777,10 @@ public:
   static const unsigned numKids = 2;
   static ref<ConstantPointerExpr> alloc(const ref<ConstantExpr> &b,
                                         const ref<ConstantExpr> &o) {
-    if (!b->isFloat() && !o->isFloat()) {
-      auto success = Expr::cachedConstantPointerExpressions.cache.find(
-          {b->getAPValue(), o->getAPValue()});
-      if (success == Expr::cachedConstantPointerExpressions.cache.end()) {
-        // Cache miss
-        ref<ConstantPointerExpr> r = new ConstantPointerExpr(b, o);
-        r->computeHash();
-        r->computeHeight();
-        r->isCached = true;
-        cachedConstantPointerExpressions
-            .cache[{b->getAPValue(), o->getAPValue()}] = r.get();
-        return r;
-      }
-      return success->second;
-    } else {
-      ref<ConstantPointerExpr> r = new ConstantPointerExpr(b, o);
-      r->computeHash();
-      r->computeHeight();
-      return createCachedExpr(r);
-    }
+    ref<ConstantPointerExpr> r = new ConstantPointerExpr(b, o);
+    r->computeHash();
+    r->computeHeight();
+    return r;
   }
   static ref<Expr> create(const ref<ConstantExpr> &b,
                           const ref<ConstantExpr> &o);
