@@ -164,9 +164,6 @@ int Expr::compare(const Expr &b, ExprEquivSet &equivs) const {
     bp = this;
   }
 
-  if (equivs.count(std::make_pair(ap, bp)))
-    return 0;
-
   Kind ak = getKind(), bk = b.getKind();
   int kc = (ak > bk) - (ak < bk);
   if (kc)
@@ -175,6 +172,9 @@ int Expr::compare(const Expr &b, ExprEquivSet &equivs) const {
   int hc = (hashValue > b.hashValue) - (hashValue < b.hashValue);
   if (hc)
     return hc;
+
+  if (equivs.count(std::make_pair(ap, bp)))
+    return 0;
 
   if (int res = compareContents(b))
     return res;
