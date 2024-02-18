@@ -417,7 +417,7 @@ const UpdateList &ObjectStage::getUpdates() const {
       auto array = Array::create(sizeExpr, SourceBuilder::constant(values),
                                  Expr::Int32, width);
       updates = UpdateList(array, symbolicUpdates.head);
-      knownSymbolics.reset();
+      knownSymbolics.reset(nullptr);
       unflushedMask.reset();
     }
   }
