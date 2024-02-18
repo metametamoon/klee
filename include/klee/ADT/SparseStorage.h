@@ -25,7 +25,7 @@ enum class Density {
 template <typename ValueType, typename Eq = std::equal_to<ValueType>>
 class SparseStorage {
 private:
-  PersistentHashMap<size_t, ValueType> internalStorage;
+  std::unordered_map<size_t, ValueType> internalStorage;
   ValueType defaultValue;
   Eq eq;
 
@@ -53,9 +53,9 @@ public:
 
   void store(size_t idx, const ValueType &value) {
     if (eq(value, defaultValue)) {
-      internalStorage.remove(idx);
+      internalStorage.erase(idx);
     } else {
-      internalStorage.replace({idx, value});
+      internalStorage[idx] = value;
     }
   }
 
@@ -68,8 +68,11 @@ public:
   }
 
   ValueType load(size_t idx) const {
-    auto it = internalStorage.lookup(idx);
-    return it ? *it : defaultValue;
+    auto it = internalStorage.find(idx);
+    if (it != internalStorage.end()) {
+      return it->second;
+    }
+    return defaultValue;
   }
 
   size_t sizeOfSetRange() const {
@@ -123,7 +126,7 @@ public:
     return vectorized;
   }
 
-  const PersistentHashMap<size_t, ValueType> &storage() const {
+  const std::unordered_map<size_t, ValueType> &storage() const {
     return internalStorage;
   };
 
