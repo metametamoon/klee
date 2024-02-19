@@ -7550,17 +7550,18 @@ bool resolveOnSymbolics(const std::vector<klee::Symbolic> &symbolics,
                         const ref<klee::ConstantPointerExpr> &addr,
                         ref<const MemoryObject> &result) {
   uint64_t base = addr->getConstantBase()->getZExtValue();
+  AssignmentEvaluator evaluator(assn, true);
 
   for (const auto &res : symbolics) {
     const auto &mo = res.memoryObject;
     // Check if the provided address is between start and end of the object
     // [mo->address, mo->address + mo->size) or the object is a 0-sized object.
     ref<klee::ConstantExpr> moSize =
-        cast<klee::ConstantExpr>(assn.evaluate(mo->getSizeExpr()));
+        cast<klee::ConstantExpr>(evaluator.visit(mo->getSizeExpr()));
     ref<klee::ConstantExpr> moAddress =
-        cast<klee::ConstantExpr>(assn.evaluate(mo->getBaseExpr()));
+        cast<klee::ConstantExpr>(evaluator.visit(mo->getBaseExpr()));
     ref<klee::ConstantExpr> moCondition =
-        cast<klee::ConstantExpr>(assn.evaluate(mo->getConditionExpr()));
+        cast<klee::ConstantExpr>(evaluator.visit(mo->getConditionExpr()));
     if (((base == moAddress->getZExtValue())) && moCondition->getZExtValue(1)) {
       result = mo;
       return true;
