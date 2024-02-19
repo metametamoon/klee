@@ -456,7 +456,7 @@ void ObjectStage::flushForRead() const {
 void ObjectStage::flushForWrite() {
   flushForRead();
   // The write is symbolic offset and might overwrite any byte
-  knownSymbolics.reset();
+  knownSymbolics.reset(nullptr);
 }
 
 /***/

@@ -2884,7 +2884,8 @@ ref<Expr> PointerExpr::create(const ref<Expr> &expr) {
              read->updates.getSize() == 0) {
     pointer = PointerExpr::createSymbolic(expr, read, read->index);
   } else {
-    pointer = PointerExpr::create(expr, expr);
+    pointer =
+        PointerExpr::create(ConstantExpr::create(0, expr->getWidth()), expr);
   }
   return pointer;
 }

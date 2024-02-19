@@ -5832,7 +5832,8 @@ void Executor::executeFree(ExecutionState &state, ref<PointerExpr> address,
 bool Executor::resolveExact(ExecutionState &estate, ref<Expr> address,
                             KType *type, ExactResolutionList &results,
                             const std::string &name) {
-  ref<PointerExpr> pointer = makePointer(address);
+  ref<PointerExpr> pointer =
+      PointerExpr::create(address->getValue(), address->getValue());
   address = pointer->getValue();
   ref<Expr> base = pointer->getBase();
   ref<PointerExpr> basePointer = PointerExpr::create(base, base);
@@ -7011,6 +7012,9 @@ const Array *Executor::makeArray(ref<Expr> size,
 }
 
 ref<PointerExpr> Executor::makePointer(ref<Expr> expr) const {
+  if (isa<ConstantExpr>(expr)) {
+    llvm::errs();
+  }
   return PointerExpr::create(expr);
 }
 
