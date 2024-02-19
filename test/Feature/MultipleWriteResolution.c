@@ -8,7 +8,7 @@
 // RUN: echo "x" >> %t1.res
 // RUN: echo "x" >> %t1.res
 // RUN: rm -rf %t.klee-out
-// RUN: %klee --output-dir=%t.klee-out --use-timestamps=false --use-merged-pointer-dereference=false %t1.bc > %t1.log
+// RUN: %klee --write-kqueries --output-dir=%t.klee-out --use-timestamps=false --use-merged-pointer-dereference=false %t1.bc > %t1.log
 // RUN: diff %t1.res %t1.log
 
 #include <stdio.h>
