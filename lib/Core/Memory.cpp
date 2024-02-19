@@ -196,14 +196,8 @@ void ObjectState::write8(ref<Expr> offset, ref<Expr> value) {
   }
 
   if (auto pointer = dyn_cast<PointerExpr>(value)) {
-    if (pointer->getBase()->isZero()) {
-      valueOS.writeWidth(offset, pointer->getValue());
-      baseOS.writeWidth(
-          offset, ConstantExpr::create(0, Context::get().getPointerWidth()));
-    } else {
-      valueOS.writeWidth(offset, pointer->getValue());
-      baseOS.writeWidth(offset, pointer->getBase());
-    }
+    valueOS.writeWidth(offset, pointer->getValue());
+    baseOS.writeWidth(offset, pointer->getBase());
   } else {
     valueOS.writeWidth(offset, value);
     baseOS.writeWidth(
