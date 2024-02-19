@@ -19,6 +19,7 @@
 #include "TypeManager.h"
 
 #include "klee/Config/config.h"
+#include "klee/Expr/Expr.h"
 #include "klee/Module/KInstruction.h"
 #include "klee/Module/KModule.h"
 #include "klee/Solver/SolverCmdLine.h"
@@ -791,12 +792,14 @@ void SpecialFunctionHandler::handleRealloc(ExecutionState &state,
       state, Expr::createIsZero(size), BranchType::Realloc);
 
   if (zeroSize.first) { // size == 0
-    executor.executeFree(*zeroSize.first, executor.makePointer(address),
+    executor.executeFree(*zeroSize.first,
+                         PointerExpr::create(addressPointer->getValue(),
+                                             addressPointer->getValue()),
                          target);
   }
   if (zeroSize.second) { // size != 0
     Executor::StatePair zeroPointer = executor.forkInternal(
-        *zeroSize.second, Expr::createIsZero(addressPointer->getBase()),
+        *zeroSize.second, Expr::createIsZero(addressPointer->getValue()),
         BranchType::Realloc);
 
     if (zeroPointer.first) { // address == 0
