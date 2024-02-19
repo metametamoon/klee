@@ -1606,7 +1606,7 @@ ref<Expr> ReadExpr::create(const UpdateList &ul, ref<Expr> index, bool safe) {
 
   // So that we return weird stuff like reads from consts that should have
   // simplified to constant exprs if we read beyond size boundary.
-  if (auto source = dyn_cast<ConstantSource>(ul.root->source)) {
+  if (ConstantSource *source = dyn_cast<ConstantSource>(ul.root->source)) {
     if (auto arraySizeExpr = dyn_cast<ConstantExpr>(ul.root->size)) {
       if (auto indexExpr = dyn_cast<ConstantExpr>(index)) {
         auto arraySize = arraySizeExpr->getZExtValue();
@@ -1620,7 +1620,7 @@ ref<Expr> ReadExpr::create(const UpdateList &ul, ref<Expr> index, bool safe) {
     }
   }
 
-  if (ref<ConstantSource> constantSource =
+  if (ConstantSource *constantSource =
           dyn_cast<ConstantSource>(ul.root->source)) {
     if (!updateListHasSymbolicWrites) {
       // No updates with symbolic index to a constant array have been found
@@ -2560,7 +2560,7 @@ static ref<Expr> TryConstArrayOpt(const ref<ConstantExpr> &cl, ReadExpr *rd) {
   assert(arraySize);
   auto size = arraySize->getZExtValue();
   ref<Expr> res = ConstantExpr::alloc(0, Expr::Bool);
-  if (ref<ConstantSource> constantSource =
+  if (ConstantSource *constantSource =
           dyn_cast<ConstantSource>(rd->updates.root->source)) {
     for (unsigned i = 0, e = size; i != e; ++i) {
       if (cl == constantSource->constantValues.load(i)) {

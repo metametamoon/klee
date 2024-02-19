@@ -5477,6 +5477,7 @@ void Executor::callExternalFunction(ExecutionState &state, KInstruction *target,
            "FIXME: Unhandled solver failure");
     (void)success;
     Assignment model = cast<InvalidResponse>(response)->initialValues();
+    AssignmentEvaluator evaluator(model, false);
     llvm::FunctionType::param_iterator ati = functionType->param_begin();
     for (std::vector<ref<Expr>>::iterator ai = arguments.begin(),
                                           ae = arguments.end();
@@ -5488,7 +5489,7 @@ void Executor::callExternalFunction(ExecutionState &state, KInstruction *target,
           arg = pointer->getValue();
         }
         arg = optimizer.optimizeExpr(arg, true);
-        ref<ConstantExpr> ce = model.evaluate(arg, false);
+        ref<ConstantExpr> ce = evaluator.visit(arg);
         ce->toMemory(&args[wordIndex]);
         addConstraint(state, EqExpr::create(ce, arg));
         wordIndex += (ce->getWidth() + 63) / 64;
@@ -7515,17 +7516,18 @@ bool resolveOnSymbolics(const std::vector<klee::Symbolic> &symbolics,
                         const ref<klee::ConstantPointerExpr> &addr,
                         ref<const MemoryObject> &result) {
   uint64_t base = addr->getConstantBase()->getZExtValue();
+  AssignmentEvaluator evaluator(assn, true);
 
   for (const auto &res : symbolics) {
     const auto &mo = res.memoryObject;
     // Check if the provided address is between start and end of the object
     // [mo->address, mo->address + mo->size) or the object is a 0-sized object.
     ref<klee::ConstantExpr> moSize =
-        cast<klee::ConstantExpr>(assn.evaluate(mo->getSizeExpr()));
+        cast<klee::ConstantExpr>(evaluator.visit(mo->getSizeExpr()));
     ref<klee::ConstantExpr> moAddress =
-        cast<klee::ConstantExpr>(assn.evaluate(mo->getBaseExpr()));
+        cast<klee::ConstantExpr>(evaluator.visit(mo->getBaseExpr()));
     ref<klee::ConstantExpr> moCondition =
-        cast<klee::ConstantExpr>(assn.evaluate(mo->getConditionExpr()));
+        cast<klee::ConstantExpr>(evaluator.visit(mo->getConditionExpr()));
     if (((base == moAddress->getZExtValue())) && moCondition->getZExtValue(1)) {
       result = mo;
       return true;
@@ -7775,6 +7777,7 @@ bool Executor::getSymbolicSolution(const ExecutionState &state, KTest &res) {
   assert(isa<InvalidResponse>(response));
 
   Assignment model = cast<InvalidResponse>(response)->initialValuesFor(objects);
+  AssignmentEvaluator evaluator(model, false);
 
   Expr::Width pointerWidthInBits = Context::get().getPointerWidth();
 
@@ -7809,7 +7812,7 @@ bool Executor::getSymbolicSolution(const ExecutionState &state, KTest &res) {
 
     for (ref<Symcrete> symcrete : extendedConstraints.cs().symcretes()) {
       concretizations[symcrete->symcretized] =
-          model.evaluate(symcrete->symcretized);
+          evaluator.visit(symcrete->symcretized);
     }
 
     std::vector<void *> addresses;
@@ -7881,10 +7884,10 @@ bool Executor::getSymbolicSolution(const ExecutionState &state, KTest &res) {
       auto &values = model.bindings.at(symbolic.array);
       KTestObject *o = &res.objects[i];
       o->name = const_cast<char *>(mo->name.c_str());
-      o->address =
-          cast<ConstantExpr>(model.evaluate(mo->getBaseExpr()))->getZExtValue();
-      o->numBytes =
-          cast<ConstantExpr>(model.evaluate(mo->getSizeExpr()))->getZExtValue();
+      o->address = cast<ConstantExpr>(evaluator.visit(mo->getBaseExpr()))
+                       ->getZExtValue();
+      o->numBytes = cast<ConstantExpr>(evaluator.visit(mo->getSizeExpr()))
+                        ->getZExtValue();
       o->bytes = new unsigned char[o->numBytes];
       for (size_t j = 0; j < o->numBytes; j++) {
         o->bytes[j] = values.load(j);
