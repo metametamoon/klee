@@ -399,12 +399,11 @@ void AddressSpace::copyOutConcrete(const MemoryObject *mo,
           dyn_cast<ConstantExpr>(mo->getBaseExpr())) {
     auto address =
         reinterpret_cast<std::uint8_t *>(addressExpr->getZExtValue());
-    AssignmentEvaluator ae(assignment, false);
+    AssignmentEvaluator evaluator(assignment, false);
     if (ref<ConstantExpr> sizeExpr =
             dyn_cast<ConstantExpr>(mo->getSizeExpr())) {
       size_t moSize = sizeExpr->getZExtValue();
       std::vector<uint8_t> concreteStore(moSize);
-      AssignmentEvaluator evaluator(assignment, false);
       for (size_t i = 0; i < moSize; i++) {
         auto byte = evaluator.visit(os->readValue8(i));
         concreteStore[i] = cast<ConstantExpr>(byte)->getZExtValue(Expr::Int8);
