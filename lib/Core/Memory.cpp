@@ -342,6 +342,10 @@ ref<Expr> ObjectState::readBase(ref<Expr> offset, Expr::Width width) const {
   if (width == Expr::Bool)
     return ExtractExpr::create(readBase8(offset), 0, Expr::Bool);
 
+  // Treat bool specially, it is the only non-byte sized write we allow.
+  if (width == Expr::Bool)
+    return ExtractExpr::create(readBase8(offset), 0, Expr::Bool);
+
   // Otherwise, follow the slow general case.
   unsigned NumBytes = width / 8;
   assert(width == NumBytes * 8 && "Invalid read size!");
@@ -357,6 +361,10 @@ ref<Expr> ObjectState::readBase(ref<Expr> offset, Expr::Width width) const {
 }
 
 ref<Expr> ObjectState::readBase(unsigned offset, Expr::Width width) const {
+  // Treat bool specially, it is the only non-byte sized write we allow.
+  if (width == Expr::Bool)
+    return ExtractExpr::create(readBase8(offset), 0, Expr::Bool);
+
   // Otherwise, follow the slow general case.
   unsigned NumBytes = width / 8;
   assert(width == NumBytes * 8 && "Invalid width for read size!");
