@@ -748,6 +748,19 @@ MetaSMTBuilder<SolverContext>::constructActual(ref<Expr> e, int *width_out) {
     break;
   }
 
+  case Expr::Convol: {
+    ConvolExpr *ce = cast<ConvolExpr>(e);
+
+    *width_out = ce->getWidth();
+    res = evaluate(
+        _solver,
+        metaSMT::logic::Ite(
+            construct(EqExpr::create(ce->getLeft(), ce->getRight()), 0),
+            construct(ce->getLeft(), width_out),
+            construct(ConstantExpr::create(0, ce->getWidth()), width_out)));
+    break;
+  }
+
   case Expr::Concat: {
     ConcatExpr *ce = cast<ConcatExpr>(e);
     assert(ce);
