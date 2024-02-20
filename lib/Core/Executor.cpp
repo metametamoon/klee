@@ -5320,12 +5320,6 @@ void Executor::terminateStateOnUserError(ExecutionState &state,
   terminateStateOnError(state, message, StateTerminationType::User, "");
 }
 
-// XXX shoot me
-static const char *okExternalsList[] = {"printf", "fprintf", "puts", "getpid"};
-static std::set<std::string> okExternals(
-    okExternalsList,
-    okExternalsList + (sizeof(okExternalsList) / sizeof(okExternalsList[0])));
-
 void Executor::callExternalFunction(ExecutionState &state, KInstruction *target,
                                     KCallable *callable,
                                     std::vector<ref<Expr>> &arguments) {

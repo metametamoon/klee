@@ -1087,6 +1087,16 @@ ref<ConstantExpr> ConstantExpr::Concat(const ref<ConstantExpr> &RHS) {
   return ConstantExpr::alloc(Tmp);
 }
 
+ref<ConstantExpr> ConstantExpr::Convol(const ref<ConstantExpr> &RHS) {
+  assert(getWidth() == RHS->getWidth());
+  Expr::Width W = getWidth();
+  APInt Tmp(value);
+  if (Tmp != APInt(RHS->value)) {
+    return ConstantExpr::create(0, W);
+  }
+  return ConstantExpr::alloc(Tmp);
+}
+
 ref<ConstantExpr> ConstantExpr::Extract(unsigned Offset, Width W) {
   return ConstantExpr::alloc(APInt(value.ashr(Offset)).zextOrTrunc(W));
 }
@@ -1814,10 +1824,7 @@ ref<Expr> ConcatExpr::create(const ref<Expr> &l, const ref<Expr> &r) {
   if (PointerExpr *ee_left = dyn_cast<PointerExpr>(l)) {
     if (PointerExpr *ee_right = dyn_cast<PointerExpr>(r)) {
       return PointerExpr::create(
-          SelectExpr::create(
-              EqExpr::create(ee_left->getBase(), ee_right->getBase()),
-              ee_left->getBase(),
-              ConstantExpr::create(0, ee_left->getBase()->getWidth())),
+          ConvolExpr::create(ee_left->getBase(), ee_right->getBase()),
           ConcatExpr::create(ee_left->getValue(), ee_right->getValue()));
     }
   }
@@ -1856,6 +1863,64 @@ ref<Expr> ConcatExpr::create8(const ref<Expr> &kid1, const ref<Expr> &kid2,
           ConcatExpr::create(
               kid3, ConcatExpr::create(
                         kid4, ConcatExpr::create4(kid5, kid6, kid7, kid8)))));
+}
+
+ref<Expr> ConvolExpr::create(const ref<Expr> &l, const ref<Expr> &r) {
+  Expr::Width w = l->getWidth() + r->getWidth();
+
+  // Fold concatenation of constants.
+  //
+  // FIXME: concat 0 x -> zext x ?
+  if (ConstantExpr *lCE = dyn_cast<ConstantExpr>(l))
+    if (ConstantExpr *rCE = dyn_cast<ConstantExpr>(r))
+      return lCE->Convol(rCE);
+
+  // Merge contiguous Extracts
+  if (ExtractExpr *ee_left = dyn_cast<ExtractExpr>(l)) {
+    if (ExtractExpr *ee_right = dyn_cast<ExtractExpr>(r)) {
+      if (ee_left->expr == ee_right->expr &&
+          ee_right->offset + ee_right->width == ee_left->offset) {
+        return ExtractExpr::create(ee_left->expr, ee_right->offset, w);
+      }
+    }
+  }
+
+  assert(!isa<PointerExpr>(l) && !isa<PointerExpr>(r));
+
+  return ConvolExpr::alloc(l, r);
+}
+
+/// Shortcut to concat N kids.  The chain returned is unbalanced to the right
+ref<Expr> ConvolExpr::createN(unsigned n_kids, const ref<Expr> kids[]) {
+  assert(n_kids > 0);
+  if (n_kids == 1)
+    return kids[0];
+
+  ref<Expr> r = ConvolExpr::create(kids[n_kids - 2], kids[n_kids - 1]);
+  for (int i = n_kids - 3; i >= 0; i--)
+    r = ConvolExpr::create(kids[i], r);
+  return r;
+}
+
+/// Shortcut to concat 4 kids.  The chain returned is unbalanced to the right
+ref<Expr> ConvolExpr::create4(const ref<Expr> &kid1, const ref<Expr> &kid2,
+                              const ref<Expr> &kid3, const ref<Expr> &kid4) {
+  return ConvolExpr::create(
+      kid1, ConvolExpr::create(kid2, ConvolExpr::create(kid3, kid4)));
+}
+
+/// Shortcut to concat 8 kids.  The chain returned is unbalanced to the right
+ref<Expr> ConvolExpr::create8(const ref<Expr> &kid1, const ref<Expr> &kid2,
+                              const ref<Expr> &kid3, const ref<Expr> &kid4,
+                              const ref<Expr> &kid5, const ref<Expr> &kid6,
+                              const ref<Expr> &kid7, const ref<Expr> &kid8) {
+  return ConvolExpr::create(
+      kid1,
+      ConvolExpr::create(
+          kid2,
+          ConvolExpr::create(
+              kid3, ConvolExpr::create(
+                        kid4, ConvolExpr::create4(kid5, kid6, kid7, kid8)))));
 }
 
 /***/

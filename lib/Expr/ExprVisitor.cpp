@@ -73,6 +73,9 @@ ref<Expr> ExprVisitor::visitActual(const ref<Expr> &e) {
     case Expr::Concat:
       res = visitConcat(static_cast<ConcatExpr &>(ep));
       break;
+    case Expr::Convol:
+      res = visitConvol(static_cast<ConvolExpr &>(ep));
+      break;
     case Expr::Extract:
       res = visitExtract(static_cast<ExtractExpr &>(ep));
       break;
@@ -297,6 +300,9 @@ ExprVisitor::Action ExprVisitor::visitSelect(const SelectExpr &) {
 }
 
 ExprVisitor::Action ExprVisitor::visitConcat(const ConcatExpr &) {
+  return Action::doChildren();
+}
+ExprVisitor::Action ExprVisitor::visitConvol(const ConvolExpr &) {
   return Action::doChildren();
 }
 

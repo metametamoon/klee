@@ -221,6 +221,7 @@ public:
     Read = NotOptimized + 2,
     Select,
     Concat,
+    Convol,
     Extract,
 
     // Casting,
@@ -944,6 +945,76 @@ protected:
   }
 };
 
+/** Children of a concat expression can have arbitrary widths.
+    Kid 0 is the left kid, kid 1 is the right kid.
+*/
+class ConvolExpr : public NonConstantExpr {
+public:
+  static const Kind kind = Convol;
+  static const unsigned numKids = 2;
+
+private:
+  Width width;
+  ref<Expr> left, right;
+
+public:
+  static ref<Expr> alloc(const ref<Expr> &l, const ref<Expr> &r) {
+    ref<Expr> c(new ConvolExpr(l, r));
+    c->computeHash();
+    c->computeHeight();
+    return createCachedExpr(c);
+  }
+
+  static ref<Expr> create(const ref<Expr> &l, const ref<Expr> &r);
+
+  Width getWidth() const { return width; }
+  Kind getKind() const { return kind; }
+  ref<Expr> getLeft() const { return left; }
+  ref<Expr> getRight() const { return right; }
+
+  unsigned getNumKids() const { return numKids; }
+  ref<Expr> getKid(unsigned i) const {
+    if (i == 0)
+      return left;
+    else if (i == 1)
+      return right;
+    else
+      return NULL;
+  }
+
+  /// Shortcuts to create larger concats.  The chain returned is unbalanced to
+  /// the right
+  static ref<Expr> createN(unsigned nKids, const ref<Expr> kids[]);
+  static ref<Expr> create4(const ref<Expr> &kid1, const ref<Expr> &kid2,
+                           const ref<Expr> &kid3, const ref<Expr> &kid4);
+  static ref<Expr> create8(const ref<Expr> &kid1, const ref<Expr> &kid2,
+                           const ref<Expr> &kid3, const ref<Expr> &kid4,
+                           const ref<Expr> &kid5, const ref<Expr> &kid6,
+                           const ref<Expr> &kid7, const ref<Expr> &kid8);
+
+  virtual ref<Expr> rebuild(ref<Expr> kids[]) const {
+    return create(kids[0], kids[1]);
+  }
+
+private:
+  ConvolExpr(const ref<Expr> &l, const ref<Expr> &r) : left(l), right(r) {
+    assert(l->getWidth() && r->getWidth());
+    width = l->getWidth();
+  }
+
+public:
+  static bool classof(const Expr *E) { return E->getKind() == Expr::Convol; }
+  static bool classof(const ConvolExpr *) { return true; }
+
+protected:
+  virtual int compareContents(const Expr &b) const {
+    const ConvolExpr &eb = static_cast<const ConvolExpr &>(b);
+    if (width != eb.width)
+      return width < eb.width ? -1 : 1;
+    return 0;
+  }
+};
+
 /** This class represents an extract from expression {\tt expr}, at
     bit offset {\tt offset} of width {\tt width}.  Bit 0 is the right most
     bit of the expression.
@@ -1622,6 +1693,7 @@ public:
   /* Constant Operations */
 
   ref<ConstantExpr> Concat(const ref<ConstantExpr> &RHS);
+  ref<ConstantExpr> Convol(const ref<ConstantExpr> &RHS);
   ref<ConstantExpr> Extract(unsigned offset, Width W);
   ref<ConstantExpr> ZExt(Width W);
   ref<ConstantExpr> SExt(Width W);
