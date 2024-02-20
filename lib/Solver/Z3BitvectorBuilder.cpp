@@ -7,7 +7,6 @@
 // License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
-#include "Z3Builder.h"
 #include "klee/Config/config.h"
 
 #ifdef ENABLE_Z3
