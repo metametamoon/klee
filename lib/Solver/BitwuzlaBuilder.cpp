@@ -538,13 +538,6 @@ Term BitwuzlaBuilder::constructActual(ref<Expr> e, int *width_out) {
     Term left = construct(ce->getLeft(), width_out);
     Term right = construct(ce->getRight(), width_out);
     Term eq = eqExpr(left, right);
-    unsigned numKids = ce->getNumKids();
-    std::vector<Term> term_args;
-    term_args.reserve(numKids);
-
-    for (unsigned i = 0; i < numKids; ++i) {
-      term_args.push_back(construct(ce->getKid(i), 0));
-    }
 
     *width_out = ce->getWidth();
     return iteExpr(eq, left, null);
