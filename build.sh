@@ -5,7 +5,7 @@
 
 # Base folder where dependencies and KLEE itself are installed
 BASE=$HOME/klee_build
-BUILD_SUFFIX="Release"
+BUILD_SUFFIX="Debug"
 
 ## KLEE Required options
 # Build type for KLEE. The options are:
@@ -15,8 +15,8 @@ BUILD_SUFFIX="Release"
 # Release+Debug+Asserts
 # Debug
 # Debug+Asserts
-# KLEE_RUNTIME_BUILD="Debug+Asserts"
-KLEE_RUNTIME_BUILD="Release" # "Debug+Asserts"
+KLEE_RUNTIME_BUILD="Debug+Asserts"
+# KLEE_RUNTIME_BUILD="Release" # "Debug+Asserts"
 
 COVERAGE=0
 ENABLE_DOXYGEN=0
@@ -26,11 +26,10 @@ USE_LIBCXX=1
 # Also required despite not being mentioned in the guide
 SQLITE_VERSION="3400100"
 
-
 ## LLVM Required options
 LLVM_VERSION=14
-ENABLE_OPTIMIZED=1
-ENABLE_DEBUG=0
+ENABLE_OPTIMIZED=0
+ENABLE_DEBUG=1
 DISABLE_ASSERTIONS=1
 REQUIRES_RTTI=1
 

@@ -316,7 +316,12 @@ public:
   ref<Expr> read(ref<Expr> offset, Expr::Width width) const;
   ref<Expr> read(unsigned offset, Expr::Width width) const;
   ref<Expr> read8(unsigned offset) const;
+  ref<Expr> readValue(ref<Expr> offset, Expr::Width width) const;
+  ref<Expr> readBase(ref<Expr> offset, Expr::Width width) const;
+  ref<Expr> readValue(unsigned offset, Expr::Width width) const;
+  ref<Expr> readBase(unsigned offset, Expr::Width width) const;
   ref<Expr> readValue8(unsigned offset) const;
+  ref<Expr> readBase8(unsigned offset) const;
 
   void write(unsigned offset, ref<Expr> value);
   void write(ref<Expr> offset, ref<Expr> value);
@@ -334,6 +339,8 @@ public:
 
 private:
   ref<Expr> read8(ref<Expr> offset) const;
+  ref<Expr> readValue8(ref<Expr> offset) const;
+  ref<Expr> readBase8(ref<Expr> offset) const;
   void write8(unsigned offset, ref<Expr> value);
   void write8(ref<Expr> offset, ref<Expr> value);
 };

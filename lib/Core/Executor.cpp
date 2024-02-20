@@ -5379,12 +5379,6 @@ void Executor::terminateStateOnUserError(ExecutionState &state,
   terminateStateOnError(state, message, StateTerminationType::User, "");
 }
 
-// XXX shoot me
-static const char *okExternalsList[] = {"printf", "fprintf", "puts", "getpid"};
-static std::set<std::string> okExternals(
-    okExternalsList,
-    okExternalsList + (sizeof(okExternalsList) / sizeof(okExternalsList[0])));
-
 void Executor::callExternalFunction(ExecutionState &state, KInstruction *target,
                                     KCallable *callable,
                                     std::vector<ref<Expr>> &arguments) {
@@ -5782,7 +5776,7 @@ void Executor::executeAlloc(ExecutionState &state, ref<Expr> size, bool isLocal,
 void Executor::executeFree(ExecutionState &state, ref<PointerExpr> address,
                            KInstruction *target) {
   address = optimizer.optimizeExpr(address, true);
-  ref<Expr> isNullPointer = Expr::createIsZero(address->getBase());
+  ref<Expr> isNullPointer = Expr::createIsZero(address->getValue());
   StatePair zeroPointer = forkInternal(state, isNullPointer, BranchType::Free);
   if (zeroPointer.first) {
     if (target)
