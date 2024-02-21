@@ -531,17 +531,6 @@ Term BitwuzlaBuilder::constructActual(ref<Expr> e, int *width_out) {
     return mk_term(Kind::BV_CONCAT, term_args);
   }
 
-  case Expr::Convol: {
-    ConvolExpr *ce = cast<ConvolExpr>(e);
-    Term null = construct(ConstantExpr::create(0, ce->getWidth()));
-    Term left = construct(ce->getLeft(), width_out);
-    Term right = construct(ce->getRight(), width_out);
-    Term eq = eqExpr(left, right);
-
-    *width_out = ce->getWidth();
-    return iteExpr(eq, left, null);
-  }
-
   case Expr::Extract: {
     ExtractExpr *ee = cast<ExtractExpr>(e);
     Term src = construct(ee->expr, width_out);
