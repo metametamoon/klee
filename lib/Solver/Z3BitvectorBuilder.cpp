@@ -340,17 +340,6 @@ Z3ASTHandle Z3BitvectorBuilder::constructActual(ref<Expr> e, int *width_out) {
     return iteExpr(cond, tExpr, fExpr);
   }
 
-  case Expr::Convol: {
-    ConvolExpr *ce = cast<ConvolExpr>(e);
-    Z3ASTHandle null = construct(ConstantExpr::create(0, ce->getWidth()));
-    Z3ASTHandle left = construct(ce->getLeft(), width_out);
-    Z3ASTHandle right = construct(ce->getRight(), width_out);
-    Z3ASTHandle eq = eqExpr(left, right);
-
-    *width_out = ce->getWidth();
-    return iteExpr(eq, left, null);
-  }
-
   case Expr::Concat: {
     ConcatExpr *ce = cast<ConcatExpr>(e);
     unsigned numKids = ce->getNumKids();

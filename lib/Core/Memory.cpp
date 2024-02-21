@@ -350,11 +350,17 @@ ref<Expr> ObjectState::readBase(ref<Expr> offset, Expr::Width width) const {
   unsigned NumBytes = width / 8;
   assert(width == NumBytes * 8 && "Invalid read size!");
   ref<Expr> Res(0);
+  ref<Expr> null = Expr::createPointer(0);
   for (unsigned i = 0; i != NumBytes; ++i) {
     unsigned idx = Context::get().isLittleEndian() ? i : (NumBytes - i - 1);
     ref<Expr> Byte =
         readBase8(AddExpr::create(offset, ConstantExpr::create(idx, Expr::Int32)));
-    Res = i ? ConvolExpr::create(Byte, Res) : Byte;
+    if (i) {
+      ref<Expr> eqBytes = EqExpr::create(Byte, Res);
+      Res = SelectExpr::create(eqBytes, Byte, null);
+    } else {
+      Res = Byte;
+    }
   }
 
   return Res;
@@ -369,10 +375,16 @@ ref<Expr> ObjectState::readBase(unsigned offset, Expr::Width width) const {
   unsigned NumBytes = width / 8;
   assert(width == NumBytes * 8 && "Invalid width for read size!");
   ref<Expr> Res(0);
+  ref<Expr> null = Expr::createPointer(0);
   for (unsigned i = 0; i != NumBytes; ++i) {
     unsigned idx = Context::get().isLittleEndian() ? i : (NumBytes - i - 1);
     ref<Expr> Byte = readBase8(offset + idx);
-    Res = i ? ConvolExpr::create(Byte, Res) : Byte;
+    if (i) {
+      ref<Expr> eqBytes = EqExpr::create(Byte, Res);
+      Res = SelectExpr::create(eqBytes, Byte, null);
+    } else {
+      Res = Byte;
+    }
   }
 
   return Res;

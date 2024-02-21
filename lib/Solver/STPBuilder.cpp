@@ -627,17 +627,6 @@ ExprHandle STPBuilder::constructActual(ref<Expr> e, int *width_out) {
     return res;
   }
 
-  case Expr::Convol: {
-    ConvolExpr *ce = cast<ConvolExpr>(e);
-    ExprHandle null = construct(ConstantExpr::create(0, ce->getWidth()));
-    ExprHandle left = construct(ce->getLeft(), width_out);
-    ExprHandle right = construct(ce->getRight(), width_out);
-    ExprHandle eq = eqExpr(left, right);
-
-    *width_out = ce->getWidth();
-    return vc_iteExpr(vc, eq, left, null);
-  }
-
   case Expr::Extract: {
     ExtractExpr *ee = cast<ExtractExpr>(e);
     ExprHandle src = construct(ee->expr, width_out);

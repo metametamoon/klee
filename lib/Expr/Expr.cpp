@@ -1088,16 +1088,6 @@ ref<ConstantExpr> ConstantExpr::Concat(const ref<ConstantExpr> &RHS) {
   return ConstantExpr::alloc(Tmp);
 }
 
-ref<ConstantExpr> ConstantExpr::Convol(const ref<ConstantExpr> &RHS) {
-  assert(getWidth() == RHS->getWidth());
-  Expr::Width W = getWidth();
-  APInt Tmp(value);
-  if (Tmp != APInt(RHS->value)) {
-    return ConstantExpr::create(0, W);
-  }
-  return ConstantExpr::alloc(Tmp);
-}
-
 ref<ConstantExpr> ConstantExpr::Extract(unsigned Offset, Width W) {
   return ConstantExpr::alloc(APInt(value.ashr(Offset)).zextOrTrunc(W));
 }
@@ -1802,6 +1792,11 @@ ref<Expr> Expr::getValue() const {
                                 : const_cast<Expr *>(this);
 }
 
+ref<Expr> convolution(const ref<Expr> &l, const ref<Expr> &r) {
+  ref<Expr> null = ConstantExpr::create(0, l->getWidth());
+  return SelectExpr::create(EqExpr::create(l, r), l, null);
+}
+
 ref<Expr> ConcatExpr::create(const ref<Expr> &l, const ref<Expr> &r) {
   Expr::Width w = l->getWidth() + r->getWidth();
 
@@ -1825,7 +1820,7 @@ ref<Expr> ConcatExpr::create(const ref<Expr> &l, const ref<Expr> &r) {
   if (PointerExpr *ee_left = dyn_cast<PointerExpr>(l)) {
     if (PointerExpr *ee_right = dyn_cast<PointerExpr>(r)) {
       return PointerExpr::create(
-          ConvolExpr::create(ee_left->getBase(), ee_right->getBase()),
+          convolution(ee_left->getBase(), ee_right->getBase()),
           ConcatExpr::create(ee_left->getValue(), ee_right->getValue()));
     }
   }
@@ -1864,64 +1859,6 @@ ref<Expr> ConcatExpr::create8(const ref<Expr> &kid1, const ref<Expr> &kid2,
           ConcatExpr::create(
               kid3, ConcatExpr::create(
                         kid4, ConcatExpr::create4(kid5, kid6, kid7, kid8)))));
-}
-
-ref<Expr> ConvolExpr::create(const ref<Expr> &l, const ref<Expr> &r) {
-  Expr::Width w = l->getWidth() + r->getWidth();
-
-  // Fold concatenation of constants.
-  //
-  // FIXME: concat 0 x -> zext x ?
-  if (ConstantExpr *lCE = dyn_cast<ConstantExpr>(l))
-    if (ConstantExpr *rCE = dyn_cast<ConstantExpr>(r))
-      return lCE->Convol(rCE);
-
-  // Merge contiguous Extracts
-  if (ExtractExpr *ee_left = dyn_cast<ExtractExpr>(l)) {
-    if (ExtractExpr *ee_right = dyn_cast<ExtractExpr>(r)) {
-      if (ee_left->expr == ee_right->expr &&
-          ee_right->offset + ee_right->width == ee_left->offset) {
-        return ExtractExpr::create(ee_left->expr, ee_right->offset, w);
-      }
-    }
-  }
-
-  assert(!isa<PointerExpr>(l) && !isa<PointerExpr>(r));
-
-  return ConvolExpr::alloc(l, r);
-}
-
-/// Shortcut to concat N kids.  The chain returned is unbalanced to the right
-ref<Expr> ConvolExpr::createN(unsigned n_kids, const ref<Expr> kids[]) {
-  assert(n_kids > 0);
-  if (n_kids == 1)
-    return kids[0];
-
-  ref<Expr> r = ConvolExpr::create(kids[n_kids - 2], kids[n_kids - 1]);
-  for (int i = n_kids - 3; i >= 0; i--)
-    r = ConvolExpr::create(kids[i], r);
-  return r;
-}
-
-/// Shortcut to concat 4 kids.  The chain returned is unbalanced to the right
-ref<Expr> ConvolExpr::create4(const ref<Expr> &kid1, const ref<Expr> &kid2,
-                              const ref<Expr> &kid3, const ref<Expr> &kid4) {
-  return ConvolExpr::create(
-      kid1, ConvolExpr::create(kid2, ConvolExpr::create(kid3, kid4)));
-}
-
-/// Shortcut to concat 8 kids.  The chain returned is unbalanced to the right
-ref<Expr> ConvolExpr::create8(const ref<Expr> &kid1, const ref<Expr> &kid2,
-                              const ref<Expr> &kid3, const ref<Expr> &kid4,
-                              const ref<Expr> &kid5, const ref<Expr> &kid6,
-                              const ref<Expr> &kid7, const ref<Expr> &kid8) {
-  return ConvolExpr::create(
-      kid1,
-      ConvolExpr::create(
-          kid2,
-          ConvolExpr::create(
-              kid3, ConvolExpr::create(
-                        kid4, ConvolExpr::create4(kid5, kid6, kid7, kid8)))));
 }
 
 /***/
@@ -2448,6 +2385,51 @@ static ref<Expr> AShrExpr_create(const ref<Expr> &l, const ref<Expr> &r) {
     return _e_op##_create(l.get(), r.get());                                   \
   }
 
+#define BCREATE_R_C(_e_op, _op, partialL, partialR, pointerL, pointerR)          \
+  ref<Expr> _e_op ::create(const ref<Expr> &l, const ref<Expr> &r) {           \
+    assert(l->getWidth() == r->getWidth() && "type mismatch");                 \
+    if (SelectExpr *sel = dyn_cast<SelectExpr>(l)) {                           \
+      if (isa<ConstantExpr>(sel->trueExpr)) {                                  \
+        return SelectExpr::create(sel->cond, _e_op::create(sel->trueExpr, r),  \
+                                  _e_op::create(sel->falseExpr, r));           \
+      }                                                                        \
+    }                                                                          \
+    if (SelectExpr *ser = dyn_cast<SelectExpr>(r)) {                           \
+      if (isa<ConstantExpr>(ser->trueExpr)) {                                  \
+        return SelectExpr::create(ser->cond, _e_op::create(l, ser->trueExpr),  \
+                                  _e_op::create(l, ser->falseExpr));           \
+      }                                                                        \
+    }                                                                          \
+    if (PointerExpr *pl = dyn_cast<PointerExpr>(l)) {                          \
+      if (PointerExpr *pr = dyn_cast<PointerExpr>(r))                          \
+        return pl->_op(pr);                                                    \
+      return pointerR(pl, r.get());                                            \
+    } else if (PointerExpr *pr = dyn_cast<PointerExpr>(r)) {                   \
+      return pointerL(l.get(), pr);                                            \
+    }                                                                          \
+    if (ConstantExpr *cl = dyn_cast<ConstantExpr>(l)) {                        \
+      if (ConstantExpr *cr = dyn_cast<ConstantExpr>(r))                        \
+        return cl->_op(cr);                                                    \
+      return partialR(cl, r.get());                                            \
+    } else if (ConstantExpr *cr = dyn_cast<ConstantExpr>(r)) {                 \
+      return partialL(l.get(), cr);                                            \
+    }                                                                          \
+    if (isa<_e_op>(l) && l->height() > r->height() + 1) { \
+      if (l->getKid(0)->height() > l->getKid(1)->height()) { \
+        return _e_op::create(l->getKid(0), _e_op::create(r, l->getKid(1))); \
+      } else { \
+        return _e_op::create(l->getKid(1), _e_op::create(r, l->getKid(0))); \
+      } \
+    } else if (isa<_e_op>(r) && r->height() > l->height() + 1) { \
+      if (r->getKid(0)->height() > r->getKid(1)->height()) { \
+        return _e_op::create(r->getKid(0), _e_op::create(l, r->getKid(1))); \
+      } else { \
+        return _e_op::create(r->getKid(1), _e_op::create(l, r->getKid(0))); \
+      } \
+    } \
+    return _e_op##_create(l.get(), r.get());                                   \
+  }
+
 #define BCREATE(_e_op, _op)                                                    \
   ref<Expr> _e_op ::create(const ref<Expr> &l, const ref<Expr> &r) {           \
     assert(l->getWidth() == r->getWidth() && "type mismatch");                 \
@@ -2480,13 +2462,13 @@ BCREATE_R(AddExpr, Add, AddExpr_createPartial, AddExpr_createPartialR,
           AddExpr_createPointer, AddExpr_createPointerR)
 BCREATE_R(SubExpr, Sub, SubExpr_createPartial, SubExpr_createPartialR,
           SubExpr_createPointer, SubExpr_createPointerR)
-BCREATE_R(MulExpr, Mul, MulExpr_createPartial, MulExpr_createPartialR,
+BCREATE_R_C(MulExpr, Mul, MulExpr_createPartial, MulExpr_createPartialR,
           MulExpr_createPointer, MulExpr_createPointerR)
-BCREATE_R(AndExpr, And, AndExpr_createPartial, AndExpr_createPartialR,
+BCREATE_R_C(AndExpr, And, AndExpr_createPartial, AndExpr_createPartialR,
           AndExpr_createPointer, AndExpr_createPointerR)
-BCREATE_R(OrExpr, Or, OrExpr_createPartial, OrExpr_createPartialR,
+BCREATE_R_C(OrExpr, Or, OrExpr_createPartial, OrExpr_createPartialR,
           OrExpr_createPointer, OrExpr_createPointerR)
-BCREATE_R(XorExpr, Xor, XorExpr_createPartial, XorExpr_createPartialR,
+BCREATE_R_C(XorExpr, Xor, XorExpr_createPartial, XorExpr_createPartialR,
           XorExpr_createPointer, XorExpr_createPointerR)
 BCREATE(UDivExpr, UDiv)
 BCREATE(SDivExpr, SDiv)

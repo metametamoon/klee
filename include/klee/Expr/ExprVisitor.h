@@ -82,7 +82,6 @@ protected:
   virtual Action visitRead(const ReadExpr &);
   virtual Action visitSelect(const SelectExpr &);
   virtual Action visitConcat(const ConcatExpr &);
-  virtual Action visitConvol(const ConvolExpr &);
   virtual Action visitExtract(const ExtractExpr &);
   virtual Action visitZExt(const ZExtExpr &);
   virtual Action visitSExt(const SExtExpr &);
