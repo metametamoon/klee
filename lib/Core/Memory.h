@@ -219,7 +219,10 @@ class ObjectStage {
 private:
   /// knownSymbolics[byte] holds the expression for byte,
   /// if byte is known
-  mutable SparseStorage<ref<Expr>, OptionalRefEq<Expr>> knownSymbolics;
+  mutable SparseStorage<
+      ref<Expr>, OptionalRefEq<Expr>,
+      PersistenUnorderedMapAdapder<ref<Expr>, OptionalRefEq<Expr>>>
+      knownSymbolics;
 
   /// unflushedMask[byte] is set if byte is unflushed
   /// mutable because may need flushed during read of const

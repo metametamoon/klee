@@ -6,7 +6,6 @@
 #include <cassert>
 #include <cstddef>
 #include <functional>
-#include <iterator>
 #include <map>
 #include <unordered_map>
 #include <vector>
@@ -22,18 +21,94 @@ enum class Density {
   Dense,
 };
 
+template <typename Iter, typename ValueType,
+          typename Eq = std::equal_to<ValueType>>
+struct StorageAdapter {
+  using iterator = Iter;
+  virtual bool contains(size_t key) const = 0;
+  virtual iterator begin() const = 0;
+  virtual iterator end() const = 0;
+  virtual const ValueType *lookup(size_t key) const = 0;
+  virtual bool empty() const = 0;
+  virtual void set(size_t key, const ValueType &value) = 0;
+  virtual void remove(size_t key) = 0;
+  virtual const ValueType &at(size_t key) const = 0;
+  virtual void clear() = 0;
+  virtual size_t size() const = 0;
+};
+
 template <typename ValueType, typename Eq = std::equal_to<ValueType>>
+struct UnorderedMapAdapder
+    : public StorageAdapter<
+          typename std::unordered_map<size_t, ValueType>::const_iterator,
+          ValueType, Eq> {
+  using storage_ty = std::unordered_map<size_t, ValueType>;
+  using iterator = typename storage_ty::const_iterator;
+  storage_ty storage;
+  bool contains(size_t key) const override { return storage.count(key) != 0; }
+  iterator begin() const override { return storage.begin(); }
+  iterator end() const override { return storage.end(); }
+  const ValueType *lookup(size_t key) const override {
+    auto it = storage.find(key);
+    if (it != storage.end()) {
+      return &it->second;
+    }
+    return nullptr;
+  }
+  bool empty() const override { return storage.empty(); }
+  void set(size_t key, const ValueType &value) override {
+    storage[key] = value;
+  }
+  void remove(size_t key) override { storage.erase(key); }
+  const ValueType &at(size_t key) const override { return storage.at(key); }
+  void clear() override { storage.clear(); }
+  size_t size() const override { return storage.size(); }
+};
+
+template <typename ValueType, typename Eq = std::equal_to<ValueType>>
+struct PersistenUnorderedMapAdapder
+    : public StorageAdapter<
+          typename PersistentHashMap<size_t, ValueType>::iterator, ValueType,
+          Eq> {
+  using storage_ty = PersistentHashMap<size_t, ValueType>;
+  using iterator = typename storage_ty::iterator;
+  storage_ty storage;
+  bool contains(size_t key) const override { return storage.count(key) != 0; }
+  iterator begin() const override { return storage.begin(); }
+  iterator end() const override { return storage.end(); }
+  const ValueType *lookup(size_t key) const override {
+    return storage.lookup(key);
+  }
+  bool empty() const override { return storage.empty(); }
+  void set(size_t key, const ValueType &value) override {
+    storage.replace({key, value});
+  }
+  void remove(size_t key) override { storage.remove(key); }
+  const ValueType &at(size_t key) const override { return storage.at(key); }
+  void clear() override { storage.clear(); }
+  size_t size() const override { return storage.size(); }
+};
+
+template <typename ValueType, typename Eq = std::equal_to<ValueType>,
+          typename InternalStorageAdapter = UnorderedMapAdapder<ValueType, Eq>>
 class SparseStorage {
 private:
-  std::unordered_map<size_t, ValueType> internalStorage;
+  InternalStorageAdapter internalStorage;
   ValueType defaultValue;
   Eq eq;
 
-  bool contains(size_t key) const { return internalStorage.count(key) != 0; }
+  bool contains(size_t key) const { return internalStorage.containts(key); }
 
 public:
   SparseStorage(const ValueType &defaultValue = ValueType())
-      : defaultValue(defaultValue) {}
+      : defaultValue(defaultValue) {
+    static_assert(
+        std::is_base_of<
+            StorageAdapter<typename InternalStorageAdapter::iterator, ValueType,
+                           Eq>,
+            InternalStorageAdapter>::value,
+        "type parameter of this class must derive from StorageAdapter");
+  }
 
   SparseStorage(const std::unordered_map<size_t, ValueType> &internalStorage,
                 const ValueType &defaultValue)
@@ -53,9 +128,9 @@ public:
 
   void store(size_t idx, const ValueType &value) {
     if (eq(value, defaultValue)) {
-      internalStorage.erase(idx);
+      internalStorage.remove(idx);
     } else {
-      internalStorage[idx] = value;
+      internalStorage.set(idx, value);
     }
   }
 
@@ -68,11 +143,8 @@ public:
   }
 
   ValueType load(size_t idx) const {
-    auto it = internalStorage.find(idx);
-    if (it != internalStorage.end()) {
-      return it->second;
-    }
-    return defaultValue;
+    auto it = internalStorage.lookup(idx);
+    return it ? *it : defaultValue;
   }
 
   size_t sizeOfSetRange() const {
@@ -126,9 +198,7 @@ public:
     return vectorized;
   }
 
-  const std::unordered_map<size_t, ValueType> &storage() const {
-    return internalStorage;
-  };
+  const InternalStorageAdapter &storage() const { return internalStorage; };
 
   const ValueType &defaultV() const { return defaultValue; };
 
