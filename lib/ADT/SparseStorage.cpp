@@ -6,7 +6,7 @@
 
 namespace klee {
 template <>
-void SparseStorage<bool>::print(llvm::raw_ostream &os, Density d) const {
+void Storage<bool>::print(llvm::raw_ostream &os, Density d) const {
   if (d == Density::Sparse) {
     // "Sparse representation"
     os << "{";
@@ -37,7 +37,7 @@ void SparseStorage<bool>::print(llvm::raw_ostream &os, Density d) const {
 }
 
 template <>
-void SparseStorage<unsigned char>::print(llvm::raw_ostream &os,
+void Storage<unsigned char>::print(llvm::raw_ostream &os,
                                          Density d) const {
   if (d == Density::Sparse) {
     // "Sparse representation"
@@ -69,7 +69,7 @@ void SparseStorage<unsigned char>::print(llvm::raw_ostream &os,
 }
 
 template <>
-void SparseStorage<ref<ConstantExpr>>::print(llvm::raw_ostream &os,
+void Storage<ref<ConstantExpr>>::print(llvm::raw_ostream &os,
                                              Density d) const {
   if (d == Density::Sparse) {
     // "Sparse representation"
@@ -115,7 +115,7 @@ void SparseStorage<ref<ConstantExpr>>::print(llvm::raw_ostream &os,
 }
 
 template <>
-void klee::SparseStorage<
+void klee::Storage<
     klee::ref<klee::Expr>,
     klee::OptionalRefEq<klee::Expr>>::print(llvm::raw_ostream &os,
                                             Density d) const {

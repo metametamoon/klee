@@ -91,7 +91,7 @@ struct PersistenUnorderedMapAdapder
 
 template <typename ValueType, typename Eq = std::equal_to<ValueType>,
           typename InternalStorageAdapter = UnorderedMapAdapder<ValueType, Eq>>
-class SparseStorage {
+class Storage {
 private:
   InternalStorageAdapter internalStorage;
   ValueType defaultValue;
@@ -100,7 +100,7 @@ private:
   bool contains(size_t key) const { return internalStorage.containts(key); }
 
 public:
-  SparseStorage(const ValueType &defaultValue = ValueType())
+  Storage(const ValueType &defaultValue = ValueType())
       : defaultValue(defaultValue) {
     static_assert(
         std::is_base_of<
@@ -110,16 +110,16 @@ public:
         "type parameter of this class must derive from StorageAdapter");
   }
 
-  SparseStorage(const std::unordered_map<size_t, ValueType> &internalStorage,
-                const ValueType &defaultValue)
+  Storage(const std::unordered_map<size_t, ValueType> &internalStorage,
+          const ValueType &defaultValue)
       : defaultValue(defaultValue) {
     for (auto &[index, value] : internalStorage) {
       store(index, value);
     }
   }
 
-  SparseStorage(const std::vector<ValueType> &values,
-                const ValueType &defaultValue = ValueType())
+  Storage(const std::vector<ValueType> &values,
+          const ValueType &defaultValue = ValueType())
       : defaultValue(defaultValue) {
     for (size_t idx = 0; idx < values.size(); ++idx) {
       store(idx, values[idx]);
@@ -155,23 +155,21 @@ public:
     return internalStorage.empty() ? 0 : sizeOfRange + 1;
   }
 
-  bool operator==(const SparseStorage<ValueType> &another) const {
+  bool operator==(const Storage<ValueType> &another) const {
     return eq(defaultValue, another.defaultValue) && compare(another) == 0;
   }
 
-  bool operator!=(const SparseStorage<ValueType> &another) const {
+  bool operator!=(const Storage<ValueType> &another) const {
     return !(*this == another);
   }
 
-  bool operator<(const SparseStorage &another) const {
+  bool operator<(const Storage &another) const {
     return compare(another) == -1;
   }
 
-  bool operator>(const SparseStorage &another) const {
-    return compare(another) == 1;
-  }
+  bool operator>(const Storage &another) const { return compare(another) == 1; }
 
-  int compare(const SparseStorage<ValueType> &other) const {
+  int compare(const Storage<ValueType> &other) const {
     auto ordered = calculateOrderedStorage();
     auto otherOrdered = other.calculateOrderedStorage();
 
@@ -210,6 +208,23 @@ public:
   }
 
   void print(llvm::raw_ostream &os, Density) const;
+};
+
+template <typename ValueType, typename Eq = std::equal_to<ValueType>,
+          typename InternalStorageAdapter = UnorderedMapAdapder<ValueType, Eq>>
+class SparseStorage : public Storage<ValueType, Eq, InternalStorageAdapter> {
+public:
+  SparseStorage(const ValueType &defaultValue = ValueType())
+      : Storage<ValueType, Eq, InternalStorageAdapter>(defaultValue) {}
+
+  SparseStorage(const std::unordered_map<size_t, ValueType> &internalStorage,
+                const ValueType &defaultValue)
+      : Storage<ValueType, Eq, InternalStorageAdapter>(internalStorage,
+                                                       defaultValue) {}
+
+  SparseStorage(const std::vector<ValueType> &values,
+                const ValueType &defaultValue = ValueType())
+      : Storage<ValueType, Eq, InternalStorageAdapter>(values, defaultValue) {}
 };
 
 template <typename U>
