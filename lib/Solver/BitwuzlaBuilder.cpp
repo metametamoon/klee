@@ -384,7 +384,7 @@ Term BitwuzlaBuilder::getInitialArray(const Array *root) {
         }
         constant_array_assertions[root] = std::move(array_assertions);
       } else {
-        for (auto &[index, value] : source->constantValues.storage()) {
+        for (const auto &[index, value] : source->constantValues.storage()) {
           int width_out;
           Term array_value = construct(value, &width_out);
           assert(width_out == (int)root->getRange() &&

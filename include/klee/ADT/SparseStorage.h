@@ -2,7 +2,6 @@
 #define KLEE_SPARSESTORAGE_H
 
 #include "klee/ADT/PersistentHashMap.h"
-#include "klee/Solver/SolverUtil.h"
 
 #include <cassert>
 #include <cstddef>
@@ -22,19 +21,46 @@ enum class Density {
   Dense,
 };
 
+enum class StorageIteratorKind { UMap, PersistentUMap, PersistenArray };
+
 template <typename ValueType, typename Eq = std::equal_to<ValueType>>
 struct StorageAdapter {
-  class iterator {
+  using value_ty = std::pair<size_t, ValueType>;
+  class inner_iterator {
   public:
-    using value_ty = std::pair<size_t, ValueType>;
-
-    virtual iterator &operator+=(int right);
-    friend iterator operator+(iterator const &left, int right) {
-      iterator result = left;
-      result += right;
-      return result;
-    }
+    virtual StorageIteratorKind getKind() const = 0;
+    virtual inner_iterator &operator++() = 0;
+    virtual inner_iterator *clone() = 0;
     virtual value_ty operator*() = 0;
+    virtual bool operator!=(const inner_iterator &other) const = 0;
+    static bool classof(const StorageAdapter<ValueType, Eq> *SE) {
+      return true;
+    }
+    virtual ~inner_iterator() {}
+  };
+
+  class iterator {
+    inner_iterator *impl;
+
+  public:
+    iterator(inner_iterator *impl) : impl(impl) {}
+    iterator(iterator const &right) : impl(right.impl->clone()) {}
+    ~iterator() { delete impl; }
+    iterator &operator=(iterator const &right) {
+      delete impl;
+      impl = right.impl->clone();
+      return *this;
+    }
+
+    // forward operators to virtual calls through impl.
+    iterator &operator++() {
+      ++(*impl);
+      return *this;
+    }
+    value_ty operator*() { return *(*impl); }
+    bool operator!=(const iterator &other) const {
+      return *impl != *other.impl;
+    }
   };
 
   virtual bool contains(size_t key) const = 0;
@@ -55,21 +81,43 @@ public:
   using storage_ty = std::unordered_map<size_t, ValueType>;
   using base_ty = StorageAdapter<ValueType, Eq>;
   using iterator = typename base_ty::iterator;
-  class umap_iterator : iterator {
+  using inner_iterator = typename base_ty::inner_iterator;
+  class umap_iterator : public inner_iterator {
     typename storage_ty::const_iterator it;
 
   public:
     umap_iterator(const typename storage_ty::const_iterator &it) : it(it) {}
-    iterator &operator+=(int right) override {
-      it += right;
+    StorageIteratorKind getKind() const override {
+      return StorageIteratorKind::UMap;
+    }
+    static bool classof(const StorageAdapter<ValueType, Eq> *SA) {
+      return SA->getKind() == StorageIteratorKind::UMap;
+    }
+    static bool classof(const UnorderedMapAdapder<ValueType, Eq> *) {
+      return true;
+    }
+    inner_iterator &operator++() override {
+      ++it;
       return *this;
     }
+    inner_iterator *clone() override { return new umap_iterator(it); }
     typename base_ty::value_ty operator*() override { return *it; }
+    bool operator!=(const inner_iterator &other) const override {
+      if (other.getKind() != getKind()) {
+        return true;
+      }
+      const umap_iterator &el = static_cast<const umap_iterator &>(other);
+      return el.it != it;
+    }
   };
   storage_ty storage;
   bool contains(size_t key) const override { return storage.count(key) != 0; }
-  iterator begin() const override { return storage.begin(); }
-  iterator end() const override { return storage.end(); }
+  iterator begin() const override {
+    return iterator(new umap_iterator(storage.begin()));
+  }
+  iterator end() const override {
+    return iterator(new umap_iterator(storage.end()));
+  }
   const ValueType *lookup(size_t key) const override {
     auto it = storage.find(key);
     if (it != storage.end()) {
@@ -92,22 +140,47 @@ struct PersistenUnorderedMapAdapder : public StorageAdapter<ValueType, Eq> {
   using storage_ty = PersistentHashMap<size_t, ValueType>;
   using base_ty = StorageAdapter<ValueType, Eq>;
   using iterator = typename base_ty::iterator;
-  class persistent_umap_iterator : iterator {
+  using inner_iterator = typename base_ty::inner_iterator;
+  class persistent_umap_iterator : public inner_iterator {
     typename storage_ty::iterator it;
 
   public:
-    persistent_umap_iterator(const typename storage_ty::const_iterator &it)
+    persistent_umap_iterator(const typename storage_ty::iterator &it)
         : it(it) {}
-    iterator &operator+=(int right) override {
-      it += right;
+    StorageIteratorKind getKind() const override {
+      return StorageIteratorKind::PersistentUMap;
+    }
+    static bool classof(const StorageAdapter<ValueType, Eq> *SA) {
+      return SA->getKind() == StorageIteratorKind::PersistentUMap;
+    }
+    static bool classof(const PersistenUnorderedMapAdapder<ValueType, Eq> *) {
+      return true;
+    }
+    inner_iterator &operator++() override {
+      ++it;
       return *this;
     }
+    inner_iterator *clone() override {
+      return new persistent_umap_iterator(it);
+    }
     typename base_ty::value_ty operator*() override { return *it; }
+    bool operator!=(const inner_iterator &other) const override {
+      if (other.getKind() != getKind()) {
+        return true;
+      }
+      const persistent_umap_iterator &el =
+          static_cast<const persistent_umap_iterator &>(other);
+      return el.it != it;
+    }
   };
   storage_ty storage;
   bool contains(size_t key) const override { return storage.count(key) != 0; }
-  iterator begin() const override { return storage.begin(); }
-  iterator end() const override { return storage.end(); }
+  iterator begin() const override {
+    return new persistent_umap_iterator(storage.begin());
+  }
+  iterator end() const override {
+    return new persistent_umap_iterator(storage.end());
+  }
   const ValueType *lookup(size_t key) const override {
     return storage.lookup(key);
   }
@@ -122,13 +195,15 @@ struct PersistenUnorderedMapAdapder : public StorageAdapter<ValueType, Eq> {
 };
 
 template <typename ValueType, typename Eq = std::equal_to<ValueType>>
-struct PeristentArray : public StorageAdapter<ValueType, Eq> {
+struct PersistentArray : public StorageAdapter<ValueType, Eq> {
   using storage_ty = ValueType *;
   using base_ty = StorageAdapter<ValueType, Eq>;
   using iterator = typename base_ty::iterator;
+  using inner_iterator = typename base_ty::inner_iterator;
 
 protected:
-  class persistent_array_iterator : iterator {
+  Eq eq;
+  class persistent_array_iterator : public inner_iterator {
     typename std::vector<ValueType>::const_interator it;
     size_t index;
 
@@ -137,12 +212,32 @@ protected:
         const typename std::vector<ValueType>::const_interator &it,
         size_t index)
         : it(it), index(index) {}
-    iterator &operator+=(int right) override {
-      it += right;
-      index += right;
+    StorageIteratorKind getKind() const override {
+      return StorageIteratorKind::PersistenArray;
+    }
+    static bool classof(const StorageAdapter<ValueType, Eq> *SA) {
+      return SA->getKind() == StorageIteratorKind::PersistenArray;
+    }
+    static bool classof(const PersistentArray<ValueType, Eq> *) { return true; }
+    inner_iterator &operator++() override {
+      do {
+        ++it;
+        ++index;
+      } while (eq(*it, defaultValue));
       return *this;
     }
+    inner_iterator *clone() override {
+      return new persistent_array_iterator(it);
+    }
     typename base_ty::value_ty operator*() override { return {index, *it}; }
+    bool operator!=(const inner_iterator &other) const override {
+      if (other.getKind() != getKind()) {
+        return true;
+      }
+      const persistent_array_iterator &el =
+          static_cast<const persistent_array_iterator &>(other);
+      return el.it != it || el.index != index;
+    }
   };
 
 public:
@@ -150,19 +245,19 @@ public:
   size_t storageSize;
   ValueType defaultValue;
   size_t nonDefaultValuesCount;
-  PeristentArray(size_t storageSize, const ValueType &defaultValue)
+  PersistentArray(size_t storageSize, const ValueType &defaultValue)
       : storageSize(storageSize), defaultValue(defaultValue),
         nonDefaultValuesCount(0) {
     clear();
   }
   bool contains(size_t key) const override { return storage[key] != 0; }
   iterator begin() const override {
-    std::vector<int>::iterator it(storage);
-    return persistent_array_iterator(it, 0);
+    typename std::vector<ValueType>::iterator it(storage);
+    return new persistent_array_iterator(it, 0);
   }
   iterator end() const override {
-    std::vector<int>::iterator it(storage + storageSize);
-    return persistent_array_iterator(it, storageSize);
+    typename std::vector<ValueType>::iterator it(storage + storageSize);
+    return new persistent_array_iterator(it, storageSize);
   }
   const ValueType *lookup(size_t key) const override {
     auto val = storage[key];
@@ -193,29 +288,15 @@ public:
 
 template <typename ValueType, typename Eq = std::equal_to<ValueType>>
 class Storage {
-private:
+protected:
   ValueType defaultValue;
   Eq eq;
 
-public:
   Storage(const ValueType &defaultValue = ValueType())
       : defaultValue(defaultValue) {}
 
-  Storage(const std::unordered_map<size_t, ValueType> &internalStorage,
-          const ValueType &defaultValue)
-      : defaultValue(defaultValue) {
-    for (auto &[index, value] : internalStorage) {
-      store(index, value);
-    }
-  }
-
-  Storage(const std::vector<ValueType> &values,
-          const ValueType &defaultValue = ValueType())
-      : defaultValue(defaultValue) {
-    for (size_t idx = 0; idx < values.size(); ++idx) {
-      store(idx, values[idx]);
-    }
-  }
+public:
+  virtual ~Storage() {}
 
   virtual void store(size_t idx, const ValueType &value) = 0;
 
@@ -279,8 +360,8 @@ template <typename ValueType, typename Eq = std::equal_to<ValueType>,
 class SparseStorage : public Storage<ValueType, Eq> {
 private:
   InternalStorageAdapter internalStorage;
-  ValueType defaultValue;
-  Eq eq;
+  // ValueType defaultValue;
+  // Eq eq;
 
   bool contains(size_t key) const { return internalStorage.containts(key); }
 
@@ -295,33 +376,40 @@ public:
 
   SparseStorage(const std::unordered_map<size_t, ValueType> &internalStorage,
                 const ValueType &defaultValue)
-      : Storage<ValueType, Eq>(internalStorage, defaultValue) {
-    static_assert(
-        std::is_base_of<StorageAdapter<ValueType, Eq>,
-                        InternalStorageAdapter>::value,
-        "type parameter of this class must derive from StorageAdapter");
+      : SparseStorage(defaultValue) {
+    for (auto &[index, value] : internalStorage) {
+      store(index, value);
+    }
   }
 
   SparseStorage(const std::vector<ValueType> &values,
                 const ValueType &defaultValue = ValueType())
-      : Storage<ValueType, Eq>(values, defaultValue) {
-    static_assert(
-        std::is_base_of<StorageAdapter<ValueType, Eq>,
-                        InternalStorageAdapter>::value,
-        "type parameter of this class must derive from StorageAdapter");
+      : SparseStorage(defaultValue) {
+    for (size_t idx = 0; idx < values.size(); ++idx) {
+      store(idx, values[idx]);
+    }
   }
 
   void store(size_t idx, const ValueType &value) override {
-    if (eq(value, defaultValue)) {
+    if (Storage<ValueType, Eq>::eq(value,
+                                   Storage<ValueType, Eq>::defaultValue)) {
       internalStorage.remove(idx);
     } else {
       internalStorage.set(idx, value);
     }
   }
 
+  template <typename InputIterator>
+  void store(size_t idx, InputIterator iteratorBegin,
+             InputIterator iteratorEnd) {
+    for (; iteratorBegin != iteratorEnd; ++iteratorBegin, ++idx) {
+      store(idx, *iteratorBegin);
+    }
+  }
+
   ValueType load(size_t idx) const override {
     auto it = internalStorage.lookup(idx);
-    return it ? *it : defaultValue;
+    return it ? *it : Storage<ValueType, Eq>::defaultValue;
   }
 
   size_t sizeOfSetRange() const override {
@@ -332,7 +420,7 @@ public:
     return internalStorage.empty() ? 0 : sizeOfRange + 1;
   }
 
-  std::map<size_t, ValueType> calculateOrderedStorage() const {
+  std::map<size_t, ValueType> calculateOrderedStorage() const override {
     std::map<size_t, ValueType> ordered;
     for (const auto &i : internalStorage) {
       ordered.insert(i);
@@ -340,7 +428,7 @@ public:
     return ordered;
   }
 
-  std::vector<ValueType> getFirstNIndexes(size_t n) const {
+  std::vector<ValueType> getFirstNIndexes(size_t n) const override {
     std::vector<ValueType> vectorized(n);
     for (size_t i = 0; i < n; i++) {
       vectorized[i] = load(i);
@@ -348,29 +436,19 @@ public:
     return vectorized;
   }
 
-  const InternalStorageAdapter &storage() const { return internalStorage; };
+  const InternalStorageAdapter &storage() const override {
+    return internalStorage;
+  };
 
-  const ValueType &defaultV() const { return defaultValue; };
-
-  void reset() { internalStorage.clear(); }
+  void reset() override { internalStorage.clear(); }
 
   void reset(ValueType newDefault) {
-    defaultValue = newDefault;
+    Storage<ValueType, Eq>::defaultValue = newDefault;
     reset();
   }
 
   void print(llvm::raw_ostream &os, Density) const;
 };
-
-template <typename U>
-Storage<unsigned char> sparseBytesFromValue(const U &value) {
-  const unsigned char *valueUnsignedCharIterator =
-      reinterpret_cast<const unsigned char *>(&value);
-  SparseStorage<unsigned char> result;
-  result.store(0, valueUnsignedCharIterator,
-               valueUnsignedCharIterator + sizeof(value));
-  return result;
-}
 
 } // namespace klee
 
