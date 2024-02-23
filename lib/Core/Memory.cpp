@@ -11,6 +11,8 @@
 
 #include "ExecutionState.h"
 #include "MemoryManager.h"
+#include "klee/ADT/Ref.h"
+#include "klee/ADT/SparseStorage.h"
 #include "klee/Core/Context.h"
 
 #include "CodeLocation.h"
@@ -23,6 +25,7 @@
 #include "klee/Support/OptionCategories.h"
 
 #include "klee/Support/CompilerWarning.h"
+#include <cstddef>
 DISABLE_WARNING_PUSH
 DISABLE_WARNING_DEPRECATED_DECLARATIONS
 #include "llvm/IR/Function.h"
@@ -304,8 +307,8 @@ ref<Expr> ObjectState::readValue(ref<Expr> offset, Expr::Width width) const {
   ref<Expr> Res(0);
   for (unsigned i = 0; i != NumBytes; ++i) {
     unsigned idx = Context::get().isLittleEndian() ? i : (NumBytes - i - 1);
-    ref<Expr> Byte =
-        readValue8(AddExpr::create(offset, ConstantExpr::create(idx, Expr::Int32)));
+    ref<Expr> Byte = readValue8(
+        AddExpr::create(offset, ConstantExpr::create(idx, Expr::Int32)));
     Res = i ? ConcatExpr::create(Byte, Res) : Byte;
   }
 
@@ -353,8 +356,8 @@ ref<Expr> ObjectState::readBase(ref<Expr> offset, Expr::Width width) const {
   ref<Expr> null = Expr::createPointer(0);
   for (unsigned i = 0; i != NumBytes; ++i) {
     unsigned idx = Context::get().isLittleEndian() ? i : (NumBytes - i - 1);
-    ref<Expr> Byte =
-        readBase8(AddExpr::create(offset, ConstantExpr::create(idx, Expr::Int32)));
+    ref<Expr> Byte = readBase8(
+        AddExpr::create(offset, ConstantExpr::create(idx, Expr::Int32)));
     if (i) {
       ref<Expr> eqBytes = EqExpr::create(Byte, Res);
       Res = SelectExpr::create(eqBytes, Byte, null);
@@ -503,30 +506,59 @@ bool ObjectState::isAccessableFrom(KType *accessingType) const {
 
 ObjectStage::ObjectStage(const Array *array, ref<Expr> defaultValue, bool safe,
                          Expr::Width width)
-    : knownSymbolics(defaultValue), unflushedMask(false),
-      updates(array, nullptr), size(array->size), safeRead(safe), width(width) {
+    : unflushedMask(false), updates(array, nullptr), size(array->size),
+      safeRead(safe), width(width) {
+  if (auto constSize = dyn_cast<ConstantExpr>(array->getSize());
+      constSize && constSize->getZExtValue() <= 64) {
+    knownSymbolics.reset(
+        new SparseStorage<ref<Expr>, OptionalRefEq<Expr>,
+                          PersistentArray<ref<Expr>, OptionalRefEq<Expr>>>(
+            defaultValue,
+            PersistentArray<ref<Expr>, OptionalRefEq<Expr>>::allocator(
+                constSize->getZExtValue())));
+  } else {
+    knownSymbolics.reset(
+        new SparseStorage<ref<Expr>, OptionalRefEq<Expr>,
+                          UnorderedMapAdapder<ref<Expr>, OptionalRefEq<Expr>>>(
+            defaultValue));
+  }
 }
 
 ObjectStage::ObjectStage(ref<Expr> size, ref<Expr> defaultValue, bool safe,
                          Expr::Width width)
-    : knownSymbolics(defaultValue), unflushedMask(false),
-      updates(nullptr, nullptr), size(size), safeRead(safe), width(width) {}
+    : unflushedMask(false), updates(nullptr, nullptr), size(size),
+      safeRead(safe), width(width) {
+  if (auto constSize = dyn_cast<ConstantExpr>(size);
+      constSize && constSize->getZExtValue() <= 64) {
+    knownSymbolics.reset(
+        new SparseStorage<ref<Expr>, OptionalRefEq<Expr>,
+                          PersistentArray<ref<Expr>, OptionalRefEq<Expr>>>(
+            defaultValue,
+            PersistentArray<ref<Expr>, OptionalRefEq<Expr>>::allocator(
+                constSize->getZExtValue())));
+  } else {
+    knownSymbolics.reset(
+        new SparseStorage<ref<Expr>, OptionalRefEq<Expr>,
+                          UnorderedMapAdapder<ref<Expr>, OptionalRefEq<Expr>>>(
+            defaultValue));
+  }
+}
 
 ObjectStage::ObjectStage(const ObjectStage &os)
-    : knownSymbolics(os.knownSymbolics), unflushedMask(os.unflushedMask),
-      updates(os.updates), size(os.size), safeRead(os.safeRead),
-      width(os.width) {}
+    : knownSymbolics(os.knownSymbolics->clone()),
+      unflushedMask(os.unflushedMask), updates(os.updates), size(os.size),
+      safeRead(os.safeRead), width(os.width) {}
 
 /***/
 
 const UpdateList &ObjectStage::getUpdates() const {
   if (auto sizeExpr = dyn_cast<ConstantExpr>(size)) {
     auto size = sizeExpr->getZExtValue();
-    if (knownSymbolics.storage().size() == size) {
+    if (knownSymbolics->storage().size() == size) {
       SparseStorage<ref<ConstantExpr>> values(ConstantExpr::create(0, width));
       UpdateList symbolicUpdates = UpdateList(nullptr, nullptr);
       for (unsigned i = 0; i < size; i++) {
-        auto value = knownSymbolics.load(i);
+        auto value = knownSymbolics->load(i);
         assert(value);
         if (isa<ConstantExpr>(value)) {
           values.store(i, cast<ConstantExpr>(value));
@@ -537,7 +569,7 @@ const UpdateList &ObjectStage::getUpdates() const {
       auto array = Array::create(sizeExpr, SourceBuilder::constant(values),
                                  Expr::Int32, width);
       updates = UpdateList(array, symbolicUpdates.head);
-      knownSymbolics.reset(nullptr);
+      knownSymbolics->reset(nullptr);
       unflushedMask.reset();
     }
   }
@@ -559,14 +591,14 @@ void ObjectStage::initializeToZero() {
   auto array =
       Array::create(size, SourceBuilder::constant(values), Expr::Int32, width);
   updates = UpdateList(array, nullptr);
-  knownSymbolics.reset();
+  knownSymbolics->reset();
   unflushedMask.reset();
 }
 
 void ObjectStage::flushForRead() const {
   for (const auto &unflushed : unflushedMask.storage()) {
     auto offset = unflushed.first;
-    auto value = knownSymbolics.load(offset);
+    auto value = knownSymbolics->load(offset);
     assert(value);
     updates.extend(ConstantExpr::create(offset, Expr::Int32), value);
   }
@@ -576,13 +608,13 @@ void ObjectStage::flushForRead() const {
 void ObjectStage::flushForWrite() {
   flushForRead();
   // The write is symbolic offset and might overwrite any byte
-  knownSymbolics.reset(nullptr);
+  knownSymbolics->reset(nullptr);
 }
 
 /***/
 
 ref<Expr> ObjectStage::readWidth(unsigned offset) const {
-  if (auto byte = knownSymbolics.load(offset)) {
+  if (auto byte = knownSymbolics->load(offset)) {
     return byte;
   } else {
     assert(!unflushedMask.load(offset) && "unflushed byte without cache value");
@@ -601,14 +633,14 @@ ref<Expr> ObjectStage::readWidth(ref<Expr> offset) const {
 }
 
 void ObjectStage::writeWidth(unsigned offset, uint64_t value) {
-  auto byte = knownSymbolics.load(offset);
+  auto byte = knownSymbolics->load(offset);
   if (byte) {
     auto ce = dyn_cast<ConstantExpr>(byte);
     if (ce && ce->getZExtValue(width) == value) {
       return;
     }
   }
-  knownSymbolics.store(offset, ConstantExpr::create(value, width));
+  knownSymbolics->store(offset, ConstantExpr::create(value, width));
   unflushedMask.store(offset, true);
 }
 
@@ -617,11 +649,11 @@ void ObjectStage::writeWidth(unsigned offset, ref<Expr> value) {
   if (ConstantExpr *CE = dyn_cast<ConstantExpr>(value)) {
     writeWidth(offset, CE->getZExtValue(width));
   } else {
-    auto byte = knownSymbolics.load(offset);
+    auto byte = knownSymbolics->load(offset);
     if (byte && byte == value) {
       return;
     }
-    knownSymbolics.store(offset, value);
+    knownSymbolics->store(offset, value);
     unflushedMask.store(offset, true);
   }
 }
@@ -630,8 +662,8 @@ void ObjectStage::writeWidth(ref<Expr> offset, ref<Expr> value) {
   assert(!isa<ConstantExpr>(offset) &&
          "constant offset passed to symbolic write8");
 
-  if (knownSymbolics.defaultV() && knownSymbolics.defaultV() == value &&
-      knownSymbolics.storage().size() == 0 && updates.getSize() == 0) {
+  if (knownSymbolics->defaultV() && knownSymbolics->defaultV() == value &&
+      knownSymbolics->storage().size() == 0 && updates.getSize() == 0) {
     return;
   }
 
@@ -641,7 +673,23 @@ void ObjectStage::writeWidth(ref<Expr> offset, ref<Expr> value) {
 }
 
 void ObjectStage::write(const ObjectStage &os) {
-  knownSymbolics = os.knownSymbolics;
+  auto constSize = dyn_cast<ConstantExpr>(size);
+  auto osConstSize = dyn_cast<ConstantExpr>(os.size);
+  if (osConstSize && osConstSize->getZExtValue() <= 64) {
+    if (constSize && constSize->getZExtValue() <= 64) {
+      for (size_t i = 0;
+           i < std::min(osConstSize->getZExtValue(), constSize->getZExtValue());
+           ++i) {
+        knownSymbolics->store(i, os.knownSymbolics->load(i));
+      }
+    } else {
+      for (size_t i = 0; i < osConstSize->getZExtValue(); ++i) {
+        knownSymbolics->store(i, os.knownSymbolics->load(i));
+      }
+    }
+  } else {
+    knownSymbolics.reset(os.knownSymbolics->clone());
+  }
   unflushedMask = os.unflushedMask;
   updates = UpdateList(updates.root, os.updates.head);
 }
@@ -655,7 +703,7 @@ void ObjectStage::print() const {
 
   llvm::errs() << "\tBytes:\n";
 
-  for (auto [index, value] : knownSymbolics.storage()) {
+  for (auto [index, value] : knownSymbolics->storage()) {
     llvm::errs() << "\t\t[" << index << "]";
     llvm::errs() << value << "\n";
   }
