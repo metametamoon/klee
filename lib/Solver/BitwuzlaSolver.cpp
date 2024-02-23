@@ -530,7 +530,7 @@ bool BitwuzlaSolverImpl::internalRunSolver(
     timeoutInMicroSeconds = UINT_MAX;
   BitwuzlaTerminator terminator(timeoutInMicroSeconds);
 
-  struct sigaction action, old_action;
+  struct sigaction action = {0}, old_action = {0};
   action.sa_handler = signal_handler;
   action.sa_flags = 0;
   sigaction(SIGINT, &action, &old_action);

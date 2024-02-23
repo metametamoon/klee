@@ -284,6 +284,7 @@ public:
     storageSize = pa.storageSize;
     defaultValue = pa.defaultValue;
     nonDefaultValuesCount = pa.nonDefaultValuesCount;
+    delete[] storage;
     storage = new ValueType[storageSize];
     clear();
     for (const auto &[key, val] : pa) {
