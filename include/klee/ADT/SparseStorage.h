@@ -82,6 +82,11 @@ public:
   using base_ty = StorageAdapter<ValueType, Eq>;
   using iterator = typename base_ty::iterator;
   using inner_iterator = typename base_ty::inner_iterator;
+  struct allocator {
+    UnorderedMapAdapder<ValueType, Eq> operator()(const ValueType &) const {
+      return UnorderedMapAdapder<ValueType, Eq>();
+    }
+  };
   class umap_iterator : public inner_iterator {
     typename storage_ty::const_iterator it;
 
@@ -141,6 +146,12 @@ struct PersistenUnorderedMapAdapder : public StorageAdapter<ValueType, Eq> {
   using base_ty = StorageAdapter<ValueType, Eq>;
   using iterator = typename base_ty::iterator;
   using inner_iterator = typename base_ty::inner_iterator;
+  struct allocator {
+    PersistenUnorderedMapAdapder<ValueType, Eq>
+    operator()(const ValueType &) const {
+      return PersistenUnorderedMapAdapder<ValueType, Eq>();
+    }
+  };
   class persistent_umap_iterator : public inner_iterator {
     typename storage_ty::iterator it;
 
@@ -200,18 +211,28 @@ struct PersistentArray : public StorageAdapter<ValueType, Eq> {
   using base_ty = StorageAdapter<ValueType, Eq>;
   using iterator = typename base_ty::iterator;
   using inner_iterator = typename base_ty::inner_iterator;
+  struct allocator {
+    size_t storageSize;
+    allocator(size_t storageSize) : storageSize(storageSize) {}
+    PersistentArray<ValueType, Eq>
+    operator()(const ValueType &defaultValue) const {
+      return PersistentArray<ValueType, Eq>(defaultValue, storageSize);
+    }
+  };
 
-protected:
   Eq eq;
   class persistent_array_iterator : public inner_iterator {
-    typename std::vector<ValueType>::const_interator it;
+    typename std::vector<ValueType>::const_iterator it;
     size_t index;
+    size_t size;
+    Eq eq;
+    ValueType defaultValue;
 
   public:
     persistent_array_iterator(
-        const typename std::vector<ValueType>::const_interator &it,
-        size_t index)
-        : it(it), index(index) {}
+        const typename std::vector<ValueType>::const_iterator &it, size_t index,
+        size_t size, const ValueType &defaultValue)
+        : it(it), index(index), size(size), defaultValue(defaultValue) {}
     StorageIteratorKind getKind() const override {
       return StorageIteratorKind::PersistenArray;
     }
@@ -223,11 +244,11 @@ protected:
       do {
         ++it;
         ++index;
-      } while (eq(*it, defaultValue));
+      } while (index < size && eq(*it, defaultValue));
       return *this;
     }
     inner_iterator *clone() override {
-      return new persistent_array_iterator(it);
+      return new persistent_array_iterator(it, index, size, defaultValue);
     }
     typename base_ty::value_ty operator*() override { return {index, *it}; }
     bool operator!=(const inner_iterator &other) const override {
@@ -245,19 +266,42 @@ public:
   size_t storageSize;
   ValueType defaultValue;
   size_t nonDefaultValuesCount;
-  PersistentArray(size_t storageSize, const ValueType &defaultValue)
+  PersistentArray(const ValueType &defaultValue, size_t storageSize = 8)
       : storageSize(storageSize), defaultValue(defaultValue),
         nonDefaultValuesCount(0) {
+    storage = new ValueType[storageSize];
     clear();
   }
+  PersistentArray(const PersistentArray<ValueType, Eq> &pa)
+      : storageSize(pa.storageSize), defaultValue(pa.defaultValue),
+        nonDefaultValuesCount(pa.nonDefaultValuesCount) {
+    storage = new ValueType[storageSize];
+    clear();
+    for (const auto &[key, val] : pa) {
+      storage[key] = val;
+    }
+  }
+  PersistentArray &operator=(const PersistentArray<ValueType, Eq> &pa) {
+    storageSize = pa.storageSize;
+    defaultValue = pa.defaultValue;
+    nonDefaultValuesCount = pa.nonDefaultValuesCount;
+    storage = new ValueType[storageSize];
+    clear();
+    for (const auto &[key, val] : pa) {
+      storage[key] = val;
+    }
+    return *this;
+  }
+  ~PersistentArray() { delete[] storage; }
   bool contains(size_t key) const override { return storage[key] != 0; }
   iterator begin() const override {
     typename std::vector<ValueType>::iterator it(storage);
-    return new persistent_array_iterator(it, 0);
+    return new persistent_array_iterator(it, 0, storageSize, defaultValue);
   }
   iterator end() const override {
     typename std::vector<ValueType>::iterator it(storage + storageSize);
-    return new persistent_array_iterator(it, storageSize);
+    return new persistent_array_iterator(it, storageSize, storageSize,
+                                         defaultValue);
   }
   const ValueType *lookup(size_t key) const override {
     auto val = storage[key];
@@ -265,8 +309,8 @@ public:
   }
   bool empty() const override { return nonDefaultValuesCount == 0; }
   void set(size_t key, const ValueType &value) override {
-    bool wasDefault = storage[key] == defaultValue;
-    bool newDefault = value == defaultValue;
+    bool wasDefault = eq(storage[key], defaultValue);
+    bool newDefault = eq(value, defaultValue);
     if (wasDefault && !newDefault) {
       ++nonDefaultValuesCount;
     }
@@ -276,13 +320,18 @@ public:
     storage[key] = value;
   }
   void remove(size_t key) override {
-    if (storage[key] != defaultValue) {
+    if (!eq(storage[key], defaultValue)) {
       --nonDefaultValuesCount;
       storage[key] = defaultValue;
     }
   }
   const ValueType &at(size_t key) const override { return storage[key]; }
-  void clear() override { std::fill(begin(), end(), defaultValue); }
+  void clear() override {
+    for (size_t i = 0; i < storageSize; ++i) {
+      storage[i] = defaultValue;
+    }
+    nonDefaultValuesCount = 0;
+  }
   size_t size() const override { return nonDefaultValuesCount; }
 };
 
@@ -312,11 +361,11 @@ public:
 
   virtual size_t sizeOfSetRange() const = 0;
 
-  bool operator==(const Storage<ValueType> &another) const {
+  bool operator==(const Storage<ValueType, Eq> &another) const {
     return eq(defaultValue, another.defaultValue) && compare(another) == 0;
   }
 
-  bool operator!=(const Storage<ValueType> &another) const {
+  bool operator!=(const Storage<ValueType, Eq> &another) const {
     return !(*this == another);
   }
 
@@ -326,7 +375,7 @@ public:
 
   bool operator>(const Storage &another) const { return compare(another) == 1; }
 
-  int compare(const Storage<ValueType> &other) const {
+  int compare(const Storage<ValueType, Eq> &other) const {
     auto ordered = calculateOrderedStorage();
     auto otherOrdered = other.calculateOrderedStorage();
 
@@ -353,21 +402,33 @@ public:
   }
 
   void print(llvm::raw_ostream &os, Density) const;
+
+  virtual Storage<ValueType, Eq> *clone() const = 0;
 };
 
 template <typename ValueType, typename Eq = std::equal_to<ValueType>,
-          typename InternalStorageAdapter = UnorderedMapAdapder<ValueType, Eq>>
+          typename InternalStorageAdapter = UnorderedMapAdapder<ValueType, Eq>,
+          typename Allocator = typename InternalStorageAdapter::allocator>
 class SparseStorage : public Storage<ValueType, Eq> {
 private:
+  Allocator alloc;
   InternalStorageAdapter internalStorage;
-  // ValueType defaultValue;
-  // Eq eq;
 
   bool contains(size_t key) const { return internalStorage.containts(key); }
 
 public:
-  SparseStorage(const ValueType &defaultValue = ValueType())
-      : Storage<ValueType, Eq>(defaultValue) {
+  // SparseStorage(const ValueType &defaultValue = ValueType())
+  //     : Storage<ValueType, Eq>(defaultValue) {
+  //   static_assert(
+  //       std::is_base_of<StorageAdapter<ValueType, Eq>,
+  //                       InternalStorageAdapter>::value,
+  //       "type parameter of this class must derive from StorageAdapter");
+  // }
+
+  SparseStorage(const ValueType &defaultValue = ValueType(),
+                const Allocator &alloc = Allocator())
+      : Storage<ValueType, Eq>(defaultValue), alloc(alloc),
+        internalStorage(alloc(defaultValue)) {
     static_assert(
         std::is_base_of<StorageAdapter<ValueType, Eq>,
                         InternalStorageAdapter>::value,
@@ -375,16 +436,18 @@ public:
   }
 
   SparseStorage(const std::unordered_map<size_t, ValueType> &internalStorage,
-                const ValueType &defaultValue)
-      : SparseStorage(defaultValue) {
+                const ValueType &defaultValue = ValueType(),
+                const Allocator &alloc = Allocator())
+      : SparseStorage(defaultValue, alloc) {
     for (auto &[index, value] : internalStorage) {
       store(index, value);
     }
   }
 
   SparseStorage(const std::vector<ValueType> &values,
-                const ValueType &defaultValue = ValueType())
-      : SparseStorage(defaultValue) {
+                const ValueType &defaultValue = ValueType(),
+                const Allocator &alloc = Allocator())
+      : SparseStorage(defaultValue, alloc) {
     for (size_t idx = 0; idx < values.size(); ++idx) {
       store(idx, values[idx]);
     }
@@ -440,7 +503,9 @@ public:
     return internalStorage;
   };
 
-  void reset() override { internalStorage.clear(); }
+  void reset() override {
+    internalStorage = alloc(Storage<ValueType, Eq>::defaultValue);
+  }
 
   void reset(ValueType newDefault) {
     Storage<ValueType, Eq>::defaultValue = newDefault;
@@ -448,6 +513,9 @@ public:
   }
 
   void print(llvm::raw_ostream &os, Density) const;
+  Storage<ValueType, Eq> *clone() const override {
+    return new SparseStorage<ValueType, Eq, InternalStorageAdapter>(*this);
+  }
 };
 
 } // namespace klee

@@ -9,7 +9,7 @@ class KModule;
 class KInstruction;
 class KGlobalVariable;
 
-template <typename T, typename Eq, typename IS> class SparseStorage;
+template <typename T, typename Eq, typename IS, typename A> class SparseStorage;
 template <typename T> class ref;
 
 class SourceBuilder {
