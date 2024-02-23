@@ -129,6 +129,10 @@ bool assertCreatedPointEvaluatesToTrue(
   }
   assert(isa<ConstantExpr>(q) &&
          "assignment evaluation did not result in constant");
+  if (!cast<ConstantExpr>(q)->isTrue()) {
+    neg->dump();
+    llvm::errs() << "Here!\n";
+  }
   return cast<ConstantExpr>(q)->isTrue();
 }
 

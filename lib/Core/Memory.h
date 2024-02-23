@@ -217,13 +217,14 @@ public:
 class ObjectStage {
 private:
   using storage_ty = Storage<ref<Expr>, OptionalRefEq<Expr>>;
+  using bool_storage_ty = Storage<bool>;
   /// knownSymbolics[byte] holds the expression for byte,
   /// if byte is known
   mutable std::unique_ptr<storage_ty> knownSymbolics;
 
   /// unflushedMask[byte] is set if byte is unflushed
   /// mutable because may need flushed during read of const
-  mutable SparseStorage<bool> unflushedMask;
+  mutable std::unique_ptr<bool_storage_ty> unflushedMask;
 
   // mutable because we may need flush during read of const
   mutable UpdateList updates;
@@ -254,7 +255,7 @@ public:
   void print() const;
 
   size_t getSparseStorageEntries() {
-    return knownSymbolics->storage().size() + unflushedMask.storage().size();
+    return knownSymbolics->storage().size() + unflushedMask->storage().size();
   }
   void initializeToZero();
 
