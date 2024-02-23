@@ -222,16 +222,15 @@ struct PersistentArray : public StorageAdapter<ValueType, Eq> {
 
   Eq eq;
   class persistent_array_iterator : public inner_iterator {
-    typename std::vector<ValueType>::const_iterator it;
+    storage_ty it;
     size_t index;
     size_t size;
     Eq eq;
     ValueType defaultValue;
 
   public:
-    persistent_array_iterator(
-        const typename std::vector<ValueType>::const_iterator &it, size_t index,
-        size_t size, const ValueType &defaultValue)
+    persistent_array_iterator(storage_ty it, size_t index, size_t size,
+                              const ValueType &defaultValue)
         : it(it), index(index), size(size), defaultValue(defaultValue) {}
     StorageIteratorKind getKind() const override {
       return StorageIteratorKind::PersistenArray;
@@ -295,13 +294,11 @@ public:
   ~PersistentArray() { delete[] storage; }
   bool contains(size_t key) const override { return storage[key] != 0; }
   iterator begin() const override {
-    typename std::vector<ValueType>::iterator it(storage);
-    return new persistent_array_iterator(it, 0, storageSize, defaultValue);
+    return new persistent_array_iterator(storage, 0, storageSize, defaultValue);
   }
   iterator end() const override {
-    typename std::vector<ValueType>::iterator it(storage + storageSize);
-    return new persistent_array_iterator(it, storageSize, storageSize,
-                                         defaultValue);
+    return new persistent_array_iterator(storage + storageSize, storageSize,
+                                         storageSize, defaultValue);
   }
   const ValueType *lookup(size_t key) const override {
     auto val = storage[key];
