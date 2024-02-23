@@ -25,7 +25,6 @@
 #include "klee/Support/OptionCategories.h"
 
 #include "klee/Support/CompilerWarning.h"
-#include <cstddef>
 DISABLE_WARNING_PUSH
 DISABLE_WARNING_DEPRECATED_DECLARATIONS
 #include "llvm/IR/Function.h"
@@ -37,6 +36,8 @@ DISABLE_WARNING_DEPRECATED_DECLARATIONS
 DISABLE_WARNING_POP
 
 #include <cassert>
+#include <cstddef>
+#include <functional>
 #include <sstream>
 
 using namespace llvm;
@@ -506,8 +507,7 @@ bool ObjectState::isAccessableFrom(KType *accessingType) const {
 
 ObjectStage::ObjectStage(const Array *array, ref<Expr> defaultValue, bool safe,
                          Expr::Width width)
-    : unflushedMask(false), updates(array, nullptr), size(array->size),
-      safeRead(safe), width(width) {
+    : updates(array, nullptr), size(array->size), safeRead(safe), width(width) {
   if (auto constSize = dyn_cast<ConstantExpr>(array->getSize());
       constSize && constSize->getZExtValue() <= 64) {
     knownSymbolics.reset(
@@ -516,18 +516,26 @@ ObjectStage::ObjectStage(const Array *array, ref<Expr> defaultValue, bool safe,
             defaultValue,
             PersistentArray<ref<Expr>, OptionalRefEq<Expr>>::allocator(
                 constSize->getZExtValue())));
+    unflushedMask.reset(
+        new SparseStorage<bool, std::equal_to<bool>,
+                          PersistentArray<bool, std::equal_to<bool>>>(
+            false, PersistentArray<bool, std::equal_to<bool>>::allocator(
+                       constSize->getZExtValue())));
   } else {
     knownSymbolics.reset(
         new SparseStorage<ref<Expr>, OptionalRefEq<Expr>,
                           UnorderedMapAdapder<ref<Expr>, OptionalRefEq<Expr>>>(
             defaultValue));
+    unflushedMask.reset(
+        new SparseStorage<bool, std::equal_to<bool>,
+                          UnorderedMapAdapder<bool, std::equal_to<bool>>>(
+            false));
   }
 }
 
 ObjectStage::ObjectStage(ref<Expr> size, ref<Expr> defaultValue, bool safe,
                          Expr::Width width)
-    : unflushedMask(false), updates(nullptr, nullptr), size(size),
-      safeRead(safe), width(width) {
+    : updates(nullptr, nullptr), size(size), safeRead(safe), width(width) {
   if (auto constSize = dyn_cast<ConstantExpr>(size);
       constSize && constSize->getZExtValue() <= 64) {
     knownSymbolics.reset(
@@ -536,18 +544,27 @@ ObjectStage::ObjectStage(ref<Expr> size, ref<Expr> defaultValue, bool safe,
             defaultValue,
             PersistentArray<ref<Expr>, OptionalRefEq<Expr>>::allocator(
                 constSize->getZExtValue())));
+    unflushedMask.reset(
+        new SparseStorage<bool, std::equal_to<bool>,
+                          PersistentArray<bool, std::equal_to<bool>>>(
+            false, PersistentArray<bool, std::equal_to<bool>>::allocator(
+                       constSize->getZExtValue())));
   } else {
     knownSymbolics.reset(
         new SparseStorage<ref<Expr>, OptionalRefEq<Expr>,
                           UnorderedMapAdapder<ref<Expr>, OptionalRefEq<Expr>>>(
             defaultValue));
+    unflushedMask.reset(
+        new SparseStorage<bool, std::equal_to<bool>,
+                          UnorderedMapAdapder<bool, std::equal_to<bool>>>(
+            false));
   }
 }
 
 ObjectStage::ObjectStage(const ObjectStage &os)
     : knownSymbolics(os.knownSymbolics->clone()),
-      unflushedMask(os.unflushedMask), updates(os.updates), size(os.size),
-      safeRead(os.safeRead), width(os.width) {}
+      unflushedMask(os.unflushedMask->clone()), updates(os.updates),
+      size(os.size), safeRead(os.safeRead), width(os.width) {}
 
 /***/
 
@@ -570,7 +587,7 @@ const UpdateList &ObjectStage::getUpdates() const {
                                  Expr::Int32, width);
       updates = UpdateList(array, symbolicUpdates.head);
       knownSymbolics->reset(nullptr);
-      unflushedMask.reset();
+      unflushedMask->reset();
     }
   }
 
@@ -592,17 +609,17 @@ void ObjectStage::initializeToZero() {
       Array::create(size, SourceBuilder::constant(values), Expr::Int32, width);
   updates = UpdateList(array, nullptr);
   knownSymbolics->reset();
-  unflushedMask.reset();
+  unflushedMask->reset();
 }
 
 void ObjectStage::flushForRead() const {
-  for (const auto &unflushed : unflushedMask.storage()) {
+  for (const auto &unflushed : unflushedMask->storage()) {
     auto offset = unflushed.first;
     auto value = knownSymbolics->load(offset);
     assert(value);
     updates.extend(ConstantExpr::create(offset, Expr::Int32), value);
   }
-  unflushedMask.reset(false);
+  unflushedMask->reset(false);
 }
 
 void ObjectStage::flushForWrite() {
@@ -617,7 +634,8 @@ ref<Expr> ObjectStage::readWidth(unsigned offset) const {
   if (auto byte = knownSymbolics->load(offset)) {
     return byte;
   } else {
-    assert(!unflushedMask.load(offset) && "unflushed byte without cache value");
+    assert(!unflushedMask->load(offset) &&
+           "unflushed byte without cache value");
     return ReadExpr::create(
         getUpdates(), ConstantExpr::create(offset, Expr::Int32), safeRead);
   }
@@ -641,7 +659,7 @@ void ObjectStage::writeWidth(unsigned offset, uint64_t value) {
     }
   }
   knownSymbolics->store(offset, ConstantExpr::create(value, width));
-  unflushedMask.store(offset, true);
+  unflushedMask->store(offset, true);
 }
 
 void ObjectStage::writeWidth(unsigned offset, ref<Expr> value) {
@@ -654,7 +672,7 @@ void ObjectStage::writeWidth(unsigned offset, ref<Expr> value) {
       return;
     }
     knownSymbolics->store(offset, value);
-    unflushedMask.store(offset, true);
+    unflushedMask->store(offset, true);
   }
 }
 
@@ -681,16 +699,23 @@ void ObjectStage::write(const ObjectStage &os) {
            i < std::min(osConstSize->getZExtValue(), constSize->getZExtValue());
            ++i) {
         knownSymbolics->store(i, os.knownSymbolics->load(i));
+        unflushedMask->store(i, os.unflushedMask->load(i));
       }
     } else {
       for (size_t i = 0; i < osConstSize->getZExtValue(); ++i) {
         knownSymbolics->store(i, os.knownSymbolics->load(i));
+        unflushedMask->store(i, os.unflushedMask->load(i));
       }
+    }
+  } else if (constSize && constSize->getZExtValue() <= 64) {
+    for (size_t i = 0; i < constSize->getZExtValue(); ++i) {
+      knownSymbolics->store(i, os.knownSymbolics->load(i));
+      unflushedMask->store(i, os.unflushedMask->load(i));
     }
   } else {
     knownSymbolics.reset(os.knownSymbolics->clone());
+    unflushedMask.reset(os.unflushedMask->clone());
   }
-  unflushedMask = os.unflushedMask;
   updates = UpdateList(updates.root, os.updates.head);
 }
 
