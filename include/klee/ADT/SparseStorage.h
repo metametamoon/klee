@@ -229,9 +229,14 @@ struct PersistentArray : public StorageAdapter<ValueType, Eq> {
     ValueType defaultValue;
 
   public:
-    persistent_array_iterator(storage_ty it, size_t index, size_t size,
-                              const ValueType &defaultValue)
-        : it(it), index(index), size(size), defaultValue(defaultValue) {}
+    persistent_array_iterator(storage_ty _it, size_t _index, size_t _size,
+                              const ValueType &_defaultValue)
+        : it(_it), index(_index), size(_size), defaultValue(_defaultValue) {
+      while (index < size && eq(*it, defaultValue)) {
+        ++it;
+        ++index;
+      }
+    }
     StorageIteratorKind getKind() const override {
       return StorageIteratorKind::PersistenArray;
     }
