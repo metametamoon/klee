@@ -1,0 +1,85 @@
+---
+name: CI
+
+on:
+  pull_request:
+    branches: [main, utbot-main, ci]
+  push:
+    branches: [main, utbot-main, ci]
+
+# Defaults for building KLEE
+env:
+  BASE_IMAGE: ubuntu:jammy-20230126
+  REPOSITORY: ghcr.io/klee
+  BUILD_SUFFIX: "default"
+  COVERAGE: 0
+  DISABLE_ASSERTIONS: 0
+  ENABLE_DOXYGEN: 0
+  ENABLE_OPTIMIZED: 1
+  ENABLE_DEBUG: 1
+  GTEST_VERSION: 1.11.0
+  KLEE_RUNTIME_BUILD: "Debug+Asserts"
+  LLVM_VERSION: 11
+  MINISAT_VERSION: "master"
+  REQUIRES_RTTI: 0
+  SOLVERS: BITWUZLA:Z3:STP
+  STP_VERSION: 2.3.3
+  TCMALLOC_VERSION: 2.9.1
+  UCLIBC_VERSION: klee_uclibc_v1.3
+  USE_TCMALLOC: 1
+  USE_LIBCXX: 1
+  Z3_VERSION: 4.8.15
+  SQLITE_VERSION: 3400100
+  BITWUZLA_VERSION: main
+  BITWUZLA_COMMIT: 80ef7cd803e1c71b5939c3eb951f1736388f7090
+  JSON_VERSION: v3.11.3
+  IMMER_VERSION: v0.8.1
+
+jobs:
+  Linux:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        name: [
+          "Debug",
+        ]
+        include:
+          - name: "Debug"
+            env:
+              LLVM_VERSION: 14
+    steps:
+      - name: Checkout KLEE source code
+        uses: actions/checkout@v3
+        with:
+          submodules: recursive
+      - name: Build KLEE
+        env: ${{ matrix.env }}
+        run: scripts/build/build.sh klee --docker --create-final-image
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
+        timeout-minutes: 40
+        with:
+          limit-access-to-actor: true
+      - name: Run tests
+        env: ${{ matrix.env }}
+        run: scripts/build/run-tests.sh --run-docker --debug
+
+  macOS:
+    runs-on: macos-latest
+    env:
+      BASE: /tmp
+      SOLVERS: STP
+      UCLIBC_VERSION: 0
+      USE_TCMALLOC: 0
+      USE_LIBCXX: 0
+    steps:
+      - name: Install newer version of Bash
+        run: brew install bash
+      - name: Checkout KLEE source code
+        uses: actions/checkout@v3
+        with:
+          submodules: recursive
+      - name: Build KLEE
+        run: scripts/build/build.sh klee --debug --install-system-deps
+      - name: Run tests
+        run: scripts/build/run-tests.sh /tmp/klee_build* --debug
