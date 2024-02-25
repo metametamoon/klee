@@ -1627,13 +1627,13 @@ ref<Expr> ReadExpr::create(const UpdateList &ul, ref<Expr> index, bool safe) {
       if (ConstantExpr *CE = dyn_cast<ConstantExpr>(index)) {
         assert(CE->getWidth() <= 64 && "Index too large");
         uint64_t concreteIndex = CE->getZExtValue();
-        auto value = constantSource->constantValues.load(concreteIndex);
+        auto value = constantSource->constantValues->load(concreteIndex);
         assert(value);
         return value;
-      } else if (constantSource->constantValues.storage().size() == 0 &&
+      } else if (constantSource->constantValues->storage().size() == 0 &&
                  !safe) {
-        assert(constantSource->constantValues.defaultV());
-        return constantSource->constantValues.defaultV();
+        assert(constantSource->constantValues->defaultV());
+        return constantSource->constantValues->defaultV();
       }
     }
   }
@@ -2610,7 +2610,7 @@ static ref<Expr> TryConstArrayOpt(const ref<ConstantExpr> &cl, ReadExpr *rd) {
   if (ConstantSource *constantSource =
           dyn_cast<ConstantSource>(rd->updates.root->source)) {
     for (unsigned i = 0, e = size; i != e; ++i) {
-      if (cl == constantSource->constantValues.load(i)) {
+      if (cl == constantSource->constantValues->load(i)) {
         // Arbitrary maximum on the size of disjunction.
         if (++numMatches > 100)
           return EqExpr_create(cl, rd);
