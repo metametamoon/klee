@@ -9,6 +9,7 @@
 
 #include "Memory.h"
 
+#include "ConstructStorage.h"
 #include "ExecutionState.h"
 #include "MemoryManager.h"
 #include "klee/ADT/Ref.h"
@@ -506,57 +507,17 @@ bool ObjectState::isAccessableFrom(KType *accessingType) const {
 ObjectStage::ObjectStage(const Array *array, ref<Expr> defaultValue, bool safe,
                          Expr::Width width)
     : updates(array, nullptr), size(array->size), safeRead(safe), width(width) {
-  if (auto constSize = dyn_cast<ConstantExpr>(array->getSize());
-      constSize && constSize->getZExtValue() <= 64) {
-    knownSymbolics.reset(
-        new SparseStorage<ref<Expr>, OptionalRefEq<Expr>,
-                          PersistentArray<ref<Expr>, OptionalRefEq<Expr>>>(
-            defaultValue,
-            PersistentArray<ref<Expr>, OptionalRefEq<Expr>>::allocator(
-                constSize->getZExtValue())));
-    unflushedMask.reset(
-        new SparseStorage<bool, std::equal_to<bool>,
-                          PersistentArray<bool, std::equal_to<bool>>>(
-            false, PersistentArray<bool, std::equal_to<bool>>::allocator(
-                       constSize->getZExtValue())));
-  } else {
-    knownSymbolics.reset(
-        new SparseStorage<ref<Expr>, OptionalRefEq<Expr>,
-                          UnorderedMapAdapder<ref<Expr>, OptionalRefEq<Expr>>>(
-            defaultValue));
-    unflushedMask.reset(
-        new SparseStorage<bool, std::equal_to<bool>,
-                          UnorderedMapAdapder<bool, std::equal_to<bool>>>(
-            false));
-  }
+  knownSymbolics.reset(constructStorage<ref<Expr>, OptionalRefEq<Expr>>(
+      array->getSize(), defaultValue));
+  unflushedMask.reset(constructStorage(array->getSize(), false));
 }
 
 ObjectStage::ObjectStage(ref<Expr> size, ref<Expr> defaultValue, bool safe,
                          Expr::Width width)
     : updates(nullptr, nullptr), size(size), safeRead(safe), width(width) {
-  if (auto constSize = dyn_cast<ConstantExpr>(size);
-      constSize && constSize->getZExtValue() <= 64) {
-    knownSymbolics.reset(
-        new SparseStorage<ref<Expr>, OptionalRefEq<Expr>,
-                          PersistentArray<ref<Expr>, OptionalRefEq<Expr>>>(
-            defaultValue,
-            PersistentArray<ref<Expr>, OptionalRefEq<Expr>>::allocator(
-                constSize->getZExtValue())));
-    unflushedMask.reset(
-        new SparseStorage<bool, std::equal_to<bool>,
-                          PersistentArray<bool, std::equal_to<bool>>>(
-            false, PersistentArray<bool, std::equal_to<bool>>::allocator(
-                       constSize->getZExtValue())));
-  } else {
-    knownSymbolics.reset(
-        new SparseStorage<ref<Expr>, OptionalRefEq<Expr>,
-                          UnorderedMapAdapder<ref<Expr>, OptionalRefEq<Expr>>>(
-            defaultValue));
-    unflushedMask.reset(
-        new SparseStorage<bool, std::equal_to<bool>,
-                          UnorderedMapAdapder<bool, std::equal_to<bool>>>(
-            false));
-  }
+  knownSymbolics.reset(
+      constructStorage<ref<Expr>, OptionalRefEq<Expr>>(size, defaultValue));
+  unflushedMask.reset(constructStorage(size, false));
 }
 
 ObjectStage::ObjectStage(const ObjectStage &os)
@@ -570,19 +531,21 @@ const UpdateList &ObjectStage::getUpdates() const {
   if (auto sizeExpr = dyn_cast<ConstantExpr>(size)) {
     auto size = sizeExpr->getZExtValue();
     if (knownSymbolics->storage().size() == size) {
-      SparseStorage<ref<ConstantExpr>> values(ConstantExpr::create(0, width));
+      std::unique_ptr<Storage<ref<ConstantExpr>>> values(
+          constructStorage(sizeExpr, ConstantExpr::create(0, width)));
       UpdateList symbolicUpdates = UpdateList(nullptr, nullptr);
       for (unsigned i = 0; i < size; i++) {
         auto value = knownSymbolics->load(i);
         assert(value);
         if (isa<ConstantExpr>(value)) {
-          values.store(i, cast<ConstantExpr>(value));
+          values->store(i, cast<ConstantExpr>(value));
         } else {
           symbolicUpdates.extend(ConstantExpr::create(i, Expr::Int32), value);
         }
       }
-      auto array = Array::create(sizeExpr, SourceBuilder::constant(values),
-                                 Expr::Int32, width);
+      auto array =
+          Array::create(sizeExpr, SourceBuilder::constant(values->clone()),
+                        Expr::Int32, width);
       updates = UpdateList(array, symbolicUpdates.head);
       knownSymbolics->reset(nullptr);
       unflushedMask->reset();
@@ -590,8 +553,9 @@ const UpdateList &ObjectStage::getUpdates() const {
   }
 
   if (!updates.root) {
-    SparseStorage<ref<ConstantExpr>> values(ConstantExpr::create(0, width));
-    auto array = Array::create(size, SourceBuilder::constant(values),
+    auto array = Array::create(size,
+                               SourceBuilder::constant(constructStorage(
+                                   size, ConstantExpr::create(0, width))),
                                Expr::Int32, width);
     updates = UpdateList(array, updates.head);
   }
@@ -602,9 +566,10 @@ const UpdateList &ObjectStage::getUpdates() const {
 }
 
 void ObjectStage::initializeToZero() {
-  SparseStorage<ref<ConstantExpr>> values(ConstantExpr::create(0, width));
-  auto array =
-      Array::create(size, SourceBuilder::constant(values), Expr::Int32, width);
+  auto array = Array::create(size,
+                             SourceBuilder::constant(constructStorage(
+                                 size, ConstantExpr::create(0, width))),
+                             Expr::Int32, width);
   updates = UpdateList(array, nullptr);
   knownSymbolics->reset();
   unflushedMask->reset();

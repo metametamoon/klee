@@ -17,7 +17,7 @@ public:
   SourceBuilder() = delete;
 
   static ref<SymbolicSource>
-  constant(SparseStorage<ref<ConstantExpr>> constantValues);
+  constant(Storage<ref<ConstantExpr>> *constantValues);
 
   static ref<SymbolicSource> uninitialized(unsigned version,
                                            const KInstruction *allocSite);
