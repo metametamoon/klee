@@ -16,13 +16,12 @@
 
 #include <immer/vector.hpp>
 // #include <immer/vector_transient.hpp>
-#include <vector>
 
 namespace klee {
 
 template <class T> class PersistentVector {
 public:
-  using Vector = std::vector<T>;
+  using Vector = immer::vector<T>;
   using iterator = typename Vector::iterator;
   using value_type = T;
 
@@ -48,7 +47,9 @@ public:
   bool empty() const { return elts.empty(); }
   size_t size() const { return elts.size(); }
 
-  void set(size_t index, const value_type &value) { elts[index] = value; }
+  void set(size_t index, const value_type &value) {
+    elts = elts.set(index, value);
+  }
   void init(const size_t &n) { elts = Vector(n); }
   void push_back(const value_type &value) { elts = elts.push_back(value); }
   const value_type &back() const { return elts.back(); }
