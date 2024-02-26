@@ -29,6 +29,7 @@ DISABLE_WARNING_POP
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
