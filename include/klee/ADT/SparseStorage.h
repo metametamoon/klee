@@ -2,6 +2,7 @@
 #define KLEE_SPARSESTORAGE_H
 
 #include "klee/ADT/PersistentHashMap.h"
+#include "klee/ADT/PersistentVector.h"
 
 #include <cassert>
 #include <cstddef>
@@ -22,6 +23,7 @@ enum class Density {
 };
 
 enum class StorageIteratorKind { UMap, PersistentUMap, Array };
+enum class FixedSizeStorageIteratorKind { Array, Vector, PersistentVector };
 
 template <typename ValueType, typename Eq = std::equal_to<ValueType>>
 struct StorageAdapter {
@@ -73,6 +75,152 @@ struct StorageAdapter {
   virtual const ValueType &at(size_t key) const = 0;
   virtual void clear() = 0;
   virtual size_t size() const = 0;
+};
+
+template <typename ValueType> struct FixedSizeStorageAdapter {
+  using value_ty = std::pair<size_t, ValueType>;
+  class inner_iterator {
+  public:
+    virtual FixedSizeStorageIteratorKind getKind() const = 0;
+    virtual inner_iterator &operator++() = 0;
+    virtual inner_iterator *clone() = 0;
+    virtual value_ty operator*() = 0;
+    virtual bool operator!=(const inner_iterator &other) const = 0;
+    static bool classof(const FixedSizeStorageAdapter<ValueType> *SE) {
+      return true;
+    }
+    virtual ~inner_iterator() {}
+  };
+
+  class iterator {
+    inner_iterator *impl;
+
+  public:
+    iterator(inner_iterator *impl) : impl(impl) {}
+    iterator(iterator const &right) : impl(right.impl->clone()) {}
+    ~iterator() { delete impl; }
+    iterator &operator=(iterator const &right) {
+      delete impl;
+      impl = right.impl->clone();
+      return *this;
+    }
+
+    // forward operators to virtual calls through impl.
+    iterator &operator++() {
+      ++(*impl);
+      return *this;
+    }
+    value_ty operator*() { return *(*impl); }
+    bool operator!=(const iterator &other) const {
+      return *impl != *other.impl;
+    }
+  };
+
+  virtual void init(size_t size) = 0;
+  virtual iterator begin() const = 0;
+  virtual iterator end() const = 0;
+  virtual bool empty() const = 0;
+  virtual void set(size_t key, const ValueType &value) = 0;
+  virtual const ValueType &at(size_t key) const = 0;
+  virtual size_t size() const = 0;
+};
+
+template <typename ValueType>
+struct VectorAdapter : public FixedSizeStorageAdapter<ValueType> {
+public:
+  using storage_ty = std::vector<ValueType>;
+  using base_ty = FixedSizeStorageAdapter<ValueType>;
+  using iterator = typename base_ty::iterator;
+  using inner_iterator = typename base_ty::inner_iterator;
+  class vector_iterator : public inner_iterator {
+    typename storage_ty::const_iterator it;
+
+  public:
+    vector_iterator(const typename storage_ty::const_iterator &it) : it(it) {}
+    FixedSizeStorageIteratorKind getKind() const override {
+      return FixedSizeStorageIteratorKind::Vector;
+    }
+    static bool classof(const FixedSizeStorageAdapter<ValueType> *SA) {
+      return SA->getKind() == FixedSizeStorageIteratorKind::Vector;
+    }
+    static bool classof(const VectorAdapter<ValueType> *) { return true; }
+    inner_iterator &operator++() override {
+      ++it;
+      return *this;
+    }
+    inner_iterator *clone() override { return new vector_iterator(it); }
+    typename base_ty::value_ty operator*() override { return *it; }
+    bool operator!=(const inner_iterator &other) const override {
+      if (other.getKind() != getKind()) {
+        return true;
+      }
+      const vector_iterator &el = static_cast<const vector_iterator &>(other);
+      return el.it != it;
+    }
+  };
+  storage_ty storage;
+  void init(size_t size) override { storage = storage_ty(size); }
+  iterator begin() const override {
+    return iterator(new vector_iterator(storage.begin()));
+  }
+  iterator end() const override {
+    return iterator(new vector_iterator(storage.end()));
+  }
+  bool empty() const override { return storage.empty(); }
+  void set(size_t key, const ValueType &value) override {
+    storage[key] = value;
+  }
+  const ValueType &at(size_t key) const override { return storage.at(key); }
+  size_t size() const override { return storage.size(); }
+};
+
+template <typename ValueType>
+struct PersistentVectorAdapter : public FixedSizeStorageAdapter<ValueType> {
+public:
+  using storage_ty = immer::vector<ValueType>;
+  using base_ty = FixedSizeStorageAdapter<ValueType>;
+  using iterator = typename base_ty::iterator;
+  using inner_iterator = typename base_ty::inner_iterator;
+  class vector_iterator : public inner_iterator {
+    typename storage_ty::iterator it;
+
+  public:
+    vector_iterator(const typename storage_ty::const_iterator &it) : it(it) {}
+    FixedSizeStorageIteratorKind getKind() const override {
+      return FixedSizeStorageIteratorKind::Vector;
+    }
+    static bool classof(const FixedSizeStorageAdapter<ValueType> *SA) {
+      return SA->getKind() == FixedSizeStorageIteratorKind::Vector;
+    }
+    static bool classof(const PersistentVectorAdapter<ValueType> *) { return true; }
+    inner_iterator &operator++() override {
+      ++it;
+      return *this;
+    }
+    inner_iterator *clone() override { return new vector_iterator(it); }
+    typename base_ty::value_ty operator*() override { return *it; }
+    bool operator!=(const inner_iterator &other) const override {
+      if (other.getKind() != getKind()) {
+        return true;
+      }
+      const vector_iterator &el = static_cast<const vector_iterator &>(other);
+      return el.it != it;
+    }
+  };
+  storage_ty storage;
+  void init(size_t size) override { storage = storage_ty(size); }
+  iterator begin() const override {
+    return iterator(new vector_iterator(storage.begin()));
+  }
+  iterator end() const override {
+    return iterator(new vector_iterator(storage.end()));
+  }
+  bool empty() const override { return storage.empty(); }
+  void set(size_t key, const ValueType &value) override {
+    storage[key] = value;
+  }
+  const ValueType &at(size_t key) const override { return storage.at(key); }
+  size_t size() const override { return storage.size(); }
 };
 
 template <typename ValueType, typename Eq = std::equal_to<ValueType>>
