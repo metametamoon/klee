@@ -406,10 +406,6 @@ cl::opt<bool> AnnotateOnlyExternal(
     cl::desc("Ignore annotations for defined function (default=false)"),
     cl::init(false), cl::cat(MockCat));
 
-cl::opt<bool> multiplexForStaticAnalysis("multiplex-static-analysis",
-                                         llvm::cl::desc(""),
-                                         llvm::cl::cat(StartCat));
-
 enum class SAMultiplexKind {
   None,
   Module,

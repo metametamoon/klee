@@ -5524,15 +5524,9 @@ void Executor::callExternalFunction(ExecutionState &state, KInstruction *target,
                                                  roundingMode);
 
   if (!success) {
-    if (interpreterOpts.Mock == MockPolicy::Failed) {
-      if (target->inst()->getType()->isSized()) {
-        prepareMockValue(state, "mockExternResult", target);
-      }
-    } else {
-      terminateStateOnExecError(state,
-                                "failed external call: " + callable->getName(),
-                                StateTerminationType::External);
-    }
+    terminateStateOnExecError(state,
+                              "failed external call: " + callable->getName(),
+                              StateTerminationType::External);
     return;
   }
 
