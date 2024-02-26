@@ -2901,7 +2901,7 @@ ref<Expr> PointerExpr::create(const ref<Expr> &expr) {
     pointer = cast<PointerExpr>(
         SelectExpr::create(se->cond, PointerExpr::create(se->trueExpr),
                            PointerExpr::create(se->falseExpr)));
-  } else if (read &&
+  } else if (read && read->updates.root->isSymbolicArray() &&
              read->updates.root->getSize()->getWidth() == expr->getWidth() &&
              read->updates.getSize() == 0) {
     pointer = PointerExpr::createSymbolic(expr, read, read->index);

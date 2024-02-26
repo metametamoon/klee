@@ -344,11 +344,6 @@ cl::opt<bool> AllExternalWarnings(
              "as opposed to once per function (default=false)"),
     cl::cat(ExtCallsCat));
 
-enum class MockExternalCallsPolicy {
-  None,
-  All,
-};
-
 enum class MockInternalCallsPolicy {
   None,
   Module,
@@ -364,13 +359,6 @@ enum class MockPointerResolvePolicy {
   Constant,
   Symbolic,
 };
-
-cl::opt<MockExternalCallsPolicy> MockExternalCalls(
-    "mock-external-calls",
-    cl::values(clEnumValN(MockExternalCallsPolicy::None, "none", ""),
-               clEnumValN(MockExternalCallsPolicy::All, "all", "")),
-    cl::init(MockExternalCallsPolicy::None), cl::desc(""),
-    cl::cat(ExtCallsCat));
 
 cl::opt<MockInternalCallsPolicy> MockInternalCalls(
     "mock-internal-calls",
@@ -4829,10 +4817,6 @@ Executor::getMockInfo(ExecutionState &state, KCallable *f,
       if (!kf->function()->isDeclaration()) {
         isExternal = false;
       }
-    }
-
-    if (isExternal && MockExternalCalls == MockExternalCallsPolicy::All) {
-      result.doMock = true;
     }
 
     if (!isExternal && MockInternalCalls == MockInternalCallsPolicy::All) {
