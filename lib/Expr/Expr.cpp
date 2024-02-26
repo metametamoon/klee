@@ -572,7 +572,6 @@ std::string Expr::toString() const {
 
 Expr::ExprCacheSet Expr::cachedExpressions;
 Expr::ConstantExprCacheSet Expr::cachedConstantExpressions;
-Expr::ConstantPointerExprCacheSet Expr::cachedConstantPointerExpressions;
 
 Expr::~Expr() {
   Expr::count--;
@@ -595,30 +594,7 @@ ConstantExpr::~ConstantExpr() {
   }
 }
 
-ConstantPointerExpr::~ConstantPointerExpr() {
-  if (isCached) {
-    toBeCleared = true;
-    if (!cast<ConstantExpr>(base)->isFloat() &&
-        !cast<ConstantExpr>(value)->isFloat()) {
-      cachedConstantPointerExpressions.cache.erase(
-          {cast<ConstantExpr>(base)->getAPValue(),
-           cast<ConstantExpr>(value)->getAPValue()});
-    } else {
-      cachedExpressions.cache.erase(this);
-    }
-    isCached = false;
-  }
-}
-
 Expr::ConstantExprCacheSet::~ConstantExprCacheSet() {
-  while (cache.size() != 0) {
-    auto tmp = *cache.begin();
-    tmp.second->isCached = false;
-    cache.erase(cache.begin());
-  }
-}
-
-Expr::ConstantPointerExprCacheSet::~ConstantPointerExprCacheSet() {
   while (cache.size() != 0) {
     auto tmp = *cache.begin();
     tmp.second->isCached = false;

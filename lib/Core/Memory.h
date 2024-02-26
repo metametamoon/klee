@@ -26,6 +26,7 @@ DISABLE_WARNING_DEPRECATED_DECLARATIONS
 #include "llvm/ADT/StringExtras.h"
 DISABLE_WARNING_POP
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -68,6 +69,7 @@ public:
   mutable unsigned timestamp;
 
   ref<Expr> addressExpr;
+  std::optional<uint64_t> address;
 
   /// size in bytes
   ref<Expr> sizeExpr;
@@ -102,9 +104,10 @@ public:
   // XXX this is just a temp hack, should be removed
   explicit MemoryObject(uint64_t _address)
       : id(0), timestamp(0), addressExpr(Expr::createPointer(_address)),
-        sizeExpr(Expr::createPointer(0)), conditionExpr(Expr::createTrue()),
-        alignment(0), isFixed(true), isLazyInitialized(false), parent(nullptr),
-        type(nullptr), content(nullptr), allocSite(nullptr) {}
+        address(_address), sizeExpr(Expr::createPointer(0)),
+        conditionExpr(Expr::createTrue()), alignment(0), isFixed(true),
+        isLazyInitialized(false), parent(nullptr), type(nullptr),
+        content(nullptr), allocSite(nullptr) {}
 
   MemoryObject(
       ref<Expr> _address, ref<Expr> _size, uint64_t alignment, bool _isLocal,
@@ -124,6 +127,9 @@ public:
       timestamp = _timestamp;
     } else {
       timestamp = time++;
+    }
+    if (auto constAddress = dyn_cast<ConstantExpr>(_address)) {
+      address = constAddress->getZExtValue();
     }
   }
 

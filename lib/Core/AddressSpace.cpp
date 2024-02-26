@@ -461,8 +461,12 @@ bool AddressSpace::copyInConcrete(const MemoryObject *mo, const ObjectState *os,
 
 bool MemoryObjectLT::operator()(const MemoryObject *a,
                                 const MemoryObject *b) const {
-  if (a->getBaseExpr() != b->getBaseExpr()) {
-    return a->getBaseExpr().get() < b->getBaseExpr().get();
+  if (a->address.has_value() && b->address.has_value()) {
+    return a->address < b->address;
+  } else if (a->address.has_value()) {
+    return true;
+  } else if (b->address.has_value()) {
+    return false;
   }
-  return false;
+  return a->getBaseExpr() < b->getBaseExpr();
 }

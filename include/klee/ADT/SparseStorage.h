@@ -21,7 +21,7 @@ enum class Density {
   Dense,
 };
 
-enum class StorageIteratorKind { UMap, PersistentUMap, PersistenArray };
+enum class StorageIteratorKind { UMap, PersistentUMap, Array };
 
 template <typename ValueType, typename Eq = std::equal_to<ValueType>>
 struct StorageAdapter {
@@ -206,7 +206,7 @@ struct PersistenUnorderedMapAdapder : public StorageAdapter<ValueType, Eq> {
 };
 
 template <typename ValueType, typename Eq = std::equal_to<ValueType>>
-struct PersistentArray : public StorageAdapter<ValueType, Eq> {
+struct ArrayAdapter : public StorageAdapter<ValueType, Eq> {
   using storage_ty = ValueType *;
   using base_ty = StorageAdapter<ValueType, Eq>;
   using iterator = typename base_ty::iterator;
@@ -214,9 +214,9 @@ struct PersistentArray : public StorageAdapter<ValueType, Eq> {
   struct allocator {
     size_t storageSize;
     allocator(size_t storageSize) : storageSize(storageSize) {}
-    PersistentArray<ValueType, Eq>
+    ArrayAdapter<ValueType, Eq>
     operator()(const ValueType &defaultValue) const {
-      return PersistentArray<ValueType, Eq>(defaultValue, storageSize);
+      return ArrayAdapter<ValueType, Eq>(defaultValue, storageSize);
     }
   };
 
@@ -225,34 +225,45 @@ struct PersistentArray : public StorageAdapter<ValueType, Eq> {
     storage_ty it;
     size_t index;
     size_t size;
+    size_t nonDefaultValuesCount;
     Eq eq;
     ValueType defaultValue;
 
   public:
     persistent_array_iterator(storage_ty _it, size_t _index, size_t _size,
+                              size_t _nonDefaultValuesCount,
                               const ValueType &_defaultValue)
-        : it(_it), index(_index), size(_size), defaultValue(_defaultValue) {
-      while (index < size && eq(*it, defaultValue)) {
-        ++it;
-        ++index;
+        : it(_it), index(_index), size(_size),
+          nonDefaultValuesCount(_nonDefaultValuesCount),
+          defaultValue(_defaultValue) {
+      if (nonDefaultValuesCount < size) {
+        while (index < size && eq(*it, defaultValue)) {
+          ++it;
+          ++index;
+        }
       }
     }
     StorageIteratorKind getKind() const override {
-      return StorageIteratorKind::PersistenArray;
+      return StorageIteratorKind::Array;
     }
     static bool classof(const StorageAdapter<ValueType, Eq> *SA) {
-      return SA->getKind() == StorageIteratorKind::PersistenArray;
+      return SA->getKind() == StorageIteratorKind::Array;
     }
-    static bool classof(const PersistentArray<ValueType, Eq> *) { return true; }
+    static bool classof(const ArrayAdapter<ValueType, Eq> *) { return true; }
     inner_iterator &operator++() override {
-      do {
-        ++it;
-        ++index;
-      } while (index < size && eq(*it, defaultValue));
+      ++it;
+      ++index;
+      if (nonDefaultValuesCount < size) {
+        while (index < size && eq(*it, defaultValue)) {
+          ++it;
+          ++index;
+        }
+      }
       return *this;
     }
     inner_iterator *clone() override {
-      return new persistent_array_iterator(it, index, size, defaultValue);
+      return new persistent_array_iterator(it, index, size,
+                                           nonDefaultValuesCount, defaultValue);
     }
     typename base_ty::value_ty operator*() override { return {index, *it}; }
     bool operator!=(const inner_iterator &other) const override {
@@ -270,13 +281,13 @@ public:
   size_t storageSize;
   ValueType defaultValue;
   size_t nonDefaultValuesCount;
-  PersistentArray(const ValueType &defaultValue, size_t storageSize = 8)
+  ArrayAdapter(const ValueType &defaultValue, size_t storageSize = 8)
       : storageSize(storageSize), defaultValue(defaultValue),
         nonDefaultValuesCount(0) {
     storage = new ValueType[storageSize];
     clear();
   }
-  PersistentArray(const PersistentArray<ValueType, Eq> &pa)
+  ArrayAdapter(const ArrayAdapter<ValueType, Eq> &pa)
       : storageSize(pa.storageSize), defaultValue(pa.defaultValue),
         nonDefaultValuesCount(pa.nonDefaultValuesCount) {
     storage = new ValueType[storageSize];
@@ -285,7 +296,7 @@ public:
       storage[key] = val;
     }
   }
-  PersistentArray &operator=(const PersistentArray<ValueType, Eq> &pa) {
+  ArrayAdapter &operator=(const ArrayAdapter<ValueType, Eq> &pa) {
     storageSize = pa.storageSize;
     defaultValue = pa.defaultValue;
     nonDefaultValuesCount = pa.nonDefaultValuesCount;
@@ -297,14 +308,16 @@ public:
     }
     return *this;
   }
-  ~PersistentArray() { delete[] storage; }
+  ~ArrayAdapter() { delete[] storage; }
   bool contains(size_t key) const override { return storage[key] != 0; }
   iterator begin() const override {
-    return new persistent_array_iterator(storage, 0, storageSize, defaultValue);
+    return new persistent_array_iterator(storage, 0, storageSize,
+                                         nonDefaultValuesCount, defaultValue);
   }
   iterator end() const override {
     return new persistent_array_iterator(storage + storageSize, storageSize,
-                                         storageSize, defaultValue);
+                                         storageSize, nonDefaultValuesCount,
+                                         defaultValue);
   }
   const ValueType *lookup(size_t key) const override {
     auto val = storage[key];

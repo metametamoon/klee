@@ -21,9 +21,9 @@ template <typename ValueType, typename Eq = std::equal_to<ValueType>>
 Storage<ValueType, Eq> *constructStorage(ref<Expr> size,
                                          const ValueType &defaultValue) {
   if (auto constSize = dyn_cast<ConstantExpr>(size);
-      constSize && constSize->getZExtValue() <= 64) {
-    return new SparseStorage<ValueType, Eq, PersistentArray<ValueType, Eq>>(
-        defaultValue, typename PersistentArray<ValueType, Eq>::allocator(
+      constSize && constSize->getZExtValue() <= 1024) {
+    return new SparseStorage<ValueType, Eq, ArrayAdapter<ValueType, Eq>>(
+        defaultValue, typename ArrayAdapter<ValueType, Eq>::allocator(
                           constSize->getZExtValue()));
   } else {
     return new SparseStorage<ValueType, Eq, UnorderedMapAdapder<ValueType, Eq>>(
