@@ -320,6 +320,9 @@ public:
                                          defaultValue);
   }
   const ValueType *lookup(size_t key) const override {
+    if (key >= storageSize) {
+      return nullptr;
+    }
     auto val = storage[key];
     return Eq()(val, defaultValue) ? nullptr : &storage[key];
   }
