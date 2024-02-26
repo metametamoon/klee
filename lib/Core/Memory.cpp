@@ -42,6 +42,14 @@ DISABLE_WARNING_POP
 #include <functional>
 #include <sstream>
 
+namespace klee {
+llvm::cl::opt<bool>
+    UseImmerStructures("use-immer-structures",
+                       llvm::cl::desc("Use optimized persistent structures "
+                                      "form immer project (default=false)"),
+                       llvm::cl::init(false));
+}
+
 using namespace llvm;
 using namespace klee;
 
