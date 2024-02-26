@@ -281,30 +281,28 @@ public:
   size_t storageSize;
   ValueType defaultValue;
   size_t nonDefaultValuesCount;
-  ArrayAdapter(const ValueType &defaultValue, size_t storageSize = 8)
+  ArrayAdapter(const ValueType &defaultValue, size_t storageSize)
       : storageSize(storageSize), defaultValue(defaultValue),
         nonDefaultValuesCount(0) {
     storage = new ValueType[storageSize];
     clear();
   }
   ArrayAdapter(const ArrayAdapter<ValueType, Eq> &pa)
-      : storageSize(pa.storageSize), defaultValue(pa.defaultValue),
-        nonDefaultValuesCount(pa.nonDefaultValuesCount) {
+      : storageSize(pa.storageSize), defaultValue(pa.defaultValue) {
     storage = new ValueType[storageSize];
     clear();
     for (const auto &[key, val] : pa) {
-      storage[key] = val;
+      set(key, val);
     }
   }
   ArrayAdapter &operator=(const ArrayAdapter<ValueType, Eq> &pa) {
     storageSize = pa.storageSize;
     defaultValue = pa.defaultValue;
-    nonDefaultValuesCount = pa.nonDefaultValuesCount;
     delete[] storage;
     storage = new ValueType[storageSize];
     clear();
     for (const auto &[key, val] : pa) {
-      storage[key] = val;
+      set(key, val);
     }
     return *this;
   }
