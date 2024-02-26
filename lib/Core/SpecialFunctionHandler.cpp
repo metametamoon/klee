@@ -1000,7 +1000,9 @@ void SpecialFunctionHandler::handleMakeMock(ExecutionState &state,
     return;
   }
 
-  name = arguments[2]->isZero() ? "" : readStringAtAddress(state, executor.makePointer(arguments[2]));
+  name = arguments[2]->isZero()
+             ? ""
+             : readStringAtAddress(state, executor.makePointer(arguments[2]));
 
   if (name.empty()) {
     executor.terminateStateOnUserError(
