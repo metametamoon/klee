@@ -3043,7 +3043,6 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
 
       // Iterate through all non-default cases and order them by expressions
       for (auto i : si->cases()) {
-        auto ec = evalConstant(i.getCaseValue(), state.roundingMode);
         ref<Expr> value = evalConstant(i.getCaseValue(), state.roundingMode);
 
         BasicBlock *caseSuccessor = i.getCaseSuccessor();
