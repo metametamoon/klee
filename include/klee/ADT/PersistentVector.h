@@ -15,7 +15,6 @@
 #endif /* IMMER_NO_EXCEPTIONS */
 
 #include <immer/vector.hpp>
-// #include <immer/vector_transient.hpp>
 
 namespace klee {
 
