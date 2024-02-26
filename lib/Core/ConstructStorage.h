@@ -23,8 +23,8 @@ Storage<ValueType, Eq> *constructStorage(ref<Expr> size,
                                          const ValueType &defaultValue) {
   if (auto constSize = dyn_cast<ConstantExpr>(size);
       constSize && constSize->getZExtValue() <= 1024) {
-    return new SparseStorage<ValueType, Eq, ArrayAdapter<ValueType, Eq>>(
-        defaultValue, typename ArrayAdapter<ValueType, Eq>::allocator(
+    return new SparseStorage<ValueType, Eq, SparseArrayAdapter<ValueType, Eq>>(
+        defaultValue, typename SparseArrayAdapter<ValueType, Eq>::allocator(
                           constSize->getZExtValue()));
   } else {
     if (UseImmerStructures) {
