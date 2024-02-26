@@ -22,7 +22,7 @@ enum class Density {
   Dense,
 };
 
-enum class StorageIteratorKind { UMap, PersistentUMap, Array };
+enum class StorageIteratorKind { UMap, PersistentUMap, SparseArray };
 enum class FixedSizeStorageIteratorKind { Array, Vector, PersistentVector };
 
 template <typename ValueType, typename Eq = std::equal_to<ValueType>>
@@ -78,7 +78,7 @@ struct StorageAdapter {
 };
 
 template <typename ValueType> struct FixedSizeStorageAdapter {
-  using value_ty = std::pair<size_t, ValueType>;
+  using value_ty = ValueType;
   class inner_iterator {
   public:
     virtual FixedSizeStorageIteratorKind getKind() const = 0;
@@ -123,6 +123,7 @@ template <typename ValueType> struct FixedSizeStorageAdapter {
   virtual void set(size_t key, const ValueType &value) = 0;
   virtual const ValueType &at(size_t key) const = 0;
   virtual size_t size() const = 0;
+  virtual FixedSizeStorageAdapter<ValueType> *clone() const = 0;
 };
 
 template <typename ValueType>
@@ -158,6 +159,7 @@ public:
       return el.it != it;
     }
   };
+  VectorAdapter(const VectorAdapter<ValueType> &va) : storage(va.storage) {}
   storage_ty storage;
   void init(size_t size) override { storage = storage_ty(size); }
   iterator begin() const override {
@@ -172,6 +174,9 @@ public:
   }
   const ValueType &at(size_t key) const override { return storage.at(key); }
   size_t size() const override { return storage.size(); }
+  FixedSizeStorageAdapter<ValueType> clone() const override {
+    return new VectorAdapter<ValueType>(*this);
+  }
 };
 
 template <typename ValueType>
@@ -192,7 +197,9 @@ public:
     static bool classof(const FixedSizeStorageAdapter<ValueType> *SA) {
       return SA->getKind() == FixedSizeStorageIteratorKind::Vector;
     }
-    static bool classof(const PersistentVectorAdapter<ValueType> *) { return true; }
+    static bool classof(const PersistentVectorAdapter<ValueType> *) {
+      return true;
+    }
     inner_iterator &operator++() override {
       ++it;
       return *this;
@@ -207,6 +214,8 @@ public:
       return el.it != it;
     }
   };
+  PersistentVectorAdapter(const PersistentVectorAdapter<ValueType> &va)
+      : storage(va.storage) {}
   storage_ty storage;
   void init(size_t size) override { storage = storage_ty(size); }
   iterator begin() const override {
@@ -221,6 +230,9 @@ public:
   }
   const ValueType &at(size_t key) const override { return storage.at(key); }
   size_t size() const override { return storage.size(); }
+  FixedSizeStorageAdapter<ValueType> clone() const override {
+    return new PersistentVectorAdapter<ValueType>(*this);
+  }
 };
 
 template <typename ValueType, typename Eq = std::equal_to<ValueType>>
@@ -353,8 +365,92 @@ struct PersistenUnorderedMapAdapder : public StorageAdapter<ValueType, Eq> {
   size_t size() const override { return storage.size(); }
 };
 
+template <typename ValueType>
+struct ArrayAdapter : public FixedSizeStorageAdapter<ValueType> {
+  using storage_ty = ValueType *;
+  using base_ty = FixedSizeStorageAdapter<ValueType>;
+  using iterator = typename base_ty::iterator;
+  using inner_iterator = typename base_ty::inner_iterator;
+
+  class persistent_array_iterator : public inner_iterator {
+    storage_ty it;
+    size_t size;
+
+  public:
+    persistent_array_iterator(storage_ty _it, size_t _index, size_t _size)
+        : it(_it), size(_size) {}
+    FixedSizeStorageIteratorKind getKind() const override {
+      return FixedSizeStorageIteratorKind::Array;
+    }
+    static bool classof(const FixedSizeStorageAdapter<ValueType> *SA) {
+      return SA->getKind() == FixedSizeStorageIteratorKind::Array;
+    }
+    static bool classof(const ArrayAdapter<ValueType> *) { return true; }
+    inner_iterator &operator++() override {
+      ++it;
+      return *this;
+    }
+    inner_iterator *clone() override {
+      return new persistent_array_iterator(it, size);
+    }
+    typename base_ty::value_ty operator*() override { return *it; }
+    bool operator!=(const inner_iterator &other) const override {
+      if (other.getKind() != getKind()) {
+        return true;
+      }
+      const persistent_array_iterator &el =
+          static_cast<const persistent_array_iterator &>(other);
+      return el.it != it;
+    }
+  };
+
+public:
+  storage_ty storage;
+  size_t storageSize;
+  ArrayAdapter(size_t storageSize) : storageSize(storageSize) {
+    storage = new ValueType[storageSize];
+    clear();
+  }
+  ArrayAdapter(const ArrayAdapter<ValueType> &pa)
+      : storageSize(pa.storageSize) {
+    storage = new ValueType[storageSize];
+    for (size_t i = 0; i < storageSize; ++i) {
+      set(i, pa.at(i));
+    }
+  }
+  ArrayAdapter &operator=(const ArrayAdapter<ValueType> &pa) {
+    storageSize = pa.storageSize;
+    delete[] storage;
+    storage = new ValueType[storageSize];
+    for (size_t i = 0; i < storageSize; ++i) {
+      set(i, pa.at(i));
+    }
+    return *this;
+  }
+  ~ArrayAdapter() { delete[] storage; }
+  bool contains(size_t key) const override { return storage[key] != 0; }
+  iterator begin() const override {
+    return new persistent_array_iterator(storage, 0, storageSize);
+  }
+  iterator end() const override {
+    return new persistent_array_iterator(storage + storageSize, storageSize,
+                                         storageSize);
+  }
+  bool empty() const override { return storageSize == 0; }
+  void set(size_t key, const ValueType &value) override {
+    storage[key] = value;
+  }
+  const ValueType &at(size_t key) const override { return storage[key]; }
+  void clear() {
+    for (size_t i = 0; i < storageSize; ++i) {
+      set(i, ValueType());
+    }
+  }
+  size_t size() const override { return storageSize; }
+};
+
 template <typename ValueType, typename Eq = std::equal_to<ValueType>>
-struct ArrayAdapter : public StorageAdapter<ValueType, Eq> {
+struct SparseArrayAdapter : public StorageAdapter<ValueType, Eq> {
   using storage_ty = ValueType *;
   using base_ty = StorageAdapter<ValueType, Eq>;
   using iterator = typename base_ty::iterator;
@@ -362,9 +458,9 @@ struct ArrayAdapter : public StorageAdapter<ValueType, Eq> {
   struct allocator {
     size_t storageSize;
     allocator(size_t storageSize) : storageSize(storageSize) {}
-    ArrayAdapter<ValueType, Eq>
+    SparseArrayAdapter<ValueType, Eq>
     operator()(const ValueType &defaultValue) const {
-      return ArrayAdapter<ValueType, Eq>(defaultValue, storageSize);
+      return SparseArrayAdapter<ValueType, Eq>(defaultValue, storageSize);
     }
   };
 
@@ -392,12 +488,14 @@ struct ArrayAdapter : public StorageAdapter<ValueType, Eq> {
       }
     }
     StorageIteratorKind getKind() const override {
-      return StorageIteratorKind::Array;
+      return StorageIteratorKind::SparseArray;
     }
     static bool classof(const StorageAdapter<ValueType, Eq> *SA) {
-      return SA->getKind() == StorageIteratorKind::Array;
+      return SA->getKind() == StorageIteratorKind::SparseArray;
     }
-    static bool classof(const ArrayAdapter<ValueType, Eq> *) { return true; }
+    static bool classof(const SparseArrayAdapter<ValueType, Eq> *) {
+      return true;
+    }
     inner_iterator &operator++() override {
       ++it;
       ++index;
@@ -429,13 +527,13 @@ public:
   size_t storageSize;
   ValueType defaultValue;
   size_t nonDefaultValuesCount;
-  ArrayAdapter(const ValueType &defaultValue, size_t storageSize)
+  SparseArrayAdapter(const ValueType &defaultValue, size_t storageSize)
       : storageSize(storageSize), defaultValue(defaultValue),
         nonDefaultValuesCount(0) {
     storage = new ValueType[storageSize];
     clear();
   }
-  ArrayAdapter(const ArrayAdapter<ValueType, Eq> &pa)
+  SparseArrayAdapter(const SparseArrayAdapter<ValueType, Eq> &pa)
       : storageSize(pa.storageSize), defaultValue(pa.defaultValue) {
     storage = new ValueType[storageSize];
     clear();
@@ -443,7 +541,7 @@ public:
       set(key, val);
     }
   }
-  ArrayAdapter &operator=(const ArrayAdapter<ValueType, Eq> &pa) {
+  SparseArrayAdapter &operator=(const SparseArrayAdapter<ValueType, Eq> &pa) {
     storageSize = pa.storageSize;
     defaultValue = pa.defaultValue;
     delete[] storage;
@@ -454,7 +552,7 @@ public:
     }
     return *this;
   }
-  ~ArrayAdapter() { delete[] storage; }
+  ~SparseArrayAdapter() { delete[] storage; }
   bool contains(size_t key) const override { return storage[key] != 0; }
   iterator begin() const override {
     return new persistent_array_iterator(storage, 0, storageSize,
