@@ -5571,7 +5571,8 @@ void Executor::callExternalFunction(ExecutionState &state, KInstruction *target,
   if (!success) {
     if (interpreterOpts.Mock == MockPolicy::Failed) {
       if (target->inst()->getType()->isSized()) {
-        prepareMockValue(state, "mockExternResult", target->inst()->getType(), target);
+        prepareMockValue(state, "mockExternResult", target->inst()->getType(),
+                         target);
       }
     } else {
       terminateStateOnExecError(state,
