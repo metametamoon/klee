@@ -16,6 +16,7 @@
 #include <functional>
 
 namespace klee {
+extern llvm::cl::opt<bool> UseImmerStructures;
 
 template <typename ValueType, typename Eq = std::equal_to<ValueType>>
 Storage<ValueType, Eq> *constructStorage(ref<Expr> size,
@@ -26,11 +27,15 @@ Storage<ValueType, Eq> *constructStorage(ref<Expr> size,
         defaultValue, typename ArrayAdapter<ValueType, Eq>::allocator(
                           constSize->getZExtValue()));
   } else {
-    return new SparseStorage<ValueType, Eq, UnorderedMapAdapder<ValueType, Eq>>(
-        defaultValue);
-    // new SparseStorage<ValueType, Eq,
-    //                   PersistenUnorderedMapAdapder<ValueType, Eq>>(
-    //     defaultValue);
+    if (UseImmerStructures) {
+      return new SparseStorage<ValueType, Eq,
+                               PersistenUnorderedMapAdapder<ValueType, Eq>>(
+          defaultValue);
+    } else {
+      return new SparseStorage<ValueType, Eq,
+                               UnorderedMapAdapder<ValueType, Eq>>(
+          defaultValue);
+    }
   }
 }
 } // namespace klee
