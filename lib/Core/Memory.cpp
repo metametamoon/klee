@@ -36,6 +36,7 @@ DISABLE_WARNING_DEPRECATED_DECLARATIONS
 #include "llvm/Support/raw_ostream.h"
 DISABLE_WARNING_POP
 
+#include <algorithm>
 #include <cassert>
 #include <cstddef>
 #include <functional>
@@ -658,22 +659,16 @@ void ObjectStage::writeWidth(ref<Expr> offset, ref<Expr> value) {
 void ObjectStage::write(const ObjectStage &os) {
   auto constSize = dyn_cast<ConstantExpr>(size);
   auto osConstSize = dyn_cast<ConstantExpr>(os.size);
-  if (osConstSize && osConstSize->getZExtValue() <= 64) {
-    if (constSize && constSize->getZExtValue() <= 64) {
-      for (size_t i = 0;
-           i < std::min(osConstSize->getZExtValue(), constSize->getZExtValue());
-           ++i) {
-        knownSymbolics->store(i, os.knownSymbolics->load(i));
-        unflushedMask->store(i, os.unflushedMask->load(i));
-      }
+  if (constSize || osConstSize) {
+    size_t bound = 0;
+    if (osConstSize && constSize) {
+      bound = std::min(constSize->getZExtValue(), osConstSize->getZExtValue());
+    } else if (constSize) {
+      bound = constSize->getZExtValue();
     } else {
-      for (size_t i = 0; i < osConstSize->getZExtValue(); ++i) {
-        knownSymbolics->store(i, os.knownSymbolics->load(i));
-        unflushedMask->store(i, os.unflushedMask->load(i));
-      }
+      bound = osConstSize->getZExtValue();
     }
-  } else if (constSize && constSize->getZExtValue() <= 64) {
-    for (size_t i = 0; i < constSize->getZExtValue(); ++i) {
+    for (size_t i = 0; i < bound; ++i) {
       knownSymbolics->store(i, os.knownSymbolics->load(i));
       unflushedMask->store(i, os.unflushedMask->load(i));
     }

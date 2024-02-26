@@ -3651,8 +3651,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
 
     if (castToType->isPointerTy()) {
       castToType = castToType->getPointerElementType();
-      if (ref<PointerExpr> pointer =
-              dyn_cast<PointerExpr>(makePointer(result))) {
+      if (ref<PointerExpr> pointer = cast<PointerExpr>(makePointer(result))) {
         ref<Expr> base = pointer->getBase();
         if (state.isGEPExpr(base)) {
           state.gepExprBases[base] = castToType;
@@ -7026,9 +7025,6 @@ const Array *Executor::makeArray(ref<Expr> size,
 }
 
 ref<PointerExpr> Executor::makePointer(ref<Expr> expr) const {
-  if (isa<ConstantExpr>(expr)) {
-    llvm::errs();
-  }
   return PointerExpr::create(expr);
 }
 
