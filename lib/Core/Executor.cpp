@@ -6880,7 +6880,8 @@ void Executor::executeMemoryOperation(
     /* If base may point to some object then we may provide additional
     information about object allocations site.*/
 
-    ref<PointerExpr> uniqueBase = PointerExpr::create(toUnique(*unbound, base));
+    ref<PointerExpr> uniqueBase =
+        cast<PointerExpr>(toUnique(*unbound, basePointer));
     bool uniqueBaseResolved = false;
     ObjectPair baseObjectPair;
 
