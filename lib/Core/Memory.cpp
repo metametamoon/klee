@@ -179,8 +179,7 @@ ref<Expr> ObjectState::readValue8(ref<Expr> offset) const {
             dyn_cast<ConstantExpr>(object->getSizeExpr())) {
       auto moSize = sizeExpr->getZExtValue();
       if (object && moSize > 4096) {
-        std::string allocInfo;
-        object->getAllocInfo(allocInfo);
+        std::string allocInfo = object->getAllocInfo();
         klee_warning_once(nullptr,
                           "Symbolic memory access will send the following "
                           "array of %lu bytes to "
@@ -203,8 +202,7 @@ ref<Expr> ObjectState::readBase8(ref<Expr> offset) const {
             dyn_cast<ConstantExpr>(object->getSizeExpr())) {
       auto moSize = sizeExpr->getZExtValue();
       if (object && moSize > 4096) {
-        std::string allocInfo;
-        object->getAllocInfo(allocInfo);
+        std::string allocInfo = object->getAllocInfo();
         klee_warning_once(nullptr,
                           "Symbolic memory access will send the following "
                           "array of %lu bytes to "

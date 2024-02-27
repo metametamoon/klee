@@ -916,8 +916,8 @@ void Executor::allocateGlobalObjects(ExecutionState &state) {
       ref<CodeLocation> fCodeLocation = CodeLocation::create(
           kf, kf->getSourceFilepath(), kf->getLine(), std::nullopt);
 
-      auto mo = allocate(state, Expr::createPointer(8), false, true, fCodeLocation , 8,
-                         typeSystemManager->getUnknownType());
+      auto mo = allocate(state, Expr::createPointer(8), false, true,
+                         fCodeLocation, 8, typeSystemManager->getUnknownType());
       auto baseExpr = cast<ConstantExpr>(mo->getBaseExpr());
       addr = ConstantPointerExpr::create(baseExpr, baseExpr);
       legalFunctions.emplace(baseExpr->getZExtValue(), &f);
@@ -5742,8 +5742,8 @@ void Executor::executeAlloc(ExecutionState &state, ref<Expr> size, bool isLocal,
     }
 
     MemoryObject *mo =
-        allocate(state, size, isLocal, /*isGlobal=*/false, allocSite,
-                 locationOf(state),, type, conditionExpr);
+        allocate(state, size, isLocal, /*isGlobal=*/false, locationOf(state),
+                 allocationAlignment, type, conditionExpr);
     if (!mo) {
       bindLocal(
           target, state,
@@ -6082,8 +6082,9 @@ MemoryObject *Executor::allocate(ExecutionState &state, ref<Expr> size,
 
   /* Constant solution exists. Just return it. */
   if (arrayConstantSize && lazyInitializationSource.isNull()) {
-    MemoryObject *mo =  memory->allocate(arrayConstantSize, isLocal, isGlobal, false,
-                            allocSite, allocationAlignment, type);
+    MemoryObject *mo =
+        memory->allocate(arrayConstantSize, isLocal, isGlobal, false, allocSite,
+                         allocationAlignment, type);
     if (mo && state.isGEPExpr(mo->getBaseExpr())) {
       state.gepExprBases.erase(mo->getBaseExpr());
     }
@@ -6883,9 +6884,9 @@ void Executor::executeMemoryOperation(
     bool uniqueBaseResolved = false;
     ObjectPair baseObjectPair;
 
-    if (!unbound->addressSpace.resolveOneIfUnique(*unbound, solver.get(),
-                                                  uniqueBase, baseTargetType,
-                                                  baseObjectPair, uniqueBaseResolved)) {
+    if (!unbound->addressSpace.resolveOneIfUnique(
+            *unbound, solver.get(), uniqueBase, baseTargetType, baseObjectPair,
+            uniqueBaseResolved)) {
       terminateStateOnSolverError(*unbound, "Query timed out (resolve)");
       return;
     }
