@@ -121,6 +121,7 @@ template <typename ValueType> struct FixedSizeStorageAdapter {
     }
   };
 
+  virtual ~FixedSizeStorageAdapter() {}
   virtual iterator begin() const = 0;
   virtual iterator end() const = 0;
   virtual bool empty() const = 0;
@@ -430,7 +431,7 @@ public:
     }
     return *this;
   }
-  ~ArrayAdapter() { delete[] storage; }
+  ~ArrayAdapter() override { delete[] storage; }
   iterator begin() const override { return new array_iterator(storage); }
   iterator end() const override {
     return new array_iterator(storage + storageSize);
