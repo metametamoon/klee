@@ -234,7 +234,7 @@ public:
   }
   bool empty() const override { return storage.empty(); }
   void set(size_t key, const ValueType &value) override {
-    storage.set(key, value);
+    storage = storage.set(key, value);
   }
   const ValueType &at(size_t key) const override { return storage.at(key); }
   size_t size() const override { return storage.size(); }
