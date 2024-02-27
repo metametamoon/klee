@@ -45,3 +45,8 @@ CodeLocation::create(const KValue *source, const std::string &sourceFilename,
 PhysicalLocationJson CodeLocation::serialize() const {
   return location.serialize();
 }
+
+bool CodeLocation::equals(const CodeLocation &b) const {
+  return pathIndex == b.pathIndex && source == b.source &&
+         location == b.location;
+}
