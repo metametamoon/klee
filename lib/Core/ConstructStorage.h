@@ -38,6 +38,16 @@ Storage<ValueType, Eq> *constructStorage(ref<Expr> size,
     }
   }
 }
+
+template <typename ValueType>
+FixedSizeStorageAdapter<ValueType> *constructStorage(size_t size) {
+  if (UseImmerStructures) {
+    return new PersistentVectorAdapter<ValueType>(size);
+  } else {
+    return new ArrayAdapter<ValueType>(size);
+    // return new VectorAdapter<ValueType>(size);
+  }
+}
 } // namespace klee
 
 #endif /* KLEE_CONSTRUCT_STORAGE_H */

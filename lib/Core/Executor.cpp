@@ -1638,11 +1638,11 @@ const Cell &Executor::eval(const KInstruction *ki, unsigned index,
     return kmodule->constantTable[index];
   } else {
     unsigned index = vnumber;
-    ref<Expr> reg = sf.locals[index].value;
+    ref<Expr> reg = sf.locals->at(index).value;
     if (isSymbolic && reg.isNull()) {
       prepareSymbolicRegister(state, sf, index);
     }
-    return sf.locals[index];
+    return sf.locals->at(index);
   }
 }
 

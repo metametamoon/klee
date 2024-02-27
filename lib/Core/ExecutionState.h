@@ -18,6 +18,7 @@
 #include "klee/ADT/PersistentMap.h"
 #include "klee/ADT/PersistentSet.h"
 #include "klee/ADT/PersistentVector.h"
+#include "klee/ADT/SparseStorage.h"
 #include "klee/ADT/TreeStream.h"
 #include "klee/Core/TerminationTypes.h"
 #include "klee/Expr/Assignment.h"
@@ -40,6 +41,7 @@ DISABLE_WARNING_DEPRECATED_DECLARATIONS
 #include "llvm/IR/Function.h"
 DISABLE_WARNING_POP
 
+#include <algorithm>
 #include <cstddef>
 #include <deque>
 #include <map>
@@ -82,7 +84,7 @@ struct CallStackFrame {
 struct StackFrame {
   KFunction *kf;
   std::vector<ref<const MemoryObject>> allocas;
-  PersistentVector<Cell> locals;
+  std::unique_ptr<FixedSizeStorageAdapter<Cell>> locals;
 
   // For vararg functions: arguments not passed via parameter are
   // stored (packed tightly) in a local (alloca) memory object. This
