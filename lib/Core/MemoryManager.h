@@ -34,7 +34,6 @@ class MemoryManager {
 private:
   typedef std::set<MemoryObject *> objects_ty;
   objects_ty objects;
-  ExprHashMap<MemoryObject *> symbolicAddresses;
 
   char *deterministicSpace;
   char *nextFreeSlot;
@@ -59,7 +58,6 @@ public:
                               ref<CodeLocation> allocSite, KType *type);
   void deallocate(const MemoryObject *mo);
   void markFreed(MemoryObject *mo);
-  const MemoryObject *getAllocatedObject(ref<Expr> address);
   /*
    * Returns the size used by deterministic allocation in bytes
    */

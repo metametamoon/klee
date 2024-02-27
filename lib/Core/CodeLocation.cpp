@@ -9,6 +9,7 @@
 #include "CodeLocation.h"
 
 #include "klee/ADT/Ref.h"
+#include "klee/Module/KValue.h"
 #include "klee/Module/LocationInfo.h"
 #include "klee/Module/SarifReport.h"
 
