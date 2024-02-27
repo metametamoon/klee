@@ -6880,19 +6880,26 @@ void Executor::executeMemoryOperation(
     /* If base may point to some object then we may provide additional
     information about object allocations site.*/
 
-    ref<PointerExpr> uniqueBase =
-        cast<PointerExpr>(toUnique(*unbound, basePointer));
+    ref<const MemoryObject> idFastResult;
     bool uniqueBaseResolved = false;
-    ObjectPair baseObjectPair;
 
-    if (!unbound->addressSpace.resolveOneIfUnique(
-            *unbound, solver.get(), uniqueBase, baseTargetType, baseObjectPair,
-            uniqueBaseResolved)) {
-      terminateStateOnSolverError(*unbound, "Query timed out (resolve)");
-      return;
+    if (unbound->resolvedPointers.count(base) &&
+        unbound->resolvedPointers.at(base).size() == 1) {
+      uniqueBaseResolved = true;
+      idFastResult = *unbound->resolvedPointers[base].begin();
+    } else if (auto constBasePointer =
+                   dyn_cast<ConstantPointerExpr>(basePointer)) {
+      ObjectPair contantResult;
+      uniqueBaseResolved = unbound->addressSpace.resolveOne(
+          constBasePointer, baseTargetType, contantResult);
+      if (uniqueBaseResolved) {
+        idFastResult = contantResult.first;
+      }
     }
 
     if (uniqueBaseResolved) {
+      RefObjectPair baseObjectPair =
+          unbound->addressSpace.findOrLazyInitializeObject(idFastResult.get());
       if (!baseObjectPair.first->isLazyInitialized) {
         // Termiante with source event
         terminateStateOnProgramError(
