@@ -9,6 +9,7 @@
 
 #include "ExecutionState.h"
 
+#include "ConstructStorage.h"
 #include "Memory.h"
 
 #include "klee/Expr/ArrayExprVisitor.h"
@@ -102,12 +103,12 @@ bool CallStackFrame::equals(const CallStackFrame &other) const {
 }
 
 StackFrame::StackFrame(KFunction *kf) : kf(kf), varargs(nullptr) {
-  locals.init(kf->getNumRegisters());
+  locals.reset(constructStorage<Cell>(kf->getNumRegisters()));
 }
 
 StackFrame::StackFrame(const StackFrame &s)
     : kf(s.kf), allocas(s.allocas), varargs(s.varargs) {
-  locals = s.locals;
+  locals.reset(s.locals->clone());
 }
 
 StackFrame::~StackFrame() {}
@@ -382,7 +383,7 @@ void ExecutionState::dumpStack(llvm::raw_ostream &out) const {
       if (ai->hasName())
         out << ai->getName().str() << "=";
 
-      ref<Expr> value = sf.locals.at(csf.kf->getArgRegister(index++)).value;
+      ref<Expr> value = sf.locals->at(csf.kf->getArgRegister(index++)).value;
       if (isa_and_nonnull<ConstantExpr>(value)) {
         out << value;
       } else if (isa_and_nonnull<ConstantPointerExpr>(value)) {

@@ -485,40 +485,40 @@ private:
 
   ref<Expr> readArgument(ExecutionState &state, StackFrame &frame,
                          const KFunction *kf, unsigned index) {
-    ref<Expr> arg = frame.locals.at(kf->getArgRegister(index)).value;
+    ref<Expr> arg = frame.locals->at(kf->getArgRegister(index)).value;
     if (!arg) {
       prepareSymbolicArg(state, frame, index);
     }
-    return frame.locals.at(kf->getArgRegister(index)).value;
+    return frame.locals->at(kf->getArgRegister(index)).value;
   }
 
   ref<Expr> readDest(ExecutionState &state, StackFrame &frame,
                      const KInstruction *target) {
     unsigned index = target->getDest();
-    ref<Expr> reg = frame.locals.at(index).value;
+    ref<Expr> reg = frame.locals->at(index).value;
     if (!reg) {
       prepareSymbolicRegister(state, frame, index);
     }
-    return frame.locals.at(index).value;
+    return frame.locals->at(index).value;
   }
 
   const Cell &getArgumentCell(const StackFrame &frame, const KFunction *kf,
                               unsigned index) {
-    return frame.locals.at(kf->getArgRegister(index));
+    return frame.locals->at(kf->getArgRegister(index));
   }
 
   const Cell &getDestCell(const StackFrame &frame, const KInstruction *target) {
-    return frame.locals.at(target->getDest());
+    return frame.locals->at(target->getDest());
   }
 
   void setArgumentCell(StackFrame &frame, const KFunction *kf, unsigned index,
                        ref<Expr> value) {
-    return frame.locals.set(kf->getArgRegister(index), Cell(value));
+    return frame.locals->set(kf->getArgRegister(index), Cell(value));
   }
 
   void setDestCell(StackFrame &frame, const KInstruction *target,
                    ref<Expr> value) {
-    return frame.locals.set(target->getDest(), Cell(value));
+    return frame.locals->set(target->getDest(), Cell(value));
   }
 
   const Cell &eval(const KInstruction *ki, unsigned index,
