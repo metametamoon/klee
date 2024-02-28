@@ -2,12 +2,9 @@
 #define KLEE_TAINT_ANNOTATION_H
 
 #include "nlohmann/json.hpp"
-#include "nonstd/optional.hpp"
 
-#include "map"
-#include "set"
-#include "string"
-#include "vector"
+#include <optional>
+#include <set>
 
 using json = nlohmann::json;
 
