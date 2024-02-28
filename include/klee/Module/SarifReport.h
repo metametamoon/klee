@@ -51,6 +51,10 @@ enum ReachWithError {
   NullCheckAfterDerefException,
   Reachable,
   None,
+
+  TaintFormatString,
+  TaintSensitiveData,
+  TaintExecute,
 };
 
 const char *getErrorString(ReachWithError error);

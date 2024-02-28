@@ -114,6 +114,12 @@ tryConvertRuleJson(const std::string &ruleId, const std::string &toolName,
       return {ReachWithError::DoubleFree};
     } else if ("MEM.USE.FREE" == ruleId) {
       return {ReachWithError::UseAfterFree};
+    } else if ("SV.STR.FMT.TAINT" == ruleId) {
+      return {ReachWithError::TaintFormatString};
+    } else if ("TAINT.SDE" == ruleId) {
+      return {ReachWithError::TaintSensitiveData};
+    } else if ("TAINT.STRING.CLI" == ruleId) {
+      return {ReachWithError::TaintExecute};
     } else {
       return {};
     }
