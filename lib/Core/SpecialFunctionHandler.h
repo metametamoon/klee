@@ -184,8 +184,8 @@ public:
   HANDLER(handleAddTaint);
   HANDLER(handleClearTaint);
   HANDLER(handleCheckTaintSource);
-  HANDLER(handleCheckTaintSink);
-  HANDLER(handleTaintSinkHit);
+  HANDLER(handleGetTaintRule);
+  HANDLER(handleTaintHit);
 #undef HANDLER
 };
 } // namespace klee
