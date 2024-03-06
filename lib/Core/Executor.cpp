@@ -5548,11 +5548,7 @@ bool Executor::resolveExact(ExecutionState &estate, ref<Expr> address,
     const MemoryObject *mo = rl.at(i).get();
     ref<Expr> inBounds;
     if (i + 1 == rl.size() && hasLazyInitialized) {
-      if (base != address) {
-        inBounds = Expr::createFalse();
-      } else {
-        inBounds = Expr::createTrue();
-      }
+      inBounds = Expr::createTrue();
     } else {
       inBounds = EqExpr::create(address, mo->getBaseExpr());
     }
@@ -5905,10 +5901,8 @@ bool Executor::resolveMemoryObjects(
            ++i) {
         const MemoryObject *mo = i->first;
         ref<Expr> inBounds = mo->getBoundsCheckPointer(address, bytes);
-        ref<Expr> baseInBounds = mo->getBoundsCheckPointer(base, size);
-        ref<Expr> notInBounds = AndExpr::create(
-            Expr::createIsZero(inBounds), Expr::createIsZero(baseInBounds));
         mayBeResolvedMemoryObjects.push_back(mo);
+        ref<Expr> notInBounds = Expr::createIsZero(inBounds);
         checkOutOfBounds = AndExpr::create(checkOutOfBounds, notInBounds);
       }
     }
@@ -5973,8 +5967,6 @@ bool Executor::checkResolvedMemoryObjects(
     ref<Expr> inBounds = mo->getBoundsCheckPointer(address, bytes);
     ref<Expr> baseInBounds = Expr::createTrue();
     ref<Expr> notInBounds = Expr::createIsZero(inBounds);
-    ref<Expr> addressNotInBounds =
-        Expr::createIsZero(mo->getBoundsCheckPointer(address));
 
     if (hasLazyInitialized) {
       baseInBounds = AndExpr::create(
@@ -5987,9 +5979,6 @@ bool Executor::checkResolvedMemoryObjects(
                    .simplified;
     notInBounds =
         Simplificator::simplifyExpr(state.constraints.cs(), notInBounds)
-            .simplified;
-    addressNotInBounds =
-        Simplificator::simplifyExpr(state.constraints.cs(), addressNotInBounds)
             .simplified;
 
     PartialValidity result;
@@ -6023,7 +6012,7 @@ bool Executor::checkResolvedMemoryObjects(
         checkOutOfBounds = Expr::createFalse();
       } else {
         resolveConditions.push_back(inBounds);
-        unboundConditions.push_back(addressNotInBounds);
+        unboundConditions.push_back(notInBounds);
         if (hasLazyInitialized /*&& !state.isolated*/) {
           notInBounds = AndExpr::create(
               notInBounds, Expr::createIsZero(mo->getOffsetExpr(base)));
@@ -6054,8 +6043,6 @@ bool Executor::checkResolvedMemoryObjects(
       ref<Expr> inBounds = mo->getBoundsCheckPointer(address, bytes);
       ref<Expr> baseInBounds = Expr::createTrue();
       ref<Expr> notInBounds = Expr::createIsZero(inBounds);
-      ref<Expr> addressNotInBounds =
-          Expr::createIsZero(mo->getBoundsCheckPointer(address));
 
       if (hasLazyInitialized && i == mayBeResolvedMemoryObjects.size() - 1) {
         baseInBounds = AndExpr::create(
@@ -6068,9 +6055,6 @@ bool Executor::checkResolvedMemoryObjects(
       notInBounds =
           Simplificator::simplifyExpr(state.constraints.cs(), notInBounds)
               .simplified;
-      addressNotInBounds = Simplificator::simplifyExpr(state.constraints.cs(),
-                                                       addressNotInBounds)
-                               .simplified;
 
       bool mayBeInBounds;
       solver->setTimeout(coreSolverTimeout);
@@ -6092,7 +6076,7 @@ bool Executor::checkResolvedMemoryObjects(
 
       resolveConditions.push_back(inBounds);
       resolvedMemoryObjects.push_back(mo);
-      unboundConditions.push_back(addressNotInBounds);
+      unboundConditions.push_back(notInBounds);
 
       if (hasLazyInitialized &&
           i == mayBeResolvedMemoryObjects.size() - 1 /*&& !state.isolated*/) {
