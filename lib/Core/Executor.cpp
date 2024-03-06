@@ -354,6 +354,7 @@ cl::opt<bool> AllExternalWarnings(
              "as opposed to once per function (default=false)"),
     cl::cat(ExtCallsCat));
 
+
 /*** Seeding options ***/
 
 cl::opt<bool> AlwaysOutputSeeds(
