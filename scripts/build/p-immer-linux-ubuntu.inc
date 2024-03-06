@@ -11,3 +11,4 @@ install_build_dependencies_immer() {
 
   #Install essential dependencies
   with_sudo apt -y --no-install-recommends install "${dependencies[@]}"
+}
