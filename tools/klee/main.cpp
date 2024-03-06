@@ -31,6 +31,7 @@
 #include "klee/Support/CompilerWarning.h"
 #include "llvm/Analysis/CallGraph.h"
 #include "llvm/IR/Attributes.h"
+#include <unordered_set>
 DISABLE_WARNING_PUSH
 DISABLE_WARNING_DEPRECATED_DECLARATIONS
 #include "llvm/ADT/APFloat.h"
@@ -1748,9 +1749,6 @@ void multiplexEntryPoint(llvm::Module *m, LLVMContext &ctx,
   auto multiplexedEntry = llvm::Function::Create(
       type, GlobalVariable::ExternalLinkage, multiplexedEntryName, m);
 
-  multiplexedEntry->addFnAttr(Attribute::NoInline);
-  multiplexedEntry->addFnAttr(Attribute::OptimizeNone);
-
   auto entryBB = llvm::BasicBlock::Create(ctx, "entry", multiplexedEntry);
   auto exitBB = llvm::BasicBlock::Create(ctx, "exit", multiplexedEntry);
 
@@ -2091,6 +2089,7 @@ int main(int argc, char **argv, char **envp) {
 
   if (multiplexForStaticAnalysis != SAMultiplexKind::None) {
     assert(UseGuidedSearch != Interpreter::GuidanceKind::ErrorGuidance);
+
     std::vector<llvm::Function *> Fns;
 
     switch (multiplexForStaticAnalysis) {

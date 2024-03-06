@@ -334,6 +334,7 @@ StatsTracker::StatsTracker(Executor &_executor, std::string _objectFilename,
 
   if (OutputIStats) {
     istatsFile = executor.interpreterHandler->openOutputFile("run.istats");
+    instructionFile = executor.interpreterHandler->openOutputFile("run.instr");
     if (istatsFile) {
       if (iStatsWriteInterval)
         executor.timers.add(std::make_unique<Timer>(iStatsWriteInterval,
@@ -703,7 +704,45 @@ void StatsTracker::updateStateStatistics(uint64_t addend) {
   }
 }
 
+void StatsTracker::writeInstructionUsage() {
+  const auto m = executor.kmodule->module.get();
+  llvm::raw_fd_ostream &of = *instructionFile;
+  StatisticManager &sm = *theStatisticManager;
+  auto id = sm.getStatisticID("CoveredInstructions");
+
+  // We assume that we didn't move the file pointer
+  unsigned istatsSize = of.tell();
+
+  of.seek(0);
+
+  for (auto &fn : *m) {
+    if (executor.kmodule->mainModuleFunctions.count(
+            std::string(fn.getName()))) {
+      of << fn.getName().str() << ": ";
+      unsigned covered = 0;
+      unsigned total = 0;
+      for (auto &bb : fn) {
+        for (auto &instr : bb) {
+          ++total;
+          unsigned index = executor.kmodule->getGlobalIndex(&instr);
+          covered += sm.getIndexedValue(sm.getStatistic(id), index);
+        }
+      }
+      of << covered << " " << total << "\n";
+    }
+  }
+
+  // Clear then end of the file if necessary (no truncate op?).
+  unsigned pos = of.tell();
+  for (unsigned i = pos; i < istatsSize; ++i)
+    of << '\n';
+
+  of.flush();
+}
+
 void StatsTracker::writeIStats() {
+  writeInstructionUsage();
+
   const auto m = executor.kmodule->module.get();
   llvm::raw_fd_ostream &of = *istatsFile;
 

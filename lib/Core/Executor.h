@@ -119,6 +119,11 @@ class Executor : public Interpreter {
   friend klee::Searcher *klee::constructBaseSearcher(Executor &executor);
   friend klee::Searcher *klee::constructUserSearcher(Executor &executor);
 
+  struct CallableMockSignature {
+    bool doMock = false;
+    std::unordered_set<const MemoryObject *> MOsToMock;
+  };
+
 public:
   typedef std::pair<ExecutionState *, ExecutionState *> StatePair;
 
@@ -181,6 +186,7 @@ private:
   /// Map of legal function addresses to the corresponding Function.
   /// Used to validate and dereference function pointers.
   std::unordered_map<std::uint64_t, llvm::Function *> legalFunctions;
+  std::unordered_map<llvm::Function *, std::uint64_t> reverseLegalFunctions;
 
   /// Manager for everything related to targeted execution mode
   std::unique_ptr<TargetedExecutionManager> targetedExecutionManager;
@@ -759,7 +765,7 @@ public:
                         KInstruction *target);
 
   void prepareMockValue(ExecutionState &state, const std::string &name,
-                        KInstruction *target);
+                        llvm::Type *type, KInstruction *target);
 
   void prepareSymbolicRegister(ExecutionState &state, StackFrame &frame,
                                unsigned index);
@@ -816,6 +822,12 @@ public:
 
   /// Returns the errno location in memory of the state
   int *getErrnoLocation(const ExecutionState &state) const;
+
+  CallableMockSignature getMockInfo(ExecutionState &state, KCallable *f,
+                                    const std::vector<ref<Expr>> &args);
+
+  void mockCallable(ExecutionState &state, KInstruction *ki, KCallable *f,
+                    CallableMockSignature mock);
 };
 
 } // namespace klee

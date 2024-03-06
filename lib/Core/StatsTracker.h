@@ -39,6 +39,7 @@ class StatsTracker {
   std::string objectFilename;
 
   std::unique_ptr<llvm::raw_fd_ostream> istatsFile;
+  std::unique_ptr<llvm::raw_fd_ostream> instructionFile;
   ::sqlite3 *statsFile = nullptr;
   ::sqlite3_stmt *transactionBeginStmt = nullptr;
   ::sqlite3_stmt *transactionEndStmt = nullptr;
@@ -66,6 +67,7 @@ private:
   void writeStatsHeader();
   void writeStatsLine();
   void writeIStats();
+  void writeInstructionUsage();
 
 public:
   StatsTracker(Executor &_executor, std::string _objectFilename,
