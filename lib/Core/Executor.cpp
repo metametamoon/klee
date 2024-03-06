@@ -6230,7 +6230,6 @@ bool Executor::resolveMemoryObjects(
         ref<Expr> addressNotInBounds =
             Expr::createIsZero(mo->getBoundsCheckAddress(address->getValue()));
         mayBeResolvedMemoryObjects.push_back(mo);
-        ref<Expr> notInBounds = Expr::createIsZero(inBounds);
         checkOutOfBounds = AndExpr::create(checkOutOfBounds, notInBounds);
       }
     }
@@ -6300,6 +6299,9 @@ bool Executor::checkResolvedMemoryObjects(
     notInBounds =
         Simplificator::simplifyExpr(state.constraints.cs(), notInBounds)
             .simplified;
+    addressNotInBounds =
+        Simplificator::simplifyExpr(state.constraints.cs(), addressNotInBounds)
+            .simplified;
 
     PartialValidity result;
     solver->setTimeout(coreSolverTimeout);
@@ -6361,6 +6363,9 @@ bool Executor::checkResolvedMemoryObjects(
       notInBounds =
           Simplificator::simplifyExpr(state.constraints.cs(), notInBounds)
               .simplified;
+      addressNotInBounds = Simplificator::simplifyExpr(state.constraints.cs(),
+                                                       addressNotInBounds)
+                               .simplified;
 
       bool mayBeInBounds;
       solver->setTimeout(coreSolverTimeout);
@@ -6379,7 +6384,7 @@ bool Executor::checkResolvedMemoryObjects(
 
       resolveConditions.push_back(inBounds);
       resolvedMemoryObjects.push_back(mo);
-      unboundConditions.push_back(notInBounds);
+      unboundConditions.push_back(addressNotInBounds);
 
       if (mayBeOutOfBound) {
         checkOutOfBounds = AndExpr::create(checkOutOfBounds, notInBounds);
