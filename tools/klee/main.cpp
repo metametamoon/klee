@@ -30,6 +30,7 @@
 
 #include "klee/Support/CompilerWarning.h"
 #include "llvm/Analysis/CallGraph.h"
+#include "llvm/IR/Attributes.h"
 DISABLE_WARNING_PUSH
 DISABLE_WARNING_DEPRECATED_DECLARATIONS
 #include "llvm/ADT/APFloat.h"
@@ -410,6 +411,18 @@ cl::opt<bool> AnnotateOnlyExternal(
     cl::desc("Ignore annotations for defined function (default=false)"),
     cl::init(false), cl::cat(MockCat));
 
+enum class SAMultiplexKind {
+  None,
+  Module,
+  All,
+};
+
+cl::opt<SAMultiplexKind> multiplexForStaticAnalysis(
+    "multiplex-static-analysis",
+    cl::values(clEnumValN(SAMultiplexKind::None, "none", ""),
+               clEnumValN(SAMultiplexKind::Module, "module", ""),
+               clEnumValN(SAMultiplexKind::All, "all", "")),
+    cl::desc(""), cl::init(SAMultiplexKind::None), cl::cat(StartCat));
 } // namespace
 
 namespace klee {
@@ -1992,7 +2005,9 @@ int main(int argc, char **argv, char **envp) {
   // Load the bytecode...
   std::vector<std::unique_ptr<llvm::Module>> loadedUserModules;
   std::vector<std::unique_ptr<llvm::Module>> loadedLibsModules;
-  if (!klee::loadFileAsOneModule(InputFile, ctx, loadedUserModules, errorMsg)) {
+  Interpreter::FunctionsByModule functionsByModule;
+  if (!klee::loadFileAsOneModule2(InputFile, ctx, loadedUserModules,
+                                  functionsByModule, errorMsg)) {
     klee_error("error loading program '%s': %s", InputFile.c_str(),
                errorMsg.c_str());
   }
@@ -2065,9 +2080,42 @@ int main(int argc, char **argv, char **envp) {
       mainModuleFunctions.insert(Function.getName().str());
     }
   }
+
   std::set<std::string> mainModuleGlobals;
   for (const auto &gv : mainModule->globals()) {
     mainModuleGlobals.insert(gv.getName().str());
+  }
+
+  if (multiplexForStaticAnalysis != SAMultiplexKind::None) {
+    assert(UseGuidedSearch != Interpreter::GuidanceKind::ErrorGuidance);
+    std::vector<llvm::Function *> Fns;
+
+    switch (multiplexForStaticAnalysis) {
+    case SAMultiplexKind::All: {
+      for (auto &f : *mainModule) {
+        if (!f.isDeclaration()) {
+          Fns.push_back(&f);
+        }
+      }
+      break;
+    }
+
+    case SAMultiplexKind::Module: {
+      for (const auto &mod : functionsByModule.modules) {
+        for (const auto &f : mod) {
+          if (functionsByModule.usesInModule[f] <= 1) {
+            Fns.push_back(f);
+          }
+        }
+      }
+      break;
+    }
+
+    default:
+      assert(0);
+    }
+
+    multiplexEntryPoint(mainModule, ctx, Fns);
   }
 
   const std::string &module_triple = mainModule->getTargetTriple();
@@ -2357,6 +2405,8 @@ int main(int argc, char **argv, char **envp) {
   if (!mainFn) {
     klee_error("Entry function '%s' not found in module.", EntryPoint.c_str());
   }
+
+  interpreter->setFunctionsByModule(std::move(functionsByModule));
 
   externalsAndGlobalsCheck(finalModule);
 
