@@ -7,8 +7,8 @@ install_build_dependencies_klee() {
     brew install doxygen graphviz
   fi
 
-  pip3 install --user --upgrade lit tabulate
-
+  brew install lit
+  brew install tabulate
   brew install pkg-config
   brew install coreutils
   # Get path of package location
