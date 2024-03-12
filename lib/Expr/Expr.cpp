@@ -2361,7 +2361,7 @@ static ref<Expr> AShrExpr_create(const ref<Expr> &l, const ref<Expr> &r) {
     return _e_op##_create(l.get(), r.get());                                   \
   }
 
-#define BCREATE_R_C(_e_op, _op, partialL, partialR, pointerL, pointerR)          \
+#define BCREATE_R_C(_e_op, _op, partialL, partialR, pointerL, pointerR)        \
   ref<Expr> _e_op ::create(const ref<Expr> &l, const ref<Expr> &r) {           \
     assert(l->getWidth() == r->getWidth() && "type mismatch");                 \
     if (SelectExpr *sel = dyn_cast<SelectExpr>(l)) {                           \
@@ -2390,19 +2390,19 @@ static ref<Expr> AShrExpr_create(const ref<Expr> &l, const ref<Expr> &r) {
     } else if (ConstantExpr *cr = dyn_cast<ConstantExpr>(r)) {                 \
       return partialL(l.get(), cr);                                            \
     }                                                                          \
-    if (isa<_e_op>(l) && l->height() > r->height() + 1) { \
-      if (l->getKid(0)->height() > l->getKid(1)->height()) { \
-        return _e_op::create(l->getKid(0), _e_op::create(r, l->getKid(1))); \
-      } else { \
-        return _e_op::create(l->getKid(1), _e_op::create(r, l->getKid(0))); \
-      } \
-    } else if (isa<_e_op>(r) && r->height() > l->height() + 1) { \
-      if (r->getKid(0)->height() > r->getKid(1)->height()) { \
-        return _e_op::create(r->getKid(0), _e_op::create(l, r->getKid(1))); \
-      } else { \
-        return _e_op::create(r->getKid(1), _e_op::create(l, r->getKid(0))); \
-      } \
-    } \
+    if (isa<_e_op>(l) && l->height() > r->height() + 1) {                      \
+      if (l->getKid(0)->height() > l->getKid(1)->height()) {                   \
+        return _e_op::create(l->getKid(0), _e_op::create(r, l->getKid(1)));    \
+      } else {                                                                 \
+        return _e_op::create(l->getKid(1), _e_op::create(r, l->getKid(0)));    \
+      }                                                                        \
+    } else if (isa<_e_op>(r) && r->height() > l->height() + 1) {               \
+      if (r->getKid(0)->height() > r->getKid(1)->height()) {                   \
+        return _e_op::create(r->getKid(0), _e_op::create(l, r->getKid(1)));    \
+      } else {                                                                 \
+        return _e_op::create(r->getKid(1), _e_op::create(l, r->getKid(0)));    \
+      }                                                                        \
+    }                                                                          \
     return _e_op##_create(l.get(), r.get());                                   \
   }
 
@@ -2439,13 +2439,13 @@ BCREATE_R(AddExpr, Add, AddExpr_createPartial, AddExpr_createPartialR,
 BCREATE_R(SubExpr, Sub, SubExpr_createPartial, SubExpr_createPartialR,
           SubExpr_createPointer, SubExpr_createPointerR)
 BCREATE_R_C(MulExpr, Mul, MulExpr_createPartial, MulExpr_createPartialR,
-          MulExpr_createPointer, MulExpr_createPointerR)
+            MulExpr_createPointer, MulExpr_createPointerR)
 BCREATE_R_C(AndExpr, And, AndExpr_createPartial, AndExpr_createPartialR,
-          AndExpr_createPointer, AndExpr_createPointerR)
+            AndExpr_createPointer, AndExpr_createPointerR)
 BCREATE_R_C(OrExpr, Or, OrExpr_createPartial, OrExpr_createPartialR,
-          OrExpr_createPointer, OrExpr_createPointerR)
+            OrExpr_createPointer, OrExpr_createPointerR)
 BCREATE_R_C(XorExpr, Xor, XorExpr_createPartial, XorExpr_createPartialR,
-          XorExpr_createPointer, XorExpr_createPointerR)
+            XorExpr_createPointer, XorExpr_createPointerR)
 BCREATE(UDivExpr, UDiv)
 BCREATE(SDivExpr, SDiv)
 BCREATE(URemExpr, URem)

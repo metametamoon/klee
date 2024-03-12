@@ -250,8 +250,8 @@ private:
 
   const char *okExternalsList[4] = {"printf", "fprintf", "puts", "getpid"};
   std::set<std::string> okExternals = std::set<std::string>(
-    okExternalsList,
-    okExternalsList + (sizeof(okExternalsList) / sizeof(okExternalsList[0])));
+      okExternalsList,
+      okExternalsList + (sizeof(okExternalsList) / sizeof(okExternalsList[0])));
 
   /// Return the typeid corresponding to a certain `type_info`
   ref<ConstantExpr> getEhTypeidFor(ref<Expr> type_info);

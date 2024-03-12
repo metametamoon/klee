@@ -9,8 +9,7 @@ DISABLE_WARNING_DEPRECATED_DECLARATIONS
 DISABLE_WARNING_POP
 
 namespace klee {
-template <>
-void Storage<bool>::print(llvm::raw_ostream &os, Density d) const {
+template <> void Storage<bool>::print(llvm::raw_ostream &os, Density d) const {
   if (d == Density::Sparse) {
     // "Sparse representation"
     os << "{";
@@ -41,8 +40,7 @@ void Storage<bool>::print(llvm::raw_ostream &os, Density d) const {
 }
 
 template <>
-void Storage<unsigned char>::print(llvm::raw_ostream &os,
-                                         Density d) const {
+void Storage<unsigned char>::print(llvm::raw_ostream &os, Density d) const {
   if (d == Density::Sparse) {
     // "Sparse representation"
     os << "{";
@@ -73,8 +71,7 @@ void Storage<unsigned char>::print(llvm::raw_ostream &os,
 }
 
 template <>
-void Storage<ref<ConstantExpr>>::print(llvm::raw_ostream &os,
-                                             Density d) const {
+void Storage<ref<ConstantExpr>>::print(llvm::raw_ostream &os, Density d) const {
   if (d == Density::Sparse) {
     // "Sparse representation"
     os << "{";
@@ -119,10 +116,8 @@ void Storage<ref<ConstantExpr>>::print(llvm::raw_ostream &os,
 }
 
 template <>
-void klee::Storage<
-    klee::ref<klee::Expr>,
-    klee::OptionalRefEq<klee::Expr>>::print(llvm::raw_ostream &os,
-                                            Density d) const {
+void klee::Storage<klee::ref<klee::Expr>, klee::OptionalRefEq<klee::Expr>>::
+    print(llvm::raw_ostream &os, Density d) const {
   if (d == Density::Sparse) {
     // "Sparse representation"
     os << "{";
