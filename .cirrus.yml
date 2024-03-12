@@ -16,3 +16,39 @@ task:
     - sed -i.bak -e 's/lit\./lit11\./' test/lit.cfg
     - cd build
     - gmake check
+task:
+  macos_instance:
+    matrix:
+      - image: ghcr.io/cirruslabs/macos-monterey-xcode:latest
+      - image: ghcr.io/cirruslabs/macos-ventura-xcode:latest
+      - image: ghcr.io/cirruslabs/macos-sonoma-xcode:latest
+  environment:
+      BASE: /tmp
+      BUILD_SUFFIX: "default"
+      SOLVERS: STP:BITWUZLA
+      UCLIBC_VERSION: 0
+      USE_TCMALLOC: 0
+      USE_LIBCXX: 0
+      COVERAGE: 0
+      DISABLE_ASSERTIONS: 0
+      ENABLE_DOXYGEN: 0
+      ENABLE_OPTIMIZED: 1
+      ENABLE_DEBUG: 1
+      GTEST_VERSION: 1.11.0
+      KLEE_RUNTIME_BUILD: "Debug+Asserts"
+      LLVM_VERSION: 14
+      MINISAT_VERSION: "master"
+      REQUIRES_RTTI: 0
+      STP_VERSION: 2.3.3
+      TCMALLOC_VERSION: 2.9.1
+      Z3_VERSION: 4.8.15
+      SQLITE_VERSION: 3400100
+      BITWUZLA_VERSION: 0.3.1
+      JSON_VERSION: v3.11.3
+      IMMER_VERSION: v0.8.1
+  deps_script:
+    - brew install bash
+  build_script:
+    - scripts/build/build.sh klee --debug --install-system-deps
+  test_script:
+    - scripts/build/run-tests.sh /tmp/klee_build* --debug

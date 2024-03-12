@@ -2,12 +2,13 @@ setup_build_variables_z3() {
   Z3_SUFFIX="${SANITIZER_SUFFIX}"
   Z3_SRC_PATH="${BASE}/z3-${Z3_VERSION}"
   Z3_INSTALL_PATH="${BASE}/z3-${Z3_VERSION}-install${Z3_SUFFIX}"
+  z3_url="https://github.com/Z3Prover/z3.git"
 }
 
 download_z3() {
-  mkdir -p "${Z3_SRC_PATH}"
-  cd "${Z3_SRC_PATH}"
-  wget -qO- https://github.com/Z3Prover/z3/archive/z3-${Z3_VERSION}.tar.gz | tar xz --strip-components=1
+  source "${DIR}/common-functions"
+  # Download Z3
+  git_clone_or_update "${z3_url}" "${Z3_SRC_PATH}" "${Z3_VERSION}"
 }
 
 build_z3() {
