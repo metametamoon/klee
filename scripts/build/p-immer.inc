@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 setup_build_variables_immer() {
   IMMER_INSTALL_PATH="${BASE}/immer-${IMMER_VERSION}"
   immer_url="https://github.com/arximboldi/immer.git"

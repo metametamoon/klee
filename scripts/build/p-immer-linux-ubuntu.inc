@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 install_build_dependencies_immer() {
   source "${DIR}/common-functions"
   with_sudo apt update -y

@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+# shellcheck disable=SC2034
 # Build information for immer
 required_variables_immer=(
   "IMMER_VERSION"
