@@ -17,19 +17,20 @@ BUILD_SUFFIX="Debug"
 # Debug+Asserts
 # KLEE_RUNTIME_BUILD="Debug+Asserts"
 KLEE_RUNTIME_BUILD="Release" # "Debug+Asserts"
+KLEE_RUNTIME_BUILD="Debug"
 
 COVERAGE=0
 ENABLE_DOXYGEN=0
 USE_TCMALLOC=0
 TCMALLOC_VERSION=2.9.1
-USE_LIBCXX=1
+USE_LIBCXX=0
 # Also required despite not being mentioned in the guide
 SQLITE_VERSION="3400100"
 
 ## LLVM Required options
 LLVM_VERSION=14
-ENABLE_OPTIMIZED=1
-ENABLE_DEBUG=0
+ENABLE_OPTIMIZED=0
+ENABLE_DEBUG=1
 DISABLE_ASSERTIONS=1
 REQUIRES_RTTI=1
 
@@ -47,7 +48,7 @@ JSON_VERSION=v3.11.3
 IMMER_VERSION=v0.8.1
 
 ## UClibC Required options
-UCLIBC_VERSION=klee_uclibc_v1.3
+UCLIBC_VERSION=0
 # LLVM_VERSION is also required for UClibC
 
 ## Z3 Required options
