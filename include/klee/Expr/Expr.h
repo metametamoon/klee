@@ -416,6 +416,7 @@ public:
   static ref<ConstantExpr> createFalse();
 
   static ref<ConstantExpr> createEmptyTaint();
+  static ref<ConstantExpr> createTaintBySource(uint64_t source);
   static ref<Expr> combineTaints(const ref<Expr> &taintL,
                                  const ref<Expr> &taintR);
 

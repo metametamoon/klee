@@ -553,6 +553,10 @@ ref<ConstantExpr> Expr::createEmptyTaint() {
   return ConstantExpr::create(0, Expr::Int64);
 }
 
+ref<ConstantExpr> Expr::createTaintBySource(uint64_t source) {
+  return ConstantExpr::create((1 << source), Expr::Int64);
+}
+
 ref<Expr> Expr::combineTaints(const ref<Expr> &taintL,
                               const ref<Expr> &taintR) {
   if (SelectExpr *sel = dyn_cast<SelectExpr>(taintL)) {
@@ -2991,7 +2995,7 @@ ref<Expr> ConstantPointerExpr::create(const ref<ConstantExpr> &b,
                                  combineTaints(RHS));                          \
     } else {                                                                   \
       auto value = _e_op::create(getValue(), RHS->getValue());                 \
-      if (getTaint()->isZero() && RHS->getTaint()->isZero()) {                   \
+      if (getTaint()->isZero() && RHS->getTaint()->isZero()) {                 \
         return value;                                                          \
       } else {                                                                 \
         return PointerExpr::create(ConstantExpr::create(0, value->getWidth()), \

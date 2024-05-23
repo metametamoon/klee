@@ -5985,7 +5985,7 @@ bool Executor::resolveMemoryObjects(
             state, basePointer, target, baseTargetType, minObjectSize, sizeExpr,
             false, checkOutOfBounds, UseSymbolicSizeLazyInit);
         RefObjectPair op = state.addressSpace.findOrLazyInitializeObject(
-            idLazyInitialization.get());
+            idLazyInitialization.get(), address->getTaint());
         state.addressSpace.bindObject(op.first, op.second.get());
         mayBeResolvedMemoryObjects.push_back(idLazyInitialization);
       }

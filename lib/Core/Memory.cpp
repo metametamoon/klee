@@ -106,22 +106,26 @@ std::string MemoryObject::getAllocInfo() const {
 
 /***/
 
-ObjectState::ObjectState(const MemoryObject *mo, const Array *array, KType *dt)
+ObjectState::ObjectState(const MemoryObject *mo, const Array *array, KType *dt,
+                         ref<Expr> defaultTaintValue)
     : copyOnWriteOwner(0), object(mo), valueOS(ObjectStage(array, nullptr)),
       baseOS(ObjectStage(array->size, Expr::createPointer(0), false,
                          Context::get().getPointerWidth())),
-      taintOS(ObjectStage(array->size, Expr::createEmptyTaint(), false, Expr::TaintWidth)),
+      taintOS(
+          ObjectStage(array->size, defaultTaintValue, false, Expr::TaintWidth)),
       lastUpdate(nullptr), size(array->size), dynamicType(dt), readOnly(false) {
   baseOS.initializeToZero();
   taintOS.initializeToZero();
 }
 
-ObjectState::ObjectState(const MemoryObject *mo, KType *dt)
+ObjectState::ObjectState(const MemoryObject *mo, KType *dt,
+                         ref<Expr> defaultTaintValue)
     : copyOnWriteOwner(0), object(mo),
       valueOS(ObjectStage(mo->getSizeExpr(), nullptr)),
       baseOS(ObjectStage(mo->getSizeExpr(), Expr::createPointer(0), false,
                          Context::get().getPointerWidth())),
-      taintOS(ObjectStage(mo->getSizeExpr(), Expr::createEmptyTaint(), false, Expr::TaintWidth)),
+      taintOS(ObjectStage(mo->getSizeExpr(), defaultTaintValue, false,
+                          Expr::TaintWidth)),
       lastUpdate(nullptr), size(mo->getSizeExpr()), dynamicType(dt),
       readOnly(false) {
   baseOS.initializeToZero();
