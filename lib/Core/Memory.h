@@ -266,6 +266,11 @@ public:
   }
   void initializeToZero();
 
+  void reset(ref<Expr> newDefault) {
+    knownSymbolics->reset(std::move(newDefault));
+    unflushedMask->reset(false);
+  }
+
 private:
   const UpdateList &getUpdates() const;
 
@@ -290,6 +295,7 @@ private:
 
   ObjectStage valueOS;
   ObjectStage baseOS;
+  ObjectStage taintOS;
 
   ref<UpdateNode> lastUpdate;
 
@@ -317,7 +323,8 @@ public:
   void initializeToZero();
 
   size_t getSparseStorageEntries() {
-    return valueOS.getSparseStorageEntries() + baseOS.getSparseStorageEntries();
+    return valueOS.getSparseStorageEntries() +
+           baseOS.getSparseStorageEntries() + taintOS.getSparseStorageEntries();
   }
 
   void swapObjectHack(MemoryObject *mo) { object = mo; }
@@ -327,10 +334,13 @@ public:
   ref<Expr> read8(unsigned offset) const;
   ref<Expr> readValue(ref<Expr> offset, Expr::Width width) const;
   ref<Expr> readBase(ref<Expr> offset, Expr::Width width) const;
+  ref<Expr> readTaint(ref<Expr> offset, Expr::Width width) const;
   ref<Expr> readValue(unsigned offset, Expr::Width width) const;
   ref<Expr> readBase(unsigned offset, Expr::Width width) const;
+  ref<Expr> readTaint(unsigned offset, Expr::Width width) const;
   ref<Expr> readValue8(unsigned offset) const;
   ref<Expr> readBase8(unsigned offset) const;
+  ref<Expr> readTaint8(unsigned offset) const;
 
   void write(unsigned offset, ref<Expr> value);
   void write(ref<Expr> offset, ref<Expr> value);
@@ -346,10 +356,13 @@ public:
 
   KType *getDynamicType() const;
 
+  void resetTaint(ref<Expr> newTaint) { taintOS.reset(std::move(newTaint)); }
+
 private:
   ref<Expr> read8(ref<Expr> offset) const;
   ref<Expr> readValue8(ref<Expr> offset) const;
   ref<Expr> readBase8(ref<Expr> offset) const;
+  ref<Expr> readTaint8(ref<Expr> offset) const;
   void write8(unsigned offset, ref<Expr> value);
   void write8(ref<Expr> offset, ref<Expr> value);
 };

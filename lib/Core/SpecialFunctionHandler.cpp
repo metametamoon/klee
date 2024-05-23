@@ -1240,6 +1240,10 @@ void SpecialFunctionHandler::handleCheckTaintSource(
                "klee_check_taint_source(void*, size_t)");
     return;
   }
+
+//  uint64_t taintSource = dyn_cast<ConstantExpr>(arguments[1])->getZExtValue();
+//  executor.executeCheckTaintSource(state, target,
+//                                   executor.makePointer(arguments[0]), taintSource);
 }
 
 void SpecialFunctionHandler::handleGetTaintRule(
@@ -1252,9 +1256,13 @@ void SpecialFunctionHandler::handleGetTaintRule(
     return;
   }
 
-  // TODO: now mock
+//  // TODO: now mock
   ref<Expr> result = ConstantExpr::create(1, Expr::Int64);
   executor.bindLocal(target, state, result);
+
+//  uint64_t taintSink = dyn_cast<ConstantExpr>(arguments[1])->getZExtValue();
+//  executor.executeGetTaintRule(state, target,
+//                               executor.makePointer(arguments[0]), taintSink);
 }
 
 void SpecialFunctionHandler::handleTaintHit(klee::ExecutionState &state,
@@ -1266,8 +1274,7 @@ void SpecialFunctionHandler::handleTaintHit(klee::ExecutionState &state,
     return;
   }
 
-//  printf("klee_taint_hit for rule: %s\n", arguments[0]->toString().c_str());
-
-  executor.terminateStateOnTargetTaintError(
-      state, dyn_cast<ConstantExpr>(arguments[0])->getZExtValue());
+  uint64_t ruleId = dyn_cast<ConstantExpr>(arguments[0])->getZExtValue();
+//  printf("klee_taint_hit for rule: %zu\n", ruleId);
+  executor.terminateStateOnTargetTaintError(state, ruleId);
 }
