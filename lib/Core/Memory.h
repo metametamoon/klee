@@ -309,8 +309,10 @@ public:
 
   /// Create a new object state for the given memory
   // For objects in memory
-  ObjectState(const MemoryObject *mo, const Array *array, KType *dt);
-  ObjectState(const MemoryObject *mo, KType *dt);
+  ObjectState(const MemoryObject *mo, const Array *array, KType *dt,
+              ref<Expr> defaultTaintValue = Expr::createEmptyTaint());
+  ObjectState(const MemoryObject *mo, KType *dt,
+              ref<Expr> defaultTaintValue = Expr::createEmptyTaint());
 
   // For symbolic objects not in memory (hack)
 
