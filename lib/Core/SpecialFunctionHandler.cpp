@@ -800,7 +800,8 @@ void SpecialFunctionHandler::handleRealloc(ExecutionState &state,
   if (zeroSize.first) { // size == 0
     executor.executeFree(*zeroSize.first,
                          PointerExpr::create(addressPointer->getValue(),
-                                             addressPointer->getValue()),
+                                             addressPointer->getValue(),
+                                             addressPointer->getTaint()),
                          target);
   }
   if (zeroSize.second) { // size != 0
@@ -1265,11 +1266,8 @@ void SpecialFunctionHandler::handleTaintHit(klee::ExecutionState &state,
     return;
   }
 
-  char *end = nullptr;
-  size_t rule = strtoul(arguments[0]->toString().c_str(), &end, 10);
-  if (*end != '\0' || errno == ERANGE) {
-    executor.terminateStateOnUserError(
-        state, "Incorrect argument 0 to klee_taint_hit(size_t)");
-  }
-  executor.terminateStateOnTargetTaintError(state, rule);
+//  printf("klee_taint_hit for rule: %s\n", arguments[0]->toString().c_str());
+
+  executor.terminateStateOnTargetTaintError(
+      state, dyn_cast<ConstantExpr>(arguments[0])->getZExtValue());
 }

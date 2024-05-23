@@ -183,6 +183,8 @@ public:
 
   static const Width Fl80 = 80;
 
+  static const Width TaintWidth = 64;
+
   enum States { Undefined, True, False };
 
   enum Kind {
@@ -414,6 +416,8 @@ public:
   static ref<ConstantExpr> createFalse();
 
   static ref<ConstantExpr> createEmptyTaint();
+  static ref<Expr> combineTaints(const ref<Expr> &taintL,
+                                 const ref<Expr> &taintR);
 
   /// Create a little endian read of the given type at offset 0 of the
   /// given object.
@@ -1684,9 +1688,8 @@ public:
   ref<Expr> value;
   ref<Expr> taint;
 
-  static ref<Expr>
-  alloc(const ref<Expr> &b, const ref<Expr> &v,
-        const ref<Expr> &t = createEmptyTaint()) {
+  static ref<Expr> alloc(const ref<Expr> &b, const ref<Expr> &v,
+                         const ref<Expr> &t = createEmptyTaint()) {
     ref<Expr> r(new PointerExpr(b, v, t));
     r->computeHash();
     r->computeHeight();
@@ -1734,8 +1737,8 @@ public:
 
   bool isKnownValue() const { return getBase()->isZero(); }
 
-  ref<Expr> combineTaints(const ref<PointerExpr> &RHS) {
-    return OrExpr::create(getTaint(), RHS->getTaint());
+  ref<ConstantExpr> combineTaints(const ref<PointerExpr> &RHS) {
+    return Expr::combineTaints(getTaint(), RHS->getTaint());
   }
 
   ref<Expr> Add(const ref<PointerExpr> &RHS);
@@ -1783,9 +1786,9 @@ public:
     r->computeHeight();
     return r;
   }
-  static ref<Expr>
-  create(const ref<ConstantExpr> &b, const ref<ConstantExpr> &v,
-         const ref<ConstantExpr> &t = createEmptyTaint());
+  static ref<Expr> create(const ref<ConstantExpr> &b,
+                          const ref<ConstantExpr> &v,
+                          const ref<ConstantExpr> &t = createEmptyTaint());
 
   Kind getKind() const { return Expr::ConstantPointer; }
 

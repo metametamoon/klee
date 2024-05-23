@@ -552,6 +552,23 @@ ref<ConstantExpr> Expr::createEmptyTaint() {
   return ConstantExpr::create(0, Expr::Int64);
 }
 
+ref<Expr> Expr::combineTaints(const ref<Expr> &taintL,
+                              const ref<Expr> &taintR) {
+  if (SelectExpr *sel = dyn_cast<SelectExpr>(taintL)) {
+    taintL->dump();
+  }
+  if (PointerExpr *sel = dyn_cast<PointerExpr>(taintL)) {
+    taintR->dump();
+  }
+  if (ConstantExpr *sel = dyn_cast<ConstantExpr>(taintL)) {
+    if (ConstantExpr *ser = dyn_cast<ConstantExpr>(taintR)) {
+      sel->getAPValue().dump();
+      ser->getAPValue().dump();
+    }
+  }
+  return OrExpr::create(taintL, taintR);
+}
+
 Expr::ByteWidth Expr::getByteWidth() const {
   return (getWidth() + CHAR_BIT - 1) / CHAR_BIT;
 }
@@ -2974,7 +2991,7 @@ ref<Expr> ConstantPointerExpr::create(const ref<ConstantExpr> &b,
                                  combineTaints(RHS));                          \
     } else {                                                                   \
       auto value = _e_op::create(getValue(), RHS->getValue());                 \
-      if (getTaint().isNull() && RHS->getTaint().isNull()) {                   \
+      if (getTaint()->isZero() && RHS->getTaint()->isZero()) {                   \
         return value;                                                          \
       } else {                                                                 \
         return PointerExpr::create(ConstantExpr::create(0, value->getWidth()), \
