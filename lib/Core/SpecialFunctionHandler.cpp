@@ -114,6 +114,7 @@ static SpecialFunctionHandler::HandlerInfo handlerInfo[] = {
     add("klee_is_symbolic", handleIsSymbolic, true),
     add("klee_make_symbolic", handleMakeSymbolic, false),
     add("klee_make_mock", handleMakeMock, false),
+    add("klee_make_mock_all", handleMakeMockAll, false),
     add("klee_mark_global", handleMarkGlobal, false),
     add("klee_prefer_cex", handlePreferCex, false),
     add("klee_posix_prefer_cex", handlePosixPreferCex, false),
@@ -1064,6 +1065,71 @@ void SpecialFunctionHandler::handleMakeMock(ExecutionState &state,
   }
 }
 
+void SpecialFunctionHandler::handleMakeMockAll(
+    ExecutionState &state, KInstruction *target,
+    std::vector<ref<Expr>> &arguments) {
+  std::string name;
+
+  if (arguments.size() != 2) {
+    executor.terminateStateOnUserError(state,
+                                       "Incorrect number of arguments to "
+                                       "klee_make_mock_all(void*, char*)");
+    return;
+  }
+
+  name = arguments[1]->isZero()
+             ? ""
+             : readStringAtAddress(state, executor.makePointer(arguments[1]));
+
+  if (name.empty()) {
+    executor.terminateStateOnUserError(
+        state, "Empty name of function in klee_make_mock_all");
+    return;
+  }
+
+  KFunction *kf = target->parent->parent;
+
+  Executor::ExactResolutionList rl;
+  executor.resolveExact(state, arguments[0],
+                        executor.typeSystemManager->getUnknownType(), rl,
+                        "make_symbolic");
+
+  for (auto &it : rl) {
+    ObjectPair op = it.second->addressSpace.findObject(it.first);
+    const MemoryObject *mo = op.first;
+    mo->setName(name);
+    mo->updateTimestamp();
+
+    const ObjectState *old = op.second;
+    ExecutionState *s = it.second;
+
+    if (old->readOnly) {
+      executor.terminateStateOnUserError(
+          *s, "cannot make readonly object symbolic");
+      return;
+    }
+
+    ref<SymbolicSource> source;
+    switch (executor.interpreterOpts.MockStrategy) {
+    case MockStrategyKind::Naive:
+      source =
+          SourceBuilder::mockNaive(executor.kmodule.get(), *kf->function(),
+                                   executor.updateNameVersion(state, name));
+      break;
+    case MockStrategyKind::Deterministic:
+      std::vector<ref<Expr>> args(kf->getNumArgs());
+      for (size_t i = 0; i < kf->getNumArgs(); i++) {
+        args[i] = executor.getArgumentCell(state, kf, i).value;
+      }
+      source = SourceBuilder::mockDeterministic(executor.kmodule.get(),
+                                                *kf->function(), args);
+      break;
+    }
+    executor.executeMakeSymbolic(state, mo, old->getDynamicType(), source,
+                                 false);
+  }
+}
+
 void SpecialFunctionHandler::handleMarkGlobal(
     ExecutionState &state, KInstruction *target,
     std::vector<ref<Expr>> &arguments) {
@@ -1218,6 +1284,11 @@ void SpecialFunctionHandler::handleAddTaint(klee::ExecutionState &state,
                                        "klee_add_taint(void*, size_t)");
     return;
   }
+
+//  uint64_t taintSource = dyn_cast<ConstantExpr>(arguments[1])->getZExtValue();
+//  printf("klee_add_taint source: %zu\n", taintSource);
+//  executor.executeChangeTaintSource(
+//      state, target, executor.makePointer(arguments[0]), taintSource, true);
 }
 
 void SpecialFunctionHandler::handleClearTaint(
@@ -1229,6 +1300,11 @@ void SpecialFunctionHandler::handleClearTaint(
                                        "klee_clear_taint(void*, size_t)");
     return;
   }
+
+//  uint64_t taintSource = dyn_cast<ConstantExpr>(arguments[1])->getZExtValue();
+//  printf("klee_clear_taint source: %zu\n", taintSource);
+//  executor.executeChangeTaintSource(
+//      state, target, executor.makePointer(arguments[0]), taintSource, false);
 }
 
 void SpecialFunctionHandler::handleCheckTaintSource(
@@ -1242,8 +1318,9 @@ void SpecialFunctionHandler::handleCheckTaintSource(
   }
 
 //  uint64_t taintSource = dyn_cast<ConstantExpr>(arguments[1])->getZExtValue();
-//  executor.executeCheckTaintSource(state, target,
-//                                   executor.makePointer(arguments[0]), taintSource);
+//  printf("klee_check_taint_source source: %zu\n", taintSource);
+//  executor.executeCheckTaintSource(
+//      state, target, executor.makePointer(arguments[0]), taintSource);
 }
 
 void SpecialFunctionHandler::handleGetTaintRule(
@@ -1256,11 +1333,12 @@ void SpecialFunctionHandler::handleGetTaintRule(
     return;
   }
 
-//  // TODO: now mock
-  ref<Expr> result = ConstantExpr::create(1, Expr::Int64);
-  executor.bindLocal(target, state, result);
+  //  // TODO: now mock
+    ref<Expr> result = ConstantExpr::create(1, Expr::Int64);
+    executor.bindLocal(target, state, result);
 
 //  uint64_t taintSink = dyn_cast<ConstantExpr>(arguments[1])->getZExtValue();
+//  printf("klee_get_taint_rule source: %zu\n", taintSink);
 //  executor.executeGetTaintRule(state, target,
 //                               executor.makePointer(arguments[0]), taintSink);
 }
@@ -1274,7 +1352,7 @@ void SpecialFunctionHandler::handleTaintHit(klee::ExecutionState &state,
     return;
   }
 
-  uint64_t ruleId = dyn_cast<ConstantExpr>(arguments[0])->getZExtValue();
-//  printf("klee_taint_hit for rule: %zu\n", ruleId);
-  executor.terminateStateOnTargetTaintError(state, ruleId);
+  uint64_t taintRule = dyn_cast<ConstantExpr>(arguments[0])->getZExtValue();
+  printf("klee_taint_hit rule: %zu\n", taintRule);
+  executor.terminateStateOnTargetTaintError(state, taintRule);
 }

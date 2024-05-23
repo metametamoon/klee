@@ -48,6 +48,8 @@ private:
   buildCallKleeMakeSymbolic(const std::string &kleeMakeSymbolicFunctionName,
                             llvm::Value *source, llvm::Type *type,
                             const std::string &symbolicName);
+  void buildCallKleeMakeMockAll(llvm::Value *source,
+                                const std::string &symbolicName);
   llvm::CallInst *buildCallKleeTaintFunction(const std::string &functionName,
                                              llvm::Value *source, size_t taint,
                                              llvm::Type *returnType);
