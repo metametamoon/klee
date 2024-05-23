@@ -130,6 +130,7 @@ public:
   HANDLER(handleIsSymbolic);
   HANDLER(handleMakeSymbolic);
   HANDLER(handleMakeMock);
+  HANDLER(handleMakeMockAll);
   HANDLER(handleMalloc);
   HANDLER(handleMemalign);
   HANDLER(handleMarkGlobal);

@@ -55,6 +55,21 @@ void MockBuilder::buildCallKleeMakeSymbolic(
                       {bitCastInst, llvm::ConstantInt::get(ctx, sz), gep});
 }
 
+void MockBuilder::buildCallKleeMakeMockAll(llvm::Value *source,
+                                           const std::string &symbolicName) {
+  auto *kleeMakeSymbolicName = llvm::FunctionType::get(
+      llvm::Type::getVoidTy(ctx),
+      {llvm::Type::getInt8PtrTy(ctx), llvm::Type::getInt8PtrTy(ctx)}, false);
+  auto kleeMakeSymbolicCallee = mockModule->getOrInsertFunction(
+      "klee_make_mock_all", kleeMakeSymbolicName);
+  auto bitCastInst =
+      builder->CreateBitCast(source, llvm::Type::getInt8PtrTy(ctx));
+  auto globalSymbolicName = builder->CreateGlobalString("@" + symbolicName);
+  auto gep = builder->CreateConstInBoundsGEP2_64(
+      globalSymbolicName->getValueType(), globalSymbolicName, 0, 0);
+  builder->CreateCall(kleeMakeSymbolicCallee, {bitCastInst, gep});
+}
+
 std::map<std::string, llvm::FunctionType *>
 MockBuilder::getExternalFunctions() {
   std::map<std::string, llvm::FunctionType *> externals;
@@ -544,44 +559,6 @@ MockBuilder::buildCallKleeTaintFunction(const std::string &functionName,
       false);
   auto kleeTaintFunctionCallee =
       mockModule->getOrInsertFunction(functionName, kleeTaintFunctionType);
-
-  //  //TODO: that's not all:
-  //  // - add var arg list (now it is not even considered
-  //  //                 when passing through the function
-  //  //                 parameters and never gets here)
-  //  // - think about **
-  //  // - add going by pointers
-  //  llvm::Value *beginPtr;
-  //  llvm::Value *countBytes;
-  //  if (!source->getType()->isPointerTy() && !source->getType()->isArrayTy())
-  //  {
-  //    beginPtr = builder->CreateAlloca(source->getType());
-  //    builder->CreateStore(source, beginPtr);
-  //
-  //    const size_t bytes = mockModule->getDataLayout().getTypeStoreSize(
-  //      source->getType()->getPointerElementType());
-  //    countBytes = llvm::ConstantInt::get(
-  //      mockModule->getContext(),
-  //      llvm::APInt(64, bytes, false));
-  //  } else if (source->getType()->isPointerTy()) {
-  //    beginPtr = builder->CreateBitCast(
-  //      source, llvm::Type::getInt8PtrTy(mockModule->getContext()));
-  //
-  //    if (source->getType()->getPointerElementType()->isIntegerTy(8)) {
-  //      auto *TLI = new
-  //      llvm::TargetLibraryInfo(llvm::TargetLibraryInfoImpl()); countBytes =
-  //      llvm::emitStrLen(source, *builder,
-  //                                    mockModule->getDataLayout(),TLI);
-  //    }
-  //    else {
-  //      const size_t bytes = mockModule->getDataLayout().getTypeStoreSize(
-  //        source->getType()->getPointerElementType());
-  //      countBytes = llvm::ConstantInt::get(
-  //        mockModule->getContext(),
-  //        llvm::APInt(64, bytes, false));
-  //    }
-  //  }
-
   llvm::Value *beginPtr;
   if (!source->getType()->isPointerTy() && !source->getType()->isArrayTy()) {
     beginPtr = builder->CreateAlloca(source->getType());
@@ -624,6 +601,7 @@ void MockBuilder::buildAnnotationForExternalFunctionArgs(
 #else
     const auto arg = &func->arg_begin()[i];
 #endif
+    size_t offsetIndex = 0;
     auto statementsMap = unifyByOffset(statements[i]);
     for (const auto &[offset, statementsOffset] : statementsMap) {
       auto [prev, elem] = goByOffset(arg, offset);
@@ -631,6 +609,11 @@ void MockBuilder::buildAnnotationForExternalFunctionArgs(
       Statement::Alloc *allocSourcePtr = nullptr;
       Statement::Free *freePtr = nullptr;
       Statement::InitNull *initNullPtr = nullptr;
+
+      bool isMocked = false;
+      std::string mockName = "klee_mock" + func->getName().str() + "_arg_" +
+                             std::to_string(i) + "_" +
+                             std::to_string(offsetIndex);
 
       for (const auto &statement : statementsOffset) {
         switch (statement->getKind()) {
@@ -697,12 +680,22 @@ void MockBuilder::buildAnnotationForExternalFunctionArgs(
           if (!elem->getType()->isPointerTy()) {
             klee_error("Annotation: TaintOutput arg is not pointer");
           }
+
+          if (!isMocked) {
+            buildCallKleeMakeMockAll(elem, mockName);
+            isMocked = true;
+          }
           buildAnnotationTaintOutput(elem, statement);
           break;
         }
         case Statement::Kind::TaintPropagation: {
           if (!elem->getType()->isPointerTy()) {
             klee_error("Annotation: TaintPropagation arg is not pointer");
+          }
+
+          if (!isMocked) {
+            buildCallKleeMakeMockAll(elem, mockName);
+            isMocked = true;
           }
           buildAnnotationTaintPropagation(elem, statement, func,
                                           "_arg_" + std::to_string(i) + "_");
@@ -724,6 +717,7 @@ void MockBuilder::buildAnnotationForExternalFunctionArgs(
         buildFree(elem, freePtr);
       }
       processingValue(prev, elem->getType(), allocSourcePtr, initNullPtr);
+      offsetIndex++;
     }
   }
 }
@@ -851,14 +845,6 @@ void MockBuilder::buildAnnotationForExternalFunctionReturn(
   }
   std::string retName = "ret_" + func->getName().str();
   llvm::Value *retValuePtr = builder->CreateAlloca(returnType, nullptr);
-
-  //  TODO: fix strange type ("fopen" mock, store instruction)
-  //  if (func->getName() == "fopen") {
-  //    buildCallKleeMakeSymbolic("klee_make_mock", retValuePtr, returnType,
-  //                              func->getName().str());
-  //    llvm::Value *retValue = builder->CreateLoad(returnType, retValuePtr,
-  //    retName); builder->CreateRet(retValue); return;
-  //  }
 
   if (returnType->isPointerTy() && (allocSourcePtr || mustInitNull)) {
     processingValue(retValuePtr, returnType, allocSourcePtr,
