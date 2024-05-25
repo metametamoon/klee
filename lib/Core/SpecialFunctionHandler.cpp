@@ -1333,10 +1333,6 @@ void SpecialFunctionHandler::handleGetTaintRule(
     return;
   }
 
-//  //  // TODO: now mock
-//    ref<Expr> result = ConstantExpr::create(1, Expr::Int64);
-//    executor.bindLocal(target, state, result);
-
   uint64_t taintSink = dyn_cast<ConstantExpr>(arguments[1])->getZExtValue();
   printf("klee_get_taint_rule sink: %zu\n", taintSink);
   executor.executeGetTaintRule(state, target,
