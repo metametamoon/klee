@@ -2332,8 +2332,7 @@
     "annotation": [
       [],
       [
-        "TaintSink::FormatString",
-        "TaintSink::SensitiveDataLeak"
+        "TaintSink::FormatString"
       ]
     ],
     "properties": []

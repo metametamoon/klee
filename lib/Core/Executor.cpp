@@ -5795,6 +5795,8 @@ void Executor::executeChangeTaintSource(ExecutionState &state,
                                      StateTerminationType::ReadOnly);
       } else {
         wos->updateTaint(Expr::createTaintBySource(source), isAdd);
+        errs() << "source was: " << source << " ";
+        wos->readTaint()->dump();
       }
     }
   }
@@ -5843,6 +5845,8 @@ void Executor::executeGetTaintRule(ExecutionState &state,
     hitsBySinkTaint =
         OrExpr::create(hitsBySinkTaint, Expr::createTaintBySource(source));
   }
+  errs() << "sink: " << sink << " sources: ";
+  hitsBySinkTaint->dump();
 
   address = optimizer.optimizeExpr(address, true);
   ref<Expr> isNullPointer = Expr::createIsZero(address->getValue());
@@ -5867,7 +5871,10 @@ void Executor::executeGetTaintRule(ExecutionState &state,
           it->second->addressSpace.findOrLazyInitializeObject(mo);
       ref<const ObjectState> os = op.second;
 
-      ref<Expr> hits = AndExpr::create(os->readTaint(), hitsBySinkTaint);
+      ref<Expr> taint = os->readTaint();
+      ref<Expr> hits = AndExpr::create(taint, hitsBySinkTaint);
+      errs() << "taint: ";
+      taint->dump();
 
       auto curState = it->second;
       for (size_t source = 0;
