@@ -267,10 +267,11 @@ public:
   }
   void initializeToZero();
 
-  void reset(ref<Expr> newDefault) {
-    knownSymbolics->reset(std::move(newDefault));
-    unflushedMask->reset(false);
-  }
+  void reset(ref<Expr> newDefault);
+  void reset(ref<Expr> updateForDefault, bool isAdd);
+
+  ref<Expr> combineAll() const;
+  void updateAll(ref<Expr> updateExpr, bool isAdd);
 
 private:
   const UpdateList &getUpdates() const;
@@ -359,7 +360,11 @@ public:
 
   KType *getDynamicType() const;
 
-  void resetTaint(ref<Expr> newTaint) { taintOS.reset(std::move(newTaint)); }
+  ref<Expr> readTaint() const { return taintOS.combineAll(); }
+  void updateTaint(ref<Expr> updateForTaint, bool isAdd) {
+    //    resetTaint(updateForTaint, isAdd);
+    taintOS.updateAll(updateForTaint, isAdd);
+  }
 
 private:
   ref<Expr> read8(ref<Expr> offset) const;
@@ -368,6 +373,11 @@ private:
   ref<Expr> readTaint8(ref<Expr> offset) const;
   void write8(unsigned offset, ref<Expr> value);
   void write8(ref<Expr> offset, ref<Expr> value);
+
+  void resetTaint(ref<Expr> newTaint) { taintOS.reset(std::move(newTaint)); }
+  void resetTaint(ref<Expr> updateForTaint, bool isAdd) {
+    taintOS.reset(std::move(updateForTaint), isAdd);
+  }
 };
 
 } // namespace klee

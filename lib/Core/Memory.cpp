@@ -814,3 +814,64 @@ void ObjectStage::print() const {
     llvm::errs() << "\t\t[" << un->index << "] = " << un->value << "\n";
   }
 }
+
+/***/
+
+void ObjectStage::reset(ref<Expr> newDefault) {
+  knownSymbolics->reset(std::move(newDefault));
+  unflushedMask->reset(false);
+  updates = UpdateList(nullptr, nullptr);
+}
+
+void ObjectStage::reset(ref<Expr> updateForDefault, bool isAdd) {
+  ref<Expr> oldDefault = knownSymbolics->defaultV();
+  ref<Expr> newDefault =
+      isAdd ? OrExpr::create(oldDefault, updateForDefault)
+            : AndExpr::create(oldDefault, NotExpr::create(updateForDefault));
+  knownSymbolics->reset(std::move(newDefault));
+  unflushedMask->reset(false);
+  updates = UpdateList(nullptr, nullptr);
+}
+
+ref<Expr> ObjectStage::combineAll() const {
+  ref<Expr> result = knownSymbolics->defaultV();
+  for (auto [index, value] : knownSymbolics->storage()) {
+    result = OrExpr::create(result, value);
+  }
+  for (const auto *un = updates.head.get(); un; un = un->next.get()) {
+    result = OrExpr::create(result, un->value);
+  }
+  return result;
+}
+
+void ObjectStage::updateAll(ref<Expr> updateExpr, bool isAdd) {
+  std::vector<std::pair<size_t, ref<Expr>>> newKnownSymbolics;
+  for (auto [index, value] : knownSymbolics->storage()) {
+    ref<Expr> newValue =
+        isAdd ? OrExpr::create(value, updateExpr)
+              : AndExpr::create(value, NotExpr::create(updateExpr));
+    newKnownSymbolics.emplace_back(index, value);
+  }
+
+  ref<Expr> oldDefault = knownSymbolics->defaultV();
+  ref<Expr> newDefault =
+      isAdd ? OrExpr::create(oldDefault, updateExpr)
+            : AndExpr::create(oldDefault, NotExpr::create(updateExpr));
+  knownSymbolics->reset(std::move(newDefault));
+
+  for (auto [index, value] : newKnownSymbolics) {
+    knownSymbolics->store(index, value);
+  }
+
+  std::vector<std::pair<ref<Expr>, ref<Expr>>> newUpdates;
+  for (auto *un = updates.head.get(); un; un = un->next.get()) {
+    ref<Expr> newValue =
+        isAdd ? OrExpr::create(un->value, updateExpr)
+              : AndExpr::create(un->value, NotExpr::create(updateExpr));
+    newUpdates.emplace_back(un->index, newValue);
+  }
+  updates = UpdateList(nullptr, nullptr);
+  for (auto [index, value] : newUpdates) {
+    updates.extend(index, value);
+  }
+}
