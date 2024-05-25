@@ -5,16 +5,6 @@
 
 namespace klee {
 
-TaintHitInfo::TaintHitInfo(source_ty source, sink_ty sink)
-    : source(source), sink(sink) {}
-
-bool TaintHitInfo::operator<(const TaintHitInfo &other) const {
-  return (sink < other.sink) || (source < other.source);
-}
-bool TaintHitInfo::operator==(const TaintHitInfo &other) const {
-  return (source == other.source) && (sink == other.sink);
-}
-
 TaintAnnotation::TaintAnnotation(const std::string &path) {
   if (path.empty()) {
     return;
@@ -60,11 +50,12 @@ TaintAnnotation::TaintAnnotation(const std::string &path) {
       klee_error("Taint annotations: Incorrect file format");
     }
 
+    std::map<source_ty, rule_ty> hitsForSink;
     for (auto &taintHitJson : item.value()) {
-      hits[TaintHitInfo(sources[taintHitJson["source"]], sinksCounter)] =
+      hitsForSink[sources[taintHitJson["source"]]] =
           rulesMap[taintHitJson["rule"]];
     }
-
+    hits[sinksCounter] = hitsForSink;
     sinksCounter++;
   }
 }

@@ -361,6 +361,18 @@ private:
   void executeFree(ExecutionState &state, ref<PointerExpr> address,
                    KInstruction *target = 0);
 
+  void executeChangeTaintSource(ExecutionState &state,
+                                klee::KInstruction *target,
+                                ref<PointerExpr> address, uint64_t source,
+                                bool isAdd);
+
+  void executeCheckTaintSource(ExecutionState &state,
+                               klee::KInstruction *target,
+                               ref<PointerExpr> address, uint64_t source);
+
+  void executeGetTaintRule(ExecutionState &state, klee::KInstruction *target,
+                           ref<PointerExpr> address, uint64_t sink);
+
   /// Serialize a landingpad instruction so it can be handled by the
   /// libcxxabi-runtime
   MemoryObject *serializeLandingpad(ExecutionState &state,
@@ -634,7 +646,7 @@ private:
   /// Then just call `terminateStateOnError`
   void terminateStateOnTargetError(ExecutionState &state, ReachWithError error);
 
-  void terminateStateOnTargetTaintError(ExecutionState &state, size_t rule);
+  void terminateStateOnTargetTaintError(ExecutionState &state, uint64_t rule);
 
   /// Call error handler and terminate state in case of program errors
   /// (e.g. free()ing globals, out-of-bound accesses)

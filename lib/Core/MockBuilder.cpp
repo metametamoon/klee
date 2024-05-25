@@ -611,7 +611,7 @@ void MockBuilder::buildAnnotationForExternalFunctionArgs(
       Statement::InitNull *initNullPtr = nullptr;
 
       bool isMocked = false;
-      std::string mockName = "klee_mock" + func->getName().str() + "_arg_" +
+      std::string mockName = "klee_mock_" + func->getName().str() + "_arg_" +
                              std::to_string(i) + "_" +
                              std::to_string(offsetIndex);
 
@@ -681,10 +681,10 @@ void MockBuilder::buildAnnotationForExternalFunctionArgs(
             klee_error("Annotation: TaintOutput arg is not pointer");
           }
 
-          if (!isMocked) {
-            buildCallKleeMakeMockAll(elem, mockName);
-            isMocked = true;
-          }
+//          if (!isMocked) {
+//            buildCallKleeMakeMockAll(elem, mockName);
+//            isMocked = true;
+//          }
           buildAnnotationTaintOutput(elem, statement);
           break;
         }
@@ -693,10 +693,10 @@ void MockBuilder::buildAnnotationForExternalFunctionArgs(
             klee_error("Annotation: TaintPropagation arg is not pointer");
           }
 
-          if (!isMocked) {
-            buildCallKleeMakeMockAll(elem, mockName);
-            isMocked = true;
-          }
+//          if (!isMocked) {
+//            buildCallKleeMakeMockAll(elem, mockName);
+//            isMocked = true;
+//          }
           buildAnnotationTaintPropagation(elem, statement, func,
                                           "_arg_" + std::to_string(i) + "_");
           break;

@@ -14,19 +14,10 @@ using source_ty = size_t;
 using sink_ty = size_t;
 using rule_ty = size_t;
 
-struct TaintHitInfo final {
-  source_ty source;
-  sink_ty sink;
-
-  explicit TaintHitInfo(source_ty source, sink_ty sink);
-
-  bool operator<(const TaintHitInfo &other) const;
-  bool operator==(const TaintHitInfo &other) const;
-};
-
-using TaintHitsMap = std::map<TaintHitInfo, rule_ty>;
-
 struct TaintAnnotation final {
+  using TaintHitsSink = std::map<source_ty, rule_ty>;
+  using TaintHitsMap = std::map<sink_ty, TaintHitsSink>;
+
   TaintHitsMap hits;
 
   std::unordered_map<std::string, source_ty> sources;
