@@ -558,18 +558,18 @@ ref<ConstantExpr> Expr::createTaintBySource(uint64_t source) {
 
 ref<Expr> Expr::combineTaints(const ref<Expr> &taintL,
                               const ref<Expr> &taintR) {
-  if (SelectExpr *sel = dyn_cast<SelectExpr>(taintL)) {
-    taintL->dump();
-  }
-  if (PointerExpr *sel = dyn_cast<PointerExpr>(taintL)) {
-    taintR->dump();
-  }
-  if (ConstantExpr *sel = dyn_cast<ConstantExpr>(taintL)) {
-    if (ConstantExpr *ser = dyn_cast<ConstantExpr>(taintR)) {
-      sel->getAPValue().dump();
-      ser->getAPValue().dump();
-    }
-  }
+//  if (SelectExpr *sel = dyn_cast<SelectExpr>(taintL)) {
+//    taintL->dump();
+//  }
+//  if (PointerExpr *sel = dyn_cast<PointerExpr>(taintL)) {
+//    taintR->dump();
+//  }
+//  if (ConstantExpr *sel = dyn_cast<ConstantExpr>(taintL)) {
+//    if (ConstantExpr *ser = dyn_cast<ConstantExpr>(taintR)) {
+//      sel->getAPValue().dump();
+//      ser->getAPValue().dump();
+//    }
+//  }
   return OrExpr::create(taintL, taintR);
 }
 

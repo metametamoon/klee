@@ -5218,7 +5218,7 @@ void Executor::terminateStateOnTargetError(ExecutionState &state,
 }
 
 void Executor::terminateStateOnTargetTaintError(ExecutionState &state,
-                                                size_t rule) {
+                                                uint64_t rule) {
   if (rule >= annotationsData.taintAnnotation.rules.size()) {
     terminateStateOnUserError(state, "Incorrect rule id");
   }
@@ -5758,6 +5758,133 @@ void Executor::executeFree(ExecutionState &state, ref<PointerExpr> address,
                     PointerExpr::create(Expr::createPointer(0),
                                         Expr::createPointer(0)));
       }
+    }
+  }
+}
+
+void Executor::executeChangeTaintSource(ExecutionState &state,
+                                        klee::KInstruction *target,
+                                        ref<PointerExpr> address,
+                                        uint64_t source, bool isAdd) {
+  address = optimizer.optimizeExpr(address, true);
+  ref<Expr> isNullPointer = Expr::createIsZero(address->getValue());
+  StatePair zeroPointer =
+      forkInternal(state, isNullPointer, BranchType::ResolvePointer);
+  if (zeroPointer.first) {
+    auto error =
+        (isReadFromSymbolicArray(address->getBase()) && zeroPointer.second)
+            ? ReachWithErrorType::MayBeNullPointerException
+            : ReachWithErrorType::MustBeNullPointerException;
+    terminateStateOnTargetError(*zeroPointer.first, ReachWithError(error));
+  }
+  if (zeroPointer.second) { // address != 0
+    ExactResolutionList rl;
+    resolveExact(*zeroPointer.second, address,
+                 typeSystemManager->getUnknownType(), rl, "сhangeTaintSource");
+    for (Executor::ExactResolutionList::iterator it = rl.begin(), ie = rl.end();
+         it != ie; ++it) {
+      const MemoryObject *mo = it->first;
+      RefObjectPair op =
+          it->second->addressSpace.findOrLazyInitializeObject(mo);
+      ref<const ObjectState> os = op.second;
+
+      ObjectState *wos = it->second->addressSpace.getWriteable(mo, os.get());
+      if (wos->readOnly) {
+        terminateStateOnProgramError(*(it->second),
+                                     "memory error: object read only",
+                                     StateTerminationType::ReadOnly);
+      } else {
+        wos->updateTaint(Expr::createTaintBySource(source), isAdd);
+      }
+    }
+  }
+}
+
+void Executor::executeCheckTaintSource(ExecutionState &state,
+                                       klee::KInstruction *target,
+                                       ref<PointerExpr> address,
+                                       uint64_t source) {
+  address = optimizer.optimizeExpr(address, true);
+  ref<Expr> isNullPointer = Expr::createIsZero(address->getValue());
+  StatePair zeroPointer =
+      forkInternal(state, isNullPointer, BranchType::ResolvePointer);
+  if (zeroPointer.first) {
+    auto error =
+        (isReadFromSymbolicArray(address->getBase()) && zeroPointer.second)
+            ? ReachWithErrorType::MayBeNullPointerException
+            : ReachWithErrorType::MustBeNullPointerException;
+    terminateStateOnTargetError(*zeroPointer.first, ReachWithError(error));
+  }
+  if (zeroPointer.second) {
+    ExactResolutionList rl;
+    resolveExact(*zeroPointer.second, address,
+                 typeSystemManager->getUnknownType(), rl, "checkTaintSource");
+
+    for (Executor::ExactResolutionList::iterator it = rl.begin(), ie = rl.end();
+         it != ie; ++it) {
+      const MemoryObject *mo = it->first;
+      RefObjectPair op =
+          it->second->addressSpace.findOrLazyInitializeObject(mo);
+      ref<const ObjectState> os = op.second;
+
+      ref<Expr> taintSource =
+          ExtractExpr::create(os->readTaint(), source, Expr::Bool);
+      bindLocal(target, *it->second, taintSource);
+    }
+  }
+}
+
+void Executor::executeGetTaintRule(ExecutionState &state,
+                                   klee::KInstruction *target,
+                                   ref<PointerExpr> address, uint64_t sink) {
+  const auto &hitsBySink = annotationsData.taintAnnotation.hits[sink];
+  ref<Expr> hitsBySinkTaint = Expr::createEmptyTaint();
+  for (const auto [source, rule] : hitsBySink) {
+    hitsBySinkTaint =
+        OrExpr::create(hitsBySinkTaint, Expr::createTaintBySource(source));
+  }
+
+  address = optimizer.optimizeExpr(address, true);
+  ref<Expr> isNullPointer = Expr::createIsZero(address->getValue());
+  StatePair zeroPointer =
+      forkInternal(state, isNullPointer, BranchType::ResolvePointer);
+  if (zeroPointer.first) {
+    auto error =
+        (isReadFromSymbolicArray(address->getBase()) && zeroPointer.second)
+            ? ReachWithErrorType::MayBeNullPointerException
+            : ReachWithErrorType::MustBeNullPointerException;
+    terminateStateOnTargetError(*zeroPointer.first, ReachWithError(error));
+  }
+  if (zeroPointer.second) {
+    ExactResolutionList rl;
+    resolveExact(*zeroPointer.second, address,
+                 typeSystemManager->getUnknownType(), rl, "getTaintRule");
+
+    for (Executor::ExactResolutionList::iterator it = rl.begin(), ie = rl.end();
+         it != ie; ++it) {
+      const MemoryObject *mo = it->first;
+      RefObjectPair op =
+          it->second->addressSpace.findOrLazyInitializeObject(mo);
+      ref<const ObjectState> os = op.second;
+
+      ref<Expr> hits = AndExpr::create(os->readTaint(), hitsBySinkTaint);
+
+      auto curState = it->second;
+      for (size_t source = 0;
+           source < annotationsData.taintAnnotation.sources.size(); source++) {
+        ref<Expr> taintSource = ExtractExpr::create(hits, source, Expr::Bool);
+        StatePair taintSourceStates =
+            forkInternal(*curState, taintSource, BranchType::Taint);
+        if (taintSourceStates.first) {
+          bindLocal(target, *taintSourceStates.first,
+                    ConstantExpr::create(hitsBySink.at(source) + 1,
+                                         Expr::Int64)); // return (rule + 1)
+        }
+        if (taintSourceStates.second) {
+          curState = taintSourceStates.second;
+        }
+      }
+      bindLocal(target, *curState, ConstantExpr::create(0, Expr::Int64));
     }
   }
 }

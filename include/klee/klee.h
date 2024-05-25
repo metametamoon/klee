@@ -67,7 +67,7 @@ bool klee_check_taint_source(void *array, size_t taint_source);
  * \arg addr - The start of the object.
  * \arg taint_sink - Taint sink.
  */
-size_t klee_get_taint_rule(void *array, size_t taint_sink);
+uint64_t klee_get_taint_rule(void *array, size_t taint_sink);
 
 /* klee_taint_hit - Execute taint hit with rule.
  *
