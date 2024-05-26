@@ -559,18 +559,6 @@ ref<ConstantExpr> Expr::createTaintBySource(uint64_t source) {
 
 ref<Expr> Expr::combineTaints(const ref<Expr> &taintL,
                               const ref<Expr> &taintR) {
-//  if (SelectExpr *sel = dyn_cast<SelectExpr>(taintL)) {
-//    taintL->dump();
-//  }
-//  if (PointerExpr *sel = dyn_cast<PointerExpr>(taintL)) {
-//    taintR->dump();
-//  }
-//  if (ConstantExpr *sel = dyn_cast<ConstantExpr>(taintL)) {
-//    if (ConstantExpr *ser = dyn_cast<ConstantExpr>(taintR)) {
-//      sel->getAPValue().dump();
-//      ser->getAPValue().dump();
-//    }
-//  }
   return OrExpr::create(taintL, taintR);
 }
 
@@ -1809,6 +1797,11 @@ ref<ReadExpr> Expr::hasOrderedReads() const {
 ref<Expr> Expr::getValue() const {
   return isa<PointerExpr>(this) ? cast<PointerExpr>(this)->getValue()
                                 : const_cast<Expr *>(this);
+}
+
+ref<Expr> Expr::getTaint() const {
+  return isa<PointerExpr>(this) ? cast<PointerExpr>(this)->getTaint()
+                                : cast<Expr>(Expr::createEmptyTaint());
 }
 
 ref<Expr> convolution(const ref<Expr> &l, const ref<Expr> &r) {

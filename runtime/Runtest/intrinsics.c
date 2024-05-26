@@ -169,8 +169,8 @@ void klee_make_mock(void *ret_array, size_t ret_nbytes, const char *fname) {
 //void klee_add_taint(void *array, size_t taint_source) {}
 //void klee_clear_taint(void *array, size_t taint_source) {}
 //bool klee_check_taint_source(void *array, size_t taint_source) {}
-//size_t klee_get_taint_rule(void *array, size_t taint_sink) {}
-//void klee_taint_hit(size_t rule) {}
+//uint64_t klee_get_taint_hits(void *array, size_t taint_sink) {}
+//void klee_taint_hit(uint64_t taint_hits, size_t taint_sink) {}
 
 void klee_silent_exit(int x) { exit(x); }
 

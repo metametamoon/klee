@@ -185,7 +185,7 @@ public:
   HANDLER(handleAddTaint);
   HANDLER(handleClearTaint);
   HANDLER(handleCheckTaintSource);
-  HANDLER(handleGetTaintRule);
+  HANDLER(handleGetTaintHits);
   HANDLER(handleTaintHit);
 #undef HANDLER
 };

@@ -2326,5 +2326,16 @@
       []
     ],
     "properties": []
+  },
+  "printf": {
+    "name": "printf",
+    "annotation": [
+      [],
+      [
+        "TaintSink::FormatString",
+        "TaintSink::SensitiveDataLeak"
+      ]
+    ],
+    "properties": []
   }
 }

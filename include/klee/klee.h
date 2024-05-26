@@ -61,19 +61,20 @@ void klee_clear_taint(void *array, size_t taint_source);
  */
 bool klee_check_taint_source(void *array, size_t taint_source);
 
-/* klee_get_taint_rule - Return taint rule id +1 if contents of the object pointer
- * to \arg addr causes a taint sink \arg taint_sink hit, else return 0.
+/* klee_get_taint_hits - Return taint hits if contents of the object pointer
+ * to \arg addr causes a taint sink \arg taint_sink hit.
  *
  * \arg addr - The start of the object.
  * \arg taint_sink - Taint sink.
  */
-uint64_t klee_get_taint_rule(void *array, size_t taint_sink);
+uint64_t klee_get_taint_hits(void *array, size_t taint_sink);
 
-/* klee_taint_hit - Execute taint hit with rule.
+/* klee_taint_hit - Execute taint hits.
  *
- * \arg rule - Taint rule id.
+ * \arg taint_hits - Actual taint hits.
+ * \arg taint_sink - Taint sink.
  */
-void klee_taint_hit(size_t rule);
+void klee_taint_hit(uint64_t taint_hits, size_t taint_sink);
 
 /* klee_range - Construct a symbolic value in the signed interval
  * [begin,end).

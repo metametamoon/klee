@@ -53,7 +53,7 @@ private:
   llvm::CallInst *buildCallKleeTaintFunction(const std::string &functionName,
                                              llvm::Value *source, size_t taint,
                                              llvm::Type *returnType);
-  void buildCallKleeTaintHit(llvm::Value *taintRule);
+  void buildCallKleeTaintHit(llvm::Value *taintHits, size_t taintSink);
 
   void buildAnnotationTaintOutput(llvm::Value *elem,
                                   const Statement::Ptr &statement);

@@ -396,6 +396,7 @@ public:
   ref<ReadExpr> hasOrderedReads(bool stride) const;
   ref<ReadExpr> hasOrderedReads() const;
   ref<Expr> getValue() const;
+  ref<Expr> getTaint() const;
 
   /* Static utility methods */
 

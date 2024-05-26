@@ -370,7 +370,7 @@ private:
                                klee::KInstruction *target,
                                ref<PointerExpr> address, uint64_t source);
 
-  void executeGetTaintRule(ExecutionState &state, klee::KInstruction *target,
+  void executeGetTaintHits(ExecutionState &state, klee::KInstruction *target,
                            ref<PointerExpr> address, uint64_t sink);
 
   /// Serialize a landingpad instruction so it can be handled by the
@@ -646,7 +646,8 @@ private:
   /// Then just call `terminateStateOnError`
   void terminateStateOnTargetError(ExecutionState &state, ReachWithError error);
 
-  void terminateStateOnTargetTaintError(ExecutionState &state, uint64_t rule);
+  void terminateStateOnTargetTaintError(ExecutionState &state, uint64_t hits,
+                                        size_t sink);
 
   /// Call error handler and terminate state in case of program errors
   /// (e.g. free()ing globals, out-of-bound accesses)

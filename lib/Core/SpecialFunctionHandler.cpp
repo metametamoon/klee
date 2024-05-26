@@ -134,7 +134,7 @@ static SpecialFunctionHandler::HandlerInfo handlerInfo[] = {
     add("klee_add_taint", handleAddTaint, false),
     add("klee_clear_taint", handleClearTaint, false),
     add("klee_check_taint_source", handleCheckTaintSource, true),
-    add("klee_get_taint_rule", handleGetTaintRule, true),
+    add("klee_get_taint_hits", handleGetTaintHits, true),
     add("klee_taint_hit", handleTaintHit, false),
 
 #ifdef SUPPORT_KLEE_EH_CXX
@@ -1299,7 +1299,7 @@ void SpecialFunctionHandler::handleAddTaint(klee::ExecutionState &state,
   }
 
   uint64_t taintSource = dyn_cast<ConstantExpr>(arguments[1])->getZExtValue();
-  printf("klee_add_taint source: %zu\n", taintSource);
+//  printf("klee_add_taint source: %zu\n", taintSource);
   executor.executeChangeTaintSource(
       state, target, executor.makePointer(arguments[0]), taintSource, true);
 }
@@ -1315,7 +1315,7 @@ void SpecialFunctionHandler::handleClearTaint(
   }
 
   uint64_t taintSource = dyn_cast<ConstantExpr>(arguments[1])->getZExtValue();
-  printf("klee_clear_taint source: %zu\n", taintSource);
+//  printf("klee_clear_taint source: %zu\n", taintSource);
   executor.executeChangeTaintSource(
       state, target, executor.makePointer(arguments[0]), taintSource, false);
 }
@@ -1331,41 +1331,39 @@ void SpecialFunctionHandler::handleCheckTaintSource(
   }
 
   uint64_t taintSource = dyn_cast<ConstantExpr>(arguments[1])->getZExtValue();
-  printf("klee_check_taint_source source: %zu\n", taintSource);
+//  printf("klee_check_taint_source source: %zu\n", taintSource);
   executor.executeCheckTaintSource(
       state, target, executor.makePointer(arguments[0]), taintSource);
 }
 
-void SpecialFunctionHandler::handleGetTaintRule(
+void SpecialFunctionHandler::handleGetTaintHits(
     klee::ExecutionState &state, klee::KInstruction *target,
     std::vector<ref<Expr>> &arguments) {
   if (arguments.size() != 2) {
     executor.terminateStateOnUserError(state,
                                        "Incorrect number of arguments to "
-                                       "klee_get_taint_rule(void*, size_t)");
+                                       "klee_get_taint_hits(void*, size_t)");
     return;
   }
 
-//  //  // TODO: now mock
-//    ref<Expr> result = ConstantExpr::create(1, Expr::Int64);
-//    executor.bindLocal(target, state, result);
-
   uint64_t taintSink = dyn_cast<ConstantExpr>(arguments[1])->getZExtValue();
-  printf("klee_get_taint_rule sink: %zu\n", taintSink);
-  executor.executeGetTaintRule(state, target,
+//  printf("klee_get_taint_hits sink: %zu\n", taintSink);
+  executor.executeGetTaintHits(state, target,
                                executor.makePointer(arguments[0]), taintSink);
 }
 
 void SpecialFunctionHandler::handleTaintHit(klee::ExecutionState &state,
                                             klee::KInstruction *target,
                                             std::vector<ref<Expr>> &arguments) {
-  if (arguments.size() != 1) {
+  if (arguments.size() != 2) {
     executor.terminateStateOnUserError(
-        state, "Incorrect number of arguments to klee_taint_hit(size_t)");
+        state,
+        "Incorrect number of arguments to klee_taint_hit(uint64_t, size_t)");
     return;
   }
 
-  uint64_t taintRule = dyn_cast<ConstantExpr>(arguments[0])->getZExtValue();
-  printf("klee_taint_hit rule: %zu\n", taintRule);
-  executor.terminateStateOnTargetTaintError(state, taintRule);
+  uint64_t taintHits = dyn_cast<ConstantExpr>(arguments[0])->getZExtValue();
+  size_t taintSink = dyn_cast<ConstantExpr>(arguments[1])->getZExtValue();
+//  printf("klee_taint_hit hits: %zu sink: %zu\n", taintHits, taintSink);
+  executor.terminateStateOnTargetTaintError(state, taintHits, taintSink);
 }

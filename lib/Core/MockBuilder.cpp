@@ -513,11 +513,11 @@ void MockBuilder::buildAnnotationTaintSink(llvm::Value *elem,
       llvm::BasicBlock::Create(mockModule->getContext(), sinkCondName, curFunc);
   llvm::BasicBlock *contBB = llvm::BasicBlock::Create(
       mockModule->getContext(), "continue_" + sinkCondName);
-  auto taintRule = buildCallKleeTaintFunction(
-      "klee_get_taint_rule", elem, sink->second,
+  auto taintHits = buildCallKleeTaintFunction(
+      "klee_get_taint_hits", elem, sink->second,
       llvm::Type::getInt64Ty(mockModule->getContext()));
   const auto brValueSink =
-      builder->CreateCmp(llvm::CmpInst::Predicate::ICMP_NE, taintRule,
+      builder->CreateCmp(llvm::CmpInst::Predicate::ICMP_NE, taintHits,
                          llvm::ConstantInt::get(mockModule->getContext(),
                                                 llvm::APInt(64, 0, false)));
   builder->CreateCondBr(brValueSink, sinkBB, contBB);
@@ -538,10 +538,7 @@ void MockBuilder::buildAnnotationTaintSink(llvm::Value *elem,
   builder->CreateCondBr(brValueTaintHit, taintHitBB, contBB);
 
   builder->SetInsertPoint(taintHitBB);
-  const auto taintRuleId = builder->CreateSub(
-      taintRule, llvm::ConstantInt::get(mockModule->getContext(),
-                                        llvm::APInt(64, 1, false)));
-  buildCallKleeTaintHit(taintRuleId);
+  buildCallKleeTaintHit(taintHits, sink->second);
   builder->CreateBr(contBB);
 
   curFunc->getBasicBlockList().push_back(contBB);
@@ -576,13 +573,19 @@ MockBuilder::buildCallKleeTaintFunction(const std::string &functionName,
                                         llvm::APInt(64, taint, false))});
 }
 
-void MockBuilder::buildCallKleeTaintHit(llvm::Value *taintRule) {
+void MockBuilder::buildCallKleeTaintHit(llvm::Value *taintHits,
+                                        size_t taintSink) {
   auto *kleeTaintHitType = llvm::FunctionType::get(
       llvm::Type::getVoidTy(mockModule->getContext()),
-      {llvm::Type::getInt64Ty(mockModule->getContext())}, false);
+      {llvm::Type::getInt64Ty(mockModule->getContext()),
+       llvm::Type::getInt64Ty(mockModule->getContext())},
+      false);
   auto kleeTaintSinkHitCallee =
       mockModule->getOrInsertFunction("klee_taint_hit", kleeTaintHitType);
-  builder->CreateCall(kleeTaintSinkHitCallee, {taintRule});
+  builder->CreateCall(
+      kleeTaintSinkHitCallee,
+      {taintHits, llvm::ConstantInt::get(mockModule->getContext(),
+                                         llvm::APInt(64, taintSink, false))});
 }
 
 void MockBuilder::buildAnnotationForExternalFunctionArgs(
@@ -681,10 +684,10 @@ void MockBuilder::buildAnnotationForExternalFunctionArgs(
             klee_error("Annotation: TaintOutput arg is not pointer");
           }
 
-//          if (!isMocked) {
-//            buildCallKleeMakeMockAll(elem, mockName);
-//            isMocked = true;
-//          }
+          if (!isMocked) {
+            buildCallKleeMakeMockAll(elem, mockName);
+            isMocked = true;
+          }
           buildAnnotationTaintOutput(elem, statement);
           break;
         }
@@ -693,10 +696,10 @@ void MockBuilder::buildAnnotationForExternalFunctionArgs(
             klee_error("Annotation: TaintPropagation arg is not pointer");
           }
 
-//          if (!isMocked) {
-//            buildCallKleeMakeMockAll(elem, mockName);
-//            isMocked = true;
-//          }
+          if (!isMocked) {
+            buildCallKleeMakeMockAll(elem, mockName);
+            isMocked = true;
+          }
           buildAnnotationTaintPropagation(elem, statement, func,
                                           "_arg_" + std::to_string(i) + "_");
           break;

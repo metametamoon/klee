@@ -509,9 +509,9 @@ Executor::Executor(LLVMContext &ctx, const InterpreterOptions &opts,
       annotationsData(opts.AnnotationsFile, opts.TaintAnnotationsFile),
       interpreterHandler(ih), searcher(nullptr),
       externalDispatcher(new ExternalDispatcher(ctx)), statsTracker(0),
-      pathWriter(0), symPathWriter(0),
-      specialFunctionHandler(0), timers{time::Span(TimerInterval)},
-      guidanceKind(opts.Guidance), codeGraphInfo(new CodeGraphInfo()),
+      pathWriter(0), symPathWriter(0), specialFunctionHandler(0),
+      timers{time::Span(TimerInterval)}, guidanceKind(opts.Guidance),
+      codeGraphInfo(new CodeGraphInfo()),
       distanceCalculator(new DistanceCalculator(*codeGraphInfo)),
       targetCalculator(new TargetCalculator(*codeGraphInfo)),
       targetManager(new TargetManager(guidanceKind, *distanceCalculator,
@@ -5028,17 +5028,21 @@ void Executor::terminateStateOnTargetError(ExecutionState &state,
 }
 
 void Executor::terminateStateOnTargetTaintError(ExecutionState &state,
-                                                uint64_t rule) {
-  if (rule >= annotationsData.taintAnnotation.rules.size()) {
-    terminateStateOnUserError(state, "Incorrect rule id");
+                                                uint64_t hits, size_t sink) {
+  std::string error = "Taint error:";
+  const auto &sinkData = annotationsData.taintAnnotation.hits.at(sink);
+  for (size_t source = 0; source < annotationsData.taintAnnotation.sources.size(); source++) {
+    if ((hits >> source) & 1u) {
+      error += " " + annotationsData.taintAnnotation.rules[sinkData.at(source)];
+    }
   }
 
-  const std::string &ruleStr = annotationsData.taintAnnotation.rules[rule];
   reportStateOnTargetError(
-      state, ReachWithError(ReachWithErrorType::MaybeTaint, ruleStr));
+      state, ReachWithError(ReachWithErrorType::MaybeTaint, error));
 
-  terminateStateOnProgramError(state, ruleStr + " taint error",
-                               StateTerminationType::Taint);
+  terminateStateOnProgramError(
+      state, new ErrorEvent(locationOf(state), StateTerminationType::Taint,
+                            error));
 }
 
 void Executor::terminateStateOnError(ExecutionState &state,
@@ -5569,9 +5573,10 @@ void Executor::executeChangeTaintSource(ExecutionState &state,
 
       ObjectState *wos = it->second->addressSpace.getWriteable(mo, os.get());
       if (wos->readOnly) {
-        terminateStateOnProgramError(*(it->second),
-                                     "memory error: object read only",
-                                     StateTerminationType::ReadOnly);
+        terminateStateOnProgramError(
+            *(it->second), new ErrorEvent(locationOf(*(it->second)),
+                                          StateTerminationType::ReadOnly,
+                                          "memory error: object read only"));
       } else {
         wos->updateTaint(Expr::createTaintBySource(source), isAdd);
       }
@@ -5613,11 +5618,11 @@ void Executor::executeCheckTaintSource(ExecutionState &state,
   }
 }
 
-void Executor::executeGetTaintRule(ExecutionState &state,
+void Executor::executeGetTaintHits(ExecutionState &state,
                                    klee::KInstruction *target,
                                    ref<PointerExpr> address, uint64_t sink) {
   const auto &hitsBySink = annotationsData.taintAnnotation.hits[sink];
-  ref<Expr> hitsBySinkTaint = Expr::createEmptyTaint();
+  ref<ConstantExpr> hitsBySinkTaint = Expr::createEmptyTaint();
   for (const auto [source, rule] : hitsBySink) {
     hitsBySinkTaint =
         OrExpr::create(hitsBySinkTaint, Expr::createTaintBySource(source));
@@ -5637,7 +5642,7 @@ void Executor::executeGetTaintRule(ExecutionState &state,
   if (zeroPointer.second) {
     ExactResolutionList rl;
     resolveExact(*zeroPointer.second, address,
-                 typeSystemManager->getUnknownType(), rl, "getTaintRule");
+                 typeSystemManager->getUnknownType(), rl, "getTaintHits");
 
     for (Executor::ExactResolutionList::iterator it = rl.begin(), ie = rl.end();
          it != ie; ++it) {
@@ -5647,23 +5652,7 @@ void Executor::executeGetTaintRule(ExecutionState &state,
       ref<const ObjectState> os = op.second;
 
       ref<Expr> hits = AndExpr::create(os->readTaint(), hitsBySinkTaint);
-
-      auto curState = it->second;
-      for (size_t source = 0;
-           source < annotationsData.taintAnnotation.sources.size(); source++) {
-        ref<Expr> taintSource = ExtractExpr::create(hits, source, Expr::Bool);
-        StatePair taintSourceStates =
-            forkInternal(*curState, taintSource, BranchType::Taint);
-        if (taintSourceStates.first) {
-          bindLocal(target, *taintSourceStates.first,
-                    ConstantExpr::create(hitsBySink.at(source) + 1,
-                                         Expr::Int64)); // return (rule + 1)
-        }
-        if (taintSourceStates.second) {
-          curState = taintSourceStates.second;
-        }
-      }
-      bindLocal(target, *curState, ConstantExpr::create(0, Expr::Int64));
+      bindLocal(target, *it->second, hits);
     }
   }
 }
@@ -5671,11 +5660,12 @@ void Executor::executeGetTaintRule(ExecutionState &state,
 bool Executor::resolveExact(ExecutionState &estate, ref<Expr> address,
                             KType *type, ExactResolutionList &results,
                             const std::string &name) {
-  ref<PointerExpr> pointer =
-      PointerExpr::create(address->getValue(), address->getValue());
+  ref<PointerExpr> pointer = PointerExpr::create(
+      address->getValue(), address->getValue(), address->getTaint());
   address = pointer->getValue();
   ref<Expr> base = pointer->getBase();
-  ref<PointerExpr> basePointer = PointerExpr::create(base, base);
+  ref<PointerExpr> basePointer =
+      PointerExpr::create(base, base, address->getTaint());
   ref<Expr> zeroPointer = PointerExpr::create(Expr::createPointer(0));
 
   if (SimplifySymIndices) {

@@ -41,6 +41,7 @@ DISABLE_WARNING_POP
 #include <cstddef>
 #include <functional>
 #include <sstream>
+#include <utility>
 
 namespace klee {
 llvm::cl::opt<MemoryType> MemoryBackend(
@@ -111,11 +112,10 @@ ObjectState::ObjectState(const MemoryObject *mo, const Array *array, KType *dt,
     : copyOnWriteOwner(0), object(mo), valueOS(ObjectStage(array, nullptr)),
       baseOS(ObjectStage(array->size, Expr::createPointer(0), false,
                          Context::get().getPointerWidth())),
-      taintOS(
-          ObjectStage(array->size, defaultTaintValue, false, Expr::TaintWidth)),
+      taintOS(ObjectStage(array->size, std::move(defaultTaintValue), false,
+                          Expr::TaintWidth)),
       lastUpdate(nullptr), size(array->size), dynamicType(dt), readOnly(false) {
   baseOS.initializeToZero();
-  taintOS.initializeToZero();
 }
 
 ObjectState::ObjectState(const MemoryObject *mo, KType *dt,
@@ -124,12 +124,11 @@ ObjectState::ObjectState(const MemoryObject *mo, KType *dt,
       valueOS(ObjectStage(mo->getSizeExpr(), nullptr)),
       baseOS(ObjectStage(mo->getSizeExpr(), Expr::createPointer(0), false,
                          Context::get().getPointerWidth())),
-      taintOS(ObjectStage(mo->getSizeExpr(), defaultTaintValue, false,
-                          Expr::TaintWidth)),
+      taintOS(ObjectStage(mo->getSizeExpr(), std::move(defaultTaintValue),
+                          false, Expr::TaintWidth)),
       lastUpdate(nullptr), size(mo->getSizeExpr()), dynamicType(dt),
       readOnly(false) {
   baseOS.initializeToZero();
-  taintOS.initializeToZero();
 }
 
 ObjectState::ObjectState(const ObjectState &os)
@@ -254,8 +253,7 @@ ref<Expr> ObjectState::readTaint8(ref<Expr> offset) const {
             dyn_cast<ConstantExpr>(object->getSizeExpr())) {
       auto moSize = sizeExpr->getZExtValue();
       if (object && moSize > 4096) {
-        std::string allocInfo;
-        object->getAllocInfo(allocInfo);
+        std::string allocInfo = object->getAllocInfo();
         klee_warning_once(nullptr,
                           "Symbolic memory access will send the following "
                           "array of %lu bytes to "
@@ -832,9 +830,21 @@ void ObjectStage::reset(ref<Expr> updateForDefault, bool isAdd) {
 }
 
 ref<Expr> ObjectStage::combineAll() const {
-  ref<Expr> result = knownSymbolics->defaultV();
+  ref<Expr> result = Expr::createEmptyTaint();
+  if (knownSymbolics->defaultV()) {
+    result = knownSymbolics->defaultV();
+  }
   for (auto [index, value] : knownSymbolics->storage()) {
     result = OrExpr::create(result, value);
+  }
+  if (updates.root) {
+    if (ref<ConstantSource> constantSource =
+            cast<ConstantSource>(updates.root->source)) {
+      for (const auto &[index, value] :
+           constantSource->constantValues->storage()) {
+        result = OrExpr::create(result, value);
+      }
+    }
   }
   for (const auto *un = updates.head.get(); un; un = un->next.get()) {
     result = OrExpr::create(result, un->value);
@@ -842,7 +852,7 @@ ref<Expr> ObjectStage::combineAll() const {
   return result;
 }
 
-void ObjectStage::updateAll(ref<Expr> updateExpr, bool isAdd) {
+void ObjectStage::updateAll(const ref<ConstantExpr> &updateExpr, bool isAdd) {
   std::vector<std::pair<size_t, ref<Expr>>> newKnownSymbolics;
   for (auto [index, value] : knownSymbolics->storage()) {
     ref<Expr> newValue =
@@ -851,11 +861,13 @@ void ObjectStage::updateAll(ref<Expr> updateExpr, bool isAdd) {
     newKnownSymbolics.emplace_back(index, value);
   }
 
-  ref<Expr> oldDefault = knownSymbolics->defaultV();
-  ref<Expr> newDefault =
-      isAdd ? OrExpr::create(oldDefault, updateExpr)
-            : AndExpr::create(oldDefault, NotExpr::create(updateExpr));
-  knownSymbolics->reset(std::move(newDefault));
+  if (knownSymbolics->defaultV()) {
+    ref<Expr> oldDefault = knownSymbolics->defaultV();
+    ref<Expr> newDefault =
+        isAdd ? OrExpr::create(oldDefault, updateExpr)
+              : AndExpr::create(oldDefault, NotExpr::create(updateExpr));
+    knownSymbolics->reset(std::move(newDefault));
+  }
 
   for (auto [index, value] : newKnownSymbolics) {
     knownSymbolics->store(index, value);
@@ -868,7 +880,28 @@ void ObjectStage::updateAll(ref<Expr> updateExpr, bool isAdd) {
               : AndExpr::create(un->value, NotExpr::create(updateExpr));
     newUpdates.emplace_back(un->index, newValue);
   }
-  updates = UpdateList(nullptr, nullptr);
+
+  const Array *array = nullptr;
+  if (updates.root) {
+    if (ref<ConstantSource> constantSource =
+            cast<ConstantSource>(updates.root->source)) {
+      SparseStorage<ref<ConstantExpr>> *newStorage = constructStorage(
+          size, ConstantExpr::create(0, width), MaxFixedSizeStructureSize);
+
+      for (const auto &[index, value] :
+           constantSource->constantValues->storage()) {
+        ref<ConstantExpr> newValue =
+            isAdd ? OrExpr::create(value, updateExpr)
+                  : AndExpr::create(value, NotExpr::create(updateExpr));
+        newStorage->store(index, newValue);
+      }
+
+      array = Array::create(size, SourceBuilder::constant(newStorage),
+                            Expr::Int32, width);
+    }
+  }
+
+  updates = UpdateList(array, nullptr);
   for (auto [index, value] : newUpdates) {
     updates.extend(index, value);
   }

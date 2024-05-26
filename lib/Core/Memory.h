@@ -271,7 +271,7 @@ public:
   void reset(ref<Expr> updateForDefault, bool isAdd);
 
   ref<Expr> combineAll() const;
-  void updateAll(ref<Expr> updateExpr, bool isAdd);
+  void updateAll(const ref<ConstantExpr> &updateExpr, bool isAdd);
 
 private:
   const UpdateList &getUpdates() const;
@@ -361,8 +361,7 @@ public:
   KType *getDynamicType() const;
 
   ref<Expr> readTaint() const { return taintOS.combineAll(); }
-  void updateTaint(ref<Expr> updateForTaint, bool isAdd) {
-    //    resetTaint(updateForTaint, isAdd);
+  void updateTaint(const ref<ConstantExpr> &updateForTaint, bool isAdd) {
     taintOS.updateAll(updateForTaint, isAdd);
   }
 
