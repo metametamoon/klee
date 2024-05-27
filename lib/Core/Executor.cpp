@@ -5030,8 +5030,9 @@ void Executor::terminateStateOnTargetError(ExecutionState &state,
 void Executor::terminateStateOnTargetTaintError(ExecutionState &state,
                                                 uint64_t hits, size_t sink) {
   std::string error = "Taint error:";
-  const auto &sinkData = annotationsData.taintAnnotation.hits.at(sink);
-  for (size_t source = 0; source < annotationsData.taintAnnotation.sources.size(); source++) {
+  const auto &sinkData = annotationsData.taintAnnotation.hits[sink];
+  for (size_t source = 0;
+       source < annotationsData.taintAnnotation.sources.size(); source++) {
     if ((hits >> source) & 1u) {
       error += " " + annotationsData.taintAnnotation.rules[sinkData.at(source)];
     }
@@ -5041,8 +5042,8 @@ void Executor::terminateStateOnTargetTaintError(ExecutionState &state,
       state, ReachWithError(ReachWithErrorType::MaybeTaint, error));
 
   terminateStateOnProgramError(
-      state, new ErrorEvent(locationOf(state), StateTerminationType::Taint,
-                            error));
+      state,
+      new ErrorEvent(locationOf(state), StateTerminationType::Taint, error));
 }
 
 void Executor::terminateStateOnError(ExecutionState &state,
@@ -5550,6 +5551,8 @@ void Executor::executeChangeTaintSource(ExecutionState &state,
                                         ref<PointerExpr> address,
                                         uint64_t source, bool isAdd) {
   address = optimizer.optimizeExpr(address, true);
+  ref<PointerExpr> base = PointerExpr::create(
+      address->getBase(), address->getBase(), address->getTaint());
   ref<Expr> isNullPointer = Expr::createIsZero(address->getValue());
   StatePair zeroPointer =
       forkInternal(state, isNullPointer, BranchType::ResolvePointer);
@@ -5562,8 +5565,8 @@ void Executor::executeChangeTaintSource(ExecutionState &state,
   }
   if (zeroPointer.second) { // address != 0
     ExactResolutionList rl;
-    resolveExact(*zeroPointer.second, address,
-                 typeSystemManager->getUnknownType(), rl, "сhangeTaintSource");
+    resolveExact(*zeroPointer.second, base, typeSystemManager->getUnknownType(),
+                 rl, "сhangeTaintSource");
     for (Executor::ExactResolutionList::iterator it = rl.begin(), ie = rl.end();
          it != ie; ++it) {
       const MemoryObject *mo = it->first;
@@ -5589,6 +5592,8 @@ void Executor::executeCheckTaintSource(ExecutionState &state,
                                        ref<PointerExpr> address,
                                        uint64_t source) {
   address = optimizer.optimizeExpr(address, true);
+  ref<PointerExpr> base = PointerExpr::create(
+      address->getBase(), address->getBase(), address->getTaint());
   ref<Expr> isNullPointer = Expr::createIsZero(address->getValue());
   StatePair zeroPointer =
       forkInternal(state, isNullPointer, BranchType::ResolvePointer);
@@ -5601,8 +5606,8 @@ void Executor::executeCheckTaintSource(ExecutionState &state,
   }
   if (zeroPointer.second) {
     ExactResolutionList rl;
-    resolveExact(*zeroPointer.second, address,
-                 typeSystemManager->getUnknownType(), rl, "checkTaintSource");
+    resolveExact(*zeroPointer.second, base, typeSystemManager->getUnknownType(),
+                 rl, "checkTaintSource");
 
     for (Executor::ExactResolutionList::iterator it = rl.begin(), ie = rl.end();
          it != ie; ++it) {
@@ -5629,6 +5634,8 @@ void Executor::executeGetTaintHits(ExecutionState &state,
   }
 
   address = optimizer.optimizeExpr(address, true);
+  ref<PointerExpr> base = PointerExpr::create(
+      address->getBase(), address->getBase(), address->getTaint());
   ref<Expr> isNullPointer = Expr::createIsZero(address->getValue());
   StatePair zeroPointer =
       forkInternal(state, isNullPointer, BranchType::ResolvePointer);
@@ -5641,8 +5648,8 @@ void Executor::executeGetTaintHits(ExecutionState &state,
   }
   if (zeroPointer.second) {
     ExactResolutionList rl;
-    resolveExact(*zeroPointer.second, address,
-                 typeSystemManager->getUnknownType(), rl, "getTaintHits");
+    resolveExact(*zeroPointer.second, base, typeSystemManager->getUnknownType(),
+                 rl, "getTaintHits");
 
     for (Executor::ExactResolutionList::iterator it = rl.begin(), ie = rl.end();
          it != ie; ++it) {

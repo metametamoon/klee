@@ -165,7 +165,7 @@ void klee_make_mock(void *ret_array, size_t ret_nbytes, const char *fname) {
 }
 
 // TODO: add for tests
-//void klee_make_mock_all(void *ret_array, const char *fname);
+//void klee_make_mock_all(void *ret_array, const char *fname) {}
 //void klee_add_taint(void *array, size_t taint_source) {}
 //void klee_clear_taint(void *array, size_t taint_source) {}
 //bool klee_check_taint_source(void *array, size_t taint_source) {}
