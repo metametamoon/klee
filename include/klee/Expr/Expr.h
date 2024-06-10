@@ -1739,7 +1739,7 @@ public:
 
   bool isKnownValue() const { return getBase()->isZero(); }
 
-  ref<ConstantExpr> combineTaints(const ref<PointerExpr> &RHS) {
+  ref<Expr> combineTaints(const ref<PointerExpr> &RHS) {
     return Expr::combineTaints(getTaint(), RHS->getTaint());
   }
 

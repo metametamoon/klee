@@ -140,12 +140,7 @@ Free::Free(const std::string &str) : Unknown(str) {
 Kind Free::getKind() const { return Kind::Free; }
 
 Taint::Taint(const std::string &str) : Unknown(str) {
-  if (!rawOffset.empty()) {
-    klee_error("Annotation Taint: Incorrect offset format, must be empty");
-  }
-
   taintType = rawValue.substr(0, rawValue.find(':'));
-  // TODO: in the future, support typeless annotations (meaning all types)
   if (taintType.empty()) {
     klee_error("Annotation Taint: Incorrect value format, must has taint type");
   }
@@ -166,7 +161,7 @@ TaintOutput::TaintOutput(const std::string &str) : Taint(str) {}
 Kind TaintOutput::getKind() const { return Kind::TaintOutput; }
 
 /*
- * Format: TaintPropagation::{type}:{data}
+ * Format: TaintPropagation:{offset}:{type}:{data}
  */
 
 TaintPropagation::TaintPropagation(const std::string &str) : Taint(str) {
@@ -201,7 +196,7 @@ TaintPropagation::TaintPropagation(const std::string &str) : Taint(str) {
 Kind TaintPropagation::getKind() const { return Kind::TaintPropagation; }
 
 /*
- * Format: TaintSink::{type}
+ * Format: TaintSink:{offset}:{type}
  */
 
 TaintSink::TaintSink(const std::string &str) : Taint(str) {}

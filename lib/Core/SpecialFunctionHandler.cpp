@@ -1299,9 +1299,15 @@ void SpecialFunctionHandler::handleAddTaint(klee::ExecutionState &state,
   }
 
   uint64_t taintSource = dyn_cast<ConstantExpr>(arguments[1])->getZExtValue();
-//  printf("klee_add_taint source: %zu\n", taintSource);
-  executor.executeChangeTaintSource(
-      state, target, executor.makePointer(arguments[0]), taintSource, true);
+
+  ref<PointerExpr> pointer = executor.makePointer(arguments[0]);
+  if (auto *p = dyn_cast<PointerExpr>(arguments[0])) {
+    if (p->isKnownValue()) {
+      pointer =
+          PointerExpr::create(p->getValue(), p->getValue(), p->getTaint());
+    }
+  }
+  executor.executeChangeTaintSource(state, target, pointer, taintSource, true);
 }
 
 void SpecialFunctionHandler::handleClearTaint(
@@ -1315,9 +1321,15 @@ void SpecialFunctionHandler::handleClearTaint(
   }
 
   uint64_t taintSource = dyn_cast<ConstantExpr>(arguments[1])->getZExtValue();
-//  printf("klee_clear_taint source: %zu\n", taintSource);
-  executor.executeChangeTaintSource(
-      state, target, executor.makePointer(arguments[0]), taintSource, false);
+
+  ref<PointerExpr> pointer = executor.makePointer(arguments[0]);
+  if (auto *p = dyn_cast<PointerExpr>(arguments[0])) {
+    if (p->isKnownValue()) {
+      pointer =
+          PointerExpr::create(p->getValue(), p->getValue(), p->getTaint());
+    }
+  }
+  executor.executeChangeTaintSource(state, target, pointer, taintSource, false);
 }
 
 void SpecialFunctionHandler::handleCheckTaintSource(
@@ -1331,9 +1343,15 @@ void SpecialFunctionHandler::handleCheckTaintSource(
   }
 
   uint64_t taintSource = dyn_cast<ConstantExpr>(arguments[1])->getZExtValue();
-//  printf("klee_check_taint_source source: %zu\n", taintSource);
-  executor.executeCheckTaintSource(
-      state, target, executor.makePointer(arguments[0]), taintSource);
+
+  ref<PointerExpr> pointer = executor.makePointer(arguments[0]);
+  if (auto *p = dyn_cast<PointerExpr>(arguments[0])) {
+    if (p->isKnownValue()) {
+      pointer =
+          PointerExpr::create(p->getValue(), p->getValue(), p->getTaint());
+    }
+  }
+  executor.executeCheckTaintSource(state, target, pointer, taintSource);
 }
 
 void SpecialFunctionHandler::handleGetTaintHits(
@@ -1347,9 +1365,15 @@ void SpecialFunctionHandler::handleGetTaintHits(
   }
 
   uint64_t taintSink = dyn_cast<ConstantExpr>(arguments[1])->getZExtValue();
-//  printf("klee_get_taint_hits sink: %zu\n", taintSink);
-  executor.executeGetTaintHits(state, target,
-                               executor.makePointer(arguments[0]), taintSink);
+
+  ref<PointerExpr> pointer = executor.makePointer(arguments[0]);
+  if (auto *p = dyn_cast<PointerExpr>(arguments[0])) {
+    if (p->isKnownValue()) {
+      pointer =
+          PointerExpr::create(p->getValue(), p->getValue(), p->getTaint());
+    }
+  }
+  executor.executeGetTaintHits(state, target, pointer, taintSink);
 }
 
 void SpecialFunctionHandler::handleTaintHit(klee::ExecutionState &state,
@@ -1364,6 +1388,5 @@ void SpecialFunctionHandler::handleTaintHit(klee::ExecutionState &state,
 
   uint64_t taintHits = dyn_cast<ConstantExpr>(arguments[0])->getZExtValue();
   size_t taintSink = dyn_cast<ConstantExpr>(arguments[1])->getZExtValue();
-//  printf("klee_taint_hit hits: %zu sink: %zu\n", taintHits, taintSink);
   executor.terminateStateOnTargetTaintError(state, taintHits, taintSink);
 }
