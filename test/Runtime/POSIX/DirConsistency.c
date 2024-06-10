@@ -35,10 +35,10 @@ int main(int argc, char **argv) {
   int res = stat("A", &s);
   int hasA = !(res != 0 && errno == ENOENT);
 
-  //printf("sizeof(dirent) = %d\n", sizeof(struct dirent));
-  //printf("sizeof(dirent64) = %d\n", sizeof(struct dirent64));
+  // printf("sizeof(dirent) = %d\n", sizeof(struct dirent));
+  // printf("sizeof(dirent64) = %d\n", sizeof(struct dirent64));
 
-  //printf("\"A\" exists: %d\n", hasA);
+  // printf("\"A\" exists: %d\n", hasA);
 
   DIR *d = opendir(".");
   assert(d);
@@ -60,7 +60,7 @@ int main(int argc, char **argv) {
 
   closedir(d);
 
-  //printf("found A: %d\n", foundA);
+  // printf("found A: %d\n", foundA);
 
   // Ensure atomic write
   char buf[64];

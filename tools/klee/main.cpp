@@ -224,12 +224,12 @@ cl::OptionCategory ReplayCat("Replaying options",
 
 cl::list<std::string>
     ReplayKTestFile("replay-ktest-file",
-                    cl::desc("Specify a ktest file to use for replay"),
-                    cl::value_desc("ktest file"), cl::cat(ReplayCat));
+                    cl::desc("Specify a .ktest file to use for replay"),
+                    cl::value_desc(".ktest file"), cl::cat(ReplayCat));
 
 cl::list<std::string>
     ReplayKTestDir("replay-ktest-dir",
-                   cl::desc("Specify a directory to replay ktest files from"),
+                   cl::desc("Specify a directory to replay .ktest files from"),
                    cl::value_desc("output directory"), cl::cat(ReplayCat));
 
 cl::opt<std::string> ReplayPathFile("replay-path",
@@ -1089,14 +1089,14 @@ linkWithUclibc(StringRef libDir, std::string opt_suffix,
 }
 
 int main(int argc, char **argv, char **envp) {
-  atexit(llvm_shutdown); // Call llvm_shutdown() on exit.
+  atexit(llvm_shutdown); // Call llvm_shutdown() on exit
 
-#if LLVM_VERSION_CODE >= LLVM_VERSION(13, 0)
-  KCommandLine::HideOptions(llvm::cl::getGeneralCategory());
-#else
-  KCommandLine::HideOptions(llvm::cl::GeneralCategory);
-#endif
-
+  KCommandLine::KeepOnlyCategories(
+      {&ChecksCat,   &DebugCat,   &ExtCallsCat, &ExprCat,
+       &LinkCat,     &MemoryCat,  &MergeCat,    &MiscCat,
+       &ModuleCat,   &ReplayCat,  &SearchCat,   &SeedingCat,
+       &SolvingCat,  &StartCat,   &StatsCat,    &TerminationCat,
+       &TestCaseCat, &TestGenCat, &ExecTreeCat, &ExecTreeCat});
   llvm::InitializeNativeTarget();
 
   parseArguments(argc, argv);
@@ -1174,6 +1174,10 @@ int main(int argc, char **argv, char **envp) {
   // Load the bytecode...
   std::string errorMsg;
   LLVMContext ctx;
+#if LLVM_VERSION_CODE == LLVM_VERSION(15, 0)
+  // We have to force the upgrade to opaque pointer explicitly for LLVM 15.
+  ctx.setOpaquePointers(true);
+#endif
   std::vector<std::unique_ptr<llvm::Module>> loadedModules;
   if (!klee::loadFile(InputFile, ctx, loadedModules, errorMsg)) {
     klee_error("error loading program '%s': %s", InputFile.c_str(),

@@ -403,7 +403,7 @@ public:
                             std::vector<std::vector<unsigned char>> &values,
                             bool &hasSolution);
   SolverRunStatus getOperationStatusCode();
-  char *getConstraintLog(const Query &);
+  std::string getConstraintLog(const Query &) override;
   void setCoreSolverTimeout(time::Span timeout);
 };
 
@@ -551,7 +551,7 @@ SolverImpl::SolverRunStatus IndependentSolver::getOperationStatusCode() {
   return solver->impl->getOperationStatusCode();
 }
 
-char *IndependentSolver::getConstraintLog(const Query &query) {
+std::string IndependentSolver::getConstraintLog(const Query &query) {
   return solver->impl->getConstraintLog(query);
 }
 

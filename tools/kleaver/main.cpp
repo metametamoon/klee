@@ -376,11 +376,7 @@ static bool printInputAsSMTLIBv2(const char *Filename, const MemoryBuffer *MB,
 }
 
 int main(int argc, char **argv) {
-#if LLVM_VERSION_CODE >= LLVM_VERSION(13, 0)
-  KCommandLine::HideOptions(llvm::cl::getGeneralCategory());
-#else
-  KCommandLine::HideOptions(llvm::cl::GeneralCategory);
-#endif
+  KCommandLine::KeepOnlyCategories({&ExprCat, &SolvingCat});
 
   bool success = true;
 

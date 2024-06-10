@@ -8,6 +8,7 @@
 // REPLAY: Yes
 
 #ifdef KLEE_EXECUTION
+#include "klee/klee.h"
 #define EXIT klee_silent_exit
 #else
 #include <stdlib.h>
@@ -30,7 +31,7 @@ int main(int argc, char **argv) {
   n = read(fd, buf, 3);
   assert(n == 3);
 
-  /* Generate a single test, with the first three chars 
+  /* Generate a single test, with the first three chars
      in the file 'abc' */
   if (buf[0] == 'a' && buf[1] == 'b' && buf[2] == 'c')
     printf("Yes\n");

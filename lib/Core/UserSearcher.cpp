@@ -20,7 +20,7 @@
 using namespace llvm;
 using namespace klee;
 
-namespace {
+namespace klee {
 llvm::cl::OptionCategory
     SearchCat("Search options", "These options control the search heuristic.");
 
@@ -75,9 +75,7 @@ cl::opt<std::string> BatchTime(
              "--use-batching-search.  Set to 0s to disable (default=5s)"),
     cl::init("5s"), cl::cat(SearchCat));
 
-} // namespace
-
-void klee::initializeSearchOptions() {
+void initializeSearchOptions() {
   // default values
   if (CoreSearch.empty()) {
     if (UseMerge) {
@@ -91,7 +89,7 @@ void klee::initializeSearchOptions() {
   }
 }
 
-bool klee::userSearcherRequiresMD2U() {
+bool userSearcherRequiresMD2U() {
   return (std::find(CoreSearch.begin(), CoreSearch.end(),
                     Searcher::NURS_MD2U) != CoreSearch.end() ||
           std::find(CoreSearch.begin(), CoreSearch.end(),
@@ -104,8 +102,15 @@ bool klee::userSearcherRequiresMD2U() {
               CoreSearch.end());
 }
 
+bool userSearcherRequiresInMemoryExecutionTree() {
+  return std::find(CoreSearch.begin(), CoreSearch.end(),
+                   Searcher::RandomPath) != CoreSearch.end();
+}
+
+} // namespace klee
+
 Searcher *getNewSearcher(Searcher::CoreSearchType type, RNG &rng,
-                         PTree &processTree) {
+                         InMemoryExecutionTree *executionTree) {
   Searcher *searcher = nullptr;
   switch (type) {
   case Searcher::DFS:
@@ -118,7 +123,7 @@ Searcher *getNewSearcher(Searcher::CoreSearchType type, RNG &rng,
     searcher = new RandomSearcher(rng);
     break;
   case Searcher::RandomPath:
-    searcher = new RandomPathSearcher(processTree, rng);
+    searcher = new RandomPathSearcher(executionTree, rng);
     break;
   case Searcher::NURS_CovNew:
     searcher =
@@ -152,17 +157,16 @@ Searcher *getNewSearcher(Searcher::CoreSearchType type, RNG &rng,
 }
 
 Searcher *klee::constructUserSearcher(Executor &executor) {
-
-  Searcher *searcher =
-      getNewSearcher(CoreSearch[0], executor.theRNG, *executor.processTree);
+  auto *etree =
+      llvm::dyn_cast<InMemoryExecutionTree>(executor.executionTree.get());
+  Searcher *searcher = getNewSearcher(CoreSearch[0], executor.theRNG, etree);
 
   if (CoreSearch.size() > 1) {
     std::vector<Searcher *> s;
     s.push_back(searcher);
 
     for (unsigned i = 1; i < CoreSearch.size(); i++)
-      s.push_back(getNewSearcher(CoreSearch[i], executor.theRNG,
-                                 *executor.processTree));
+      s.push_back(getNewSearcher(CoreSearch[i], executor.theRNG, etree));
 
     searcher = new InterleavedSearcher(s);
   }

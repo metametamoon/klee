@@ -4,10 +4,12 @@
 // RUN: FileCheck --input-file=%t.log %s
 
 /* This test case captures a bug where two distinct division
-*  by zero errors are treated as the same error and so
-*  only one test case is generated EVEN IF THERE ARE MULTIPLE 
-*  DISTINCT ERRORS!
-*/
+ *  by zero errors are treated as the same error and so
+ *  only one test case is generated EVEN IF THERE ARE MULTIPLE
+ *  DISTINCT ERRORS!
+ */
+
+#include "klee/klee.h"
 int main() {
   unsigned int a = 15;
   unsigned int b = 15;

@@ -38,6 +38,10 @@ cl::opt<bool> DebugLogStateMerge(
     "debug-log-state-merge", cl::init(false),
     cl::desc("Debug information for underlying state merging (default=false)"),
     cl::cat(MergeCat));
+
+}
+namespace klee {
+extern cl::opt<bool> SingleObjectResolution;
 }
 
 /***/
@@ -120,6 +124,28 @@ void ExecutionState::popFrame() {
     addressSpace.unbindObject(memoryObject);
   }
   stack.pop_back();
+}
+
+void ExecutionState::deallocate(const MemoryObject *mo) {
+  if (SingleObjectResolution) {
+    auto mos_it = base_mos.find(mo->address);
+    if (mos_it != base_mos.end()) {
+      for (auto it = mos_it->second.begin(); it != mos_it->second.end(); ++it) {
+        base_addrs.erase(*it);
+      }
+      base_mos.erase(mos_it->first);
+    }
+  }
+
+  if (!stackAllocator || !heapAllocator)
+    return;
+
+  auto address = reinterpret_cast<void *>(mo->address);
+  if (mo->isLocal) {
+    stackAllocator.free(address, std::max(mo->size, mo->alignment));
+  } else {
+    heapAllocator.free(address, std::max(mo->size, mo->alignment));
+  }
 }
 
 void ExecutionState::addSymbolic(const MemoryObject *mo, const Array *array) {

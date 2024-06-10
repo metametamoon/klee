@@ -1,6 +1,6 @@
 /* This test is for the alignment of variadic arguments.  In
    particular, on x86 arguments > 8 bytes (long double arguments in
-   test1) should be 16-byte aligned, unless they are passed byval with 
+   test1) should be 16-byte aligned, unless they are passed byval with
    specified alignment */
 
 // RUN: %clang %s -emit-llvm %O0opt -c -g -o %t1.bc

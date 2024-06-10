@@ -16,6 +16,7 @@ class Searcher;
 
 // XXX gross, should be on demand?
 bool userSearcherRequiresMD2U();
+bool userSearcherRequiresInMemoryExecutionTree();
 
 void initializeSearchOptions();
 

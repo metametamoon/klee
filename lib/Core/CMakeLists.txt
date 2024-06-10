@@ -13,13 +13,14 @@ add_library(kleeCore
   Context.cpp
   CoreStats.cpp
   ExecutionState.cpp
+  ExecutionTree.cpp
+  ExecutionTreeWriter.cpp
   Executor.cpp
   ExecutorUtil.cpp
   ExternalDispatcher.cpp
   ImpliedValue.cpp
   Memory.cpp
   MemoryManager.cpp
-  PTree.cpp
   Searcher.cpp
   SeedInfo.cpp
   SpecialFunctionHandler.cpp

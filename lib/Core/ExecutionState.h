@@ -31,10 +31,10 @@ namespace klee {
 class Array;
 class CallPathNode;
 struct Cell;
+class ExecutionTreeNode;
 struct KFunction;
 struct KInstruction;
 class MemoryObject;
-class PTreeNode;
 struct InstructionInfo;
 
 llvm::raw_ostream &operator<<(llvm::raw_ostream &os, const MemoryMap &mm);
@@ -200,9 +200,9 @@ public:
   /// @brief Set containing which lines in which files are covered by this state
   std::map<const std::string *, std::set<std::uint32_t>> coveredLines;
 
-  /// @brief Pointer to the process tree of the current state
-  /// Copies of ExecutionState should not copy ptreeNode
-  PTreeNode *ptreeNode = nullptr;
+  /// @brief Pointer to the execution tree of the current state
+  /// Copies of ExecutionState should not copy executionTreeNode
+  ExecutionTreeNode *executionTreeNode = nullptr;
 
   /// @brief Ordered list of symbolics: used to generate test cases.
   //
@@ -242,6 +242,13 @@ public:
 
   /// @brief Disables forking for this state. Set by user code
   bool forkDisabled = false;
+
+  /// @brief Mapping symbolic address expressions to concrete base addresses
+  using base_addrs_t = std::map<ref<Expr>, ref<ConstantExpr>>;
+  base_addrs_t base_addrs;
+  /// @brief Mapping MemoryObject addresses to refs used in the base_addrs map
+  using base_mo_t = std::map<uint64_t, std::set<ref<Expr>>>;
+  base_mo_t base_mos;
 
 public:
 #ifdef KLEE_UNITTEST

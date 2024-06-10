@@ -72,7 +72,7 @@ class KModule;
 class MemoryManager;
 class MemoryObject;
 class ObjectState;
-class PTree;
+class ExecutionTree;
 class Searcher;
 class SeedInfo;
 class SpecialFunctionHandler;
@@ -94,6 +94,7 @@ class Executor : public Interpreter {
   friend class SpecialFunctionHandler;
   friend class StatsTracker;
   friend class MergeHandler;
+  friend class ObjectState;
   friend klee::Searcher *klee::constructUserSearcher(Executor &executor);
 
 public:
@@ -115,7 +116,7 @@ private:
   TreeStreamWriter *pathWriter, *symPathWriter;
   SpecialFunctionHandler *specialFunctionHandler;
   TimerGroup timers;
-  std::unique_ptr<PTree> processTree;
+  std::unique_ptr<ExecutionTree> executionTree;
 
   /// Used to track states that have been added during the current
   /// instructions step.
@@ -369,14 +370,21 @@ private:
   /// value). Otherwise return the original expression.
   ref<Expr> toUnique(const ExecutionState &state, ref<Expr> &e);
 
-  /// Return a constant value for the given expression, forcing it to
-  /// be constant in the given state by adding a constraint if
+  /// Return a constant value for the given expression.  If \param concretize is
+  /// true, the expression is forced to be a constant by adding a constraint if
   /// necessary. Note that this function breaks completeness and
   /// should generally be avoided.
   ///
-  /// \param purpose An identify string to printed in case of concretization.
+  /// \param reason A documentation string stating the reason for concretization
   ref<klee::ConstantExpr> toConstant(ExecutionState &state, ref<Expr> e,
-                                     const char *purpose);
+                                     const std::string &reason,
+                                     bool concretize = true);
+
+  /// Evaluate the given expression under each seed, and return the
+  /// first one that results in a constant, if such a seed exist.  Otherwise,
+  /// return the non-constant evaluation of the expression under one of the
+  /// seeds.
+  ref<klee::ConstantExpr> getValueFromSeeds(ExecutionState &state, ref<Expr> e);
 
   /// Bind a constant value for e to the given target. NOTE: This
   /// function may fork state if the state has multiple seeds.
@@ -394,7 +402,7 @@ private:
 
   /// Remove state from queue and delete state. This function should only be
   /// used in the termination functions below.
-  void terminateState(ExecutionState &state);
+  void terminateState(ExecutionState &state, StateTerminationType reason);
 
   /// Call exit handler and terminate state normally
   /// (end of execution path)
@@ -448,7 +456,8 @@ private:
   /// Call error handler and terminate state for user errors
   /// (e.g. wrong usage of klee.h API)
   void terminateStateOnUserError(ExecutionState &state,
-                                 const llvm::Twine &message);
+                                 const llvm::Twine &message,
+                                 bool writeErr = true);
 
   /// bindModuleConstants - Initialize the module constant table.
   void bindModuleConstants();
@@ -481,7 +490,7 @@ private:
 
   /// Only for debug purposes; enable via debugger or klee-control
   void dumpStates();
-  void dumpPTree();
+  void dumpExecutionTree();
 
 public:
   Executor(llvm::LLVMContext &ctx, const InterpreterOptions &opts,
