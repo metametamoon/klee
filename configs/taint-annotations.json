@@ -16,5 +16,11 @@
       "source": "UntrustedSource",
       "rule": "TAINT.STRING.CLI"
     }
+  ],
+  "PathString": [
+    {
+      "source": "UntrustedSource",
+      "rule": "TAINT.STRING.PATH"
+    }
   ]
 }

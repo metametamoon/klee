@@ -596,9 +596,8 @@ void MockBuilder::buildAnnotationForExternalFunctionArgs(
   if (!flag) {
     klee_warning("Annotation: can't align function arguments %s",
                  func->getName().str().c_str());
-    return;
   }
-  for (size_t i = 0; i < statements.size(); i++) {
+  for (size_t i = 0; i < std::min(statements.size(), func->arg_size()); i++) {
 #if LLVM_VERSION_CODE >= LLVM_VERSION(10, 0)
     const auto arg = func->getArg(i);
 #else
