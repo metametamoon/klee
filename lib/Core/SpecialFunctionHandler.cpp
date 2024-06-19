@@ -683,7 +683,8 @@ void SpecialFunctionHandler::handleGetObjSize(
   Executor::ExactResolutionList rl;
 
   auto type = target->inst->getOperand(0)->getType();
-  unsigned bytes = executor.getWidthForLLVMType(type->getPointerElementType());
+  unsigned bytes = Expr::getMinBytesForWidth(
+      executor.getWidthForLLVMType(type->getPointerElementType()));
 
   executor.resolveExact(state, arguments[0],
                         executor.typeSystemManager->getUnknownType(), bytes, rl,
@@ -771,8 +772,8 @@ void SpecialFunctionHandler::handleRealloc(ExecutionState &state,
   ref<Expr> size = arguments[1];
 
   auto type = target->inst->getOperand(0)->getType();
-  unsigned baseBytes =
-      executor.getWidthForLLVMType(type->getPointerElementType());
+  unsigned baseBytes = Expr::getMinBytesForWidth(
+      executor.getWidthForLLVMType(type->getPointerElementType()));
 
   Executor::StatePair zeroSize = executor.forkInternal(
       state, Expr::createIsZero(size), BranchType::Realloc);
@@ -898,8 +899,8 @@ void SpecialFunctionHandler::handleMakeSymbolic(
   }
 
   auto type = target->inst->getOperand(0)->getType();
-  unsigned baseBytes =
-      executor.getWidthForLLVMType(type->getPointerElementType());
+  unsigned baseBytes = Expr::getMinBytesForWidth(
+      executor.getWidthForLLVMType(type->getPointerElementType()));
 
   Executor::ExactResolutionList rl;
   executor.resolveExact(state, arguments[0],
@@ -956,8 +957,8 @@ void SpecialFunctionHandler::handleMarkGlobal(
          "invalid number of arguments to klee_mark_global");
 
   auto type = target->inst->getOperand(0)->getType();
-  unsigned baseBytes =
-      executor.getWidthForLLVMType(type->getPointerElementType());
+  unsigned baseBytes = Expr::getMinBytesForWidth(
+      executor.getWidthForLLVMType(type->getPointerElementType()));
 
   Executor::ExactResolutionList rl;
   executor.resolveExact(state, arguments[0],
