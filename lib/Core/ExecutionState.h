@@ -13,7 +13,7 @@
 #include "AddressSpace.h"
 
 #include "klee/ADT/FixedSizeStorageAdapter.h"
-#include "klee/ADT/ImmutableList.h"
+#include "klee/ADT/ImmutableMap.h"
 #include "klee/ADT/ImmutableSet.h"
 #include "klee/ADT/PersistentMap.h"
 #include "klee/ADT/PersistentSet.h"
@@ -246,17 +246,21 @@ struct CleanupPhaseUnwindingInformation : public UnwindingInformation {
 
 struct Symbolic {
   ref<const MemoryObject> memoryObject;
-  const Array *array;
-  KType *type;
-  Symbolic(ref<const MemoryObject> mo, const Array *a, KType *t)
-      : memoryObject(std::move(mo)), array(a), type(t) {}
+  ref<const ObjectState> objectState;
+  std::size_t num;
+
+  Symbolic(const MemoryObject *memObj = nullptr,
+           const ObjectState *objState = nullptr, std::size_t num = 0)
+      : memoryObject(memObj), objectState(objState), num(num) {}
+
+  const Array *array() const {
+    assert(!memoryObject.isNull());
+    return objectState->valueOS.updates.root;
+  }
+  const KType *type() const { return objectState->getDynamicType(); }
+
   Symbolic(const Symbolic &other) = default;
   Symbolic &operator=(const Symbolic &other) = default;
-
-  friend bool operator==(const Symbolic &lhs, const Symbolic &rhs) {
-    return lhs.memoryObject == rhs.memoryObject && lhs.array == rhs.array &&
-           lhs.type == rhs.type;
-  }
 };
 
 struct MemorySubobject {
@@ -360,8 +364,7 @@ public:
   /// Copies of ExecutionState should not copy ptreeNode
   PTreeNode *ptreeNode = nullptr;
 
-  /// @brief Ordered list of symbolics: used to generate test cases.
-  ImmutableList<Symbolic> symbolics;
+  ImmutableMap<const MemoryObject *, Symbolic, MemoryObjectLT> symbolics;
 
   /// @brief map from memory accesses to accessed objects and access offsets.
   ExprHashMap<std::set<ref<const MemoryObject>>> resolvedPointers;
@@ -450,13 +453,16 @@ public:
   ExecutionState *empty();
   ExecutionState *copy() const;
 
-  bool inSymbolics(const MemoryObject *mo) const;
+  bool inSymbolics(const MemoryObject &mo) const;
 
   void pushFrame(KInstIterator caller, KFunction *kf);
   void popFrame();
 
-  void addSymbolic(const MemoryObject *mo, const Array *array,
-                   KType *type = nullptr);
+  void addSymbolic(const MemoryObject &mo, const ObjectState &os);
+  void replaceSymbolic(const MemoryObject &mo, ObjectState &os);
+  void replaceMemoryObjectFromSymbolics(const MemoryObject &oldMemObj,
+                                        const MemoryObject &newMemObj,
+                                        ObjectState &newObjState);
 
   ref<const MemoryObject> findMemoryObject(const Array *array) const;
 

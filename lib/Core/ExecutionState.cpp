@@ -112,7 +112,7 @@ InfoStackFrame::InfoStackFrame(KFunction *kf) : kf(kf) {}
 /***/
 ExecutionState::ExecutionState()
     : initPC(nullptr), pc(nullptr), prevPC(nullptr), incomingBBIndex(-1),
-      depth(0), ptreeNode(nullptr), symbolics(), steppedInstructions(0),
+      depth(0), ptreeNode(nullptr), steppedInstructions(0),
       steppedMemoryInstructions(0), instsSinceCovNew(0),
       roundingMode(llvm::APFloat::rmNearestTiesToEven), coveredNew({}),
       coveredNewError(new box<bool>(false)), forkDisabled(false),
@@ -123,7 +123,7 @@ ExecutionState::ExecutionState()
 
 ExecutionState::ExecutionState(KFunction *kf)
     : initPC(kf->instructions), pc(initPC), prevPC(pc), incomingBBIndex(-1),
-      depth(0), ptreeNode(nullptr), symbolics(), steppedInstructions(0),
+      depth(0), ptreeNode(nullptr), steppedInstructions(0),
       steppedMemoryInstructions(0), instsSinceCovNew(0),
       roundingMode(llvm::APFloat::rmNearestTiesToEven), coveredNew({}),
       coveredNewError(new box<bool>(false)), forkDisabled(false),
@@ -135,7 +135,7 @@ ExecutionState::ExecutionState(KFunction *kf)
 
 ExecutionState::ExecutionState(KFunction *kf, KBlock *kb)
     : initPC(kb->instructions), pc(initPC), prevPC(pc), incomingBBIndex(-1),
-      depth(0), ptreeNode(nullptr), symbolics(), steppedInstructions(0),
+      depth(0), ptreeNode(nullptr), steppedInstructions(0),
       steppedMemoryInstructions(0), instsSinceCovNew(0),
       roundingMode(llvm::APFloat::rmNearestTiesToEven), coveredNew({}),
       coveredNewError(new box<bool>(false)), forkDisabled(false),
@@ -188,15 +188,6 @@ ExecutionState *ExecutionState::branch() {
   return falseState;
 }
 
-bool ExecutionState::inSymbolics(const MemoryObject *mo) const {
-  for (const auto &symbolic : symbolics) {
-    if (mo->id == symbolic.memoryObject->id) {
-      return true;
-    }
-  }
-  return false;
-}
-
 ExecutionState *ExecutionState::withStackFrame(KInstIterator caller,
                                                KFunction *kf) {
   ExecutionState *newState = new ExecutionState(*this);
@@ -247,19 +238,38 @@ void ExecutionState::popFrame() {
   stack.popFrame();
 }
 
-void ExecutionState::addSymbolic(const MemoryObject *mo, const Array *array,
-                                 KType *type) {
-  symbolics.push_back({mo, array, type});
+void ExecutionState::addSymbolic(const MemoryObject &mo,
+                                 const ObjectState &os) {
+  symbolics = symbolics.insert({&mo, Symbolic(&mo, &os, symbolics.size())});
+}
+
+void ExecutionState::replaceSymbolic(const MemoryObject &mo, ObjectState &os) {
+  auto &symbolic = *symbolics.find(&mo);
+  symbolics = symbolics.replace({&mo, Symbolic(&mo, &os, symbolic.second.num)});
 }
 
 ref<const MemoryObject>
 ExecutionState::findMemoryObject(const Array *array) const {
-  for (const auto &symbolic : symbolics) {
-    if (array == symbolic.array) {
-      return symbolic.memoryObject;
+  // FIXME: use hash map instead
+  for (auto &[mo, symbolic] : symbolics) {
+    if (array == symbolic.array()) {
+      return mo;
     }
   }
   return nullptr;
+}
+
+void ExecutionState::replaceMemoryObjectFromSymbolics(
+    const MemoryObject &oldMemObj, const MemoryObject &newMemObj,
+    ObjectState &newObjState) {
+  auto oldSymbolicNum = symbolics.find(&oldMemObj)->second.num;
+  symbolics = symbolics.remove(&oldMemObj);
+  symbolics = symbolics.insert(
+      {&newMemObj, Symbolic(&newMemObj, &newObjState, oldSymbolicNum)});
+}
+
+bool ExecutionState::inSymbolics(const MemoryObject &mo) const {
+  return symbolics.count(&mo) > 0;
 }
 
 bool ExecutionState::getBase(

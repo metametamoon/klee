@@ -214,6 +214,7 @@ public:
 };
 
 class ObjectStage {
+  friend struct Symbolic;
 private:
   using storage_ty = SparseStorage<ref<Expr>, OptionalRefEq<Expr>>;
   using bool_storage_ty = SparseStorage<bool>;
@@ -272,6 +273,7 @@ private:
   friend class AddressSpace;
   friend class ref<ObjectState>;
   friend class ref<const ObjectState>;
+  friend struct Symbolic;
 
   unsigned copyOnWriteOwner; // exclusively for AddressSpace
 

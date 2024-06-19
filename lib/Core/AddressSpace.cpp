@@ -221,7 +221,7 @@ public:
 
   bool operator()(const MemoryObject *mo, const ObjectState *os) const {
     bool result = !useTimestamps || mo->timestamp <= timestamp;
-    result = result && (!skipNotSymbolicObjects || state->inSymbolics(mo));
+    result = result && (!skipNotSymbolicObjects || state->inSymbolics(*mo));
     result = result && (!skipNotLazyInitialized || mo->isLazyInitialized);
     result = result && (!skipLocal || !mo->isLocal);
     result = result && (!skipGlobal || !mo->isGlobal);
@@ -431,17 +431,17 @@ void AddressSpace::copyOutConcrete(const MemoryObject *mo,
   }
 }
 
-bool AddressSpace::copyInConcretes(const Assignment &assignment) {
+bool AddressSpace::copyInConcretes(ExecutionState &state,
+                                   const Assignment &assignment) {
   for (auto &obj : objects) {
     const MemoryObject *mo = obj.first;
 
     if (!mo->isUserSpecified) {
       const auto &os = obj.second;
-
       if (ref<ConstantExpr> arrayConstantAddress =
               dyn_cast<ConstantExpr>(mo->getBaseExpr())) {
-        if (!copyInConcrete(mo, os.get(), arrayConstantAddress->getZExtValue(),
-                            assignment))
+        if (!copyInConcrete(state, mo, os.get(),
+                            arrayConstantAddress->getZExtValue(), assignment))
           return false;
       }
     }
@@ -450,8 +450,8 @@ bool AddressSpace::copyInConcretes(const Assignment &assignment) {
   return true;
 }
 
-bool AddressSpace::copyInConcrete(const MemoryObject *mo, const ObjectState *os,
-                                  uint64_t src_address,
+bool AddressSpace::copyInConcrete(ExecutionState &state, const MemoryObject *mo,
+                                  const ObjectState *os, uint64_t src_address,
                                   const Assignment &assignment) {
   AssignmentEvaluator evaluator(assignment, false);
   auto address = reinterpret_cast<std::uint8_t *>(src_address);
@@ -467,6 +467,9 @@ bool AddressSpace::copyInConcrete(const MemoryObject *mo, const ObjectState *os,
       return false;
     } else {
       ObjectState *wos = getWriteable(mo, os);
+      if (state.inSymbolics(*mo)) {
+        state.replaceSymbolic(*mo, *wos);
+      }
       for (size_t i = 0; i < moSize; i++) {
         wos->write(i, ConstantExpr::create(address[i], Expr::Int8));
       }

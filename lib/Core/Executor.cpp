@@ -5371,7 +5371,7 @@ void Executor::callExternalFunction(ExecutionState &state, KInstruction *target,
     return;
   }
 
-  if (!state.addressSpace.copyInConcretes(assignment)) {
+  if (!state.addressSpace.copyInConcretes(state, assignment)) {
     terminateStateOnExecError(state, "external modified read-only object",
                               StateTerminationType::External);
     return;
@@ -5380,7 +5380,7 @@ void Executor::callExternalFunction(ExecutionState &state, KInstruction *target,
 #ifndef WINDOWS
   // Update errno memory object with the errno value from the call
   int error = externalDispatcher->getLastErrno();
-  state.addressSpace.copyInConcrete(result.first, result.second,
+  state.addressSpace.copyInConcrete(state, result.first, result.second,
                                     (uint64_t)&error, assignment);
 #endif
 
@@ -5539,6 +5539,10 @@ void Executor::executeAlloc(ExecutionState &state, ref<Expr> size, bool isLocal,
 
       if (reallocFrom) {
         os->write(reallocFrom);
+        if (state.inSymbolics(*reallocFrom->getObject())) {
+          state.replaceMemoryObjectFromSymbolics(*reallocFrom->getObject(), *mo,
+                                                 *os);
+        }
         state.removePointerResolutions(reallocFrom->getObject());
         state.addressSpace.unbindObject(reallocFrom->getObject());
       }
@@ -5559,10 +5563,15 @@ void Executor::executeFree(ExecutionState &state, ref<PointerExpr> address,
           target, *zeroPointer.first,
           PointerExpr::create(Expr::createPointer(0), Expr::createPointer(0)));
   }
+
+  auto type = target->inst()->getOperand(0)->getType();
+  unsigned bytes = Expr::getMinBytesForWidth(
+      getWidthForLLVMType(type->getPointerElementType()));
+
   if (zeroPointer.second) { // address != 0
     ExactResolutionList rl;
     if (!resolveExact(*zeroPointer.second, address,
-                      typeSystemManager->getUnknownType(), rl, "free") &&
+                      typeSystemManager->getUnknownType(), bytes, rl, "free") &&
         guidanceKind == GuidanceKind::ErrorGuidance) {
       terminateStateOnTargetError(*zeroPointer.second,
                                   ReachWithError::DoubleFree);
@@ -5600,7 +5609,8 @@ void Executor::executeFree(ExecutionState &state, ref<PointerExpr> address,
 }
 
 bool Executor::resolveExact(ExecutionState &estate, ref<Expr> address,
-                            KType *type, ExactResolutionList &results,
+                            KType *type, unsigned bytes,
+                            ExactResolutionList &results,
                             const std::string &name) {
   ref<PointerExpr> pointer =
       PointerExpr::create(address->getValue(), address->getValue());
@@ -5649,7 +5659,7 @@ bool Executor::resolveExact(ExecutionState &estate, ref<Expr> address,
 
   /* We do not need this variable here, just a placeholder for resolve */
   [[maybe_unused]] bool success = resolveMemoryObjects(
-      state, pointer, type, state.prevPC, 0, rl, mayBeOutOfBound,
+      state, pointer, type, state.prevPC, bytes, rl, mayBeOutOfBound,
       hasLazyInitialized, incomplete,
       LazyInitialization == LazyInitializationPolicy::Only);
   assert(success);
@@ -5932,9 +5942,6 @@ MemoryObject *Executor::allocate(ExecutionState &state, ref<Expr> size,
 
   state.constraints.addSymcrete(sizeSymcrete);
   state.constraints.addSymcrete(addressSymcrete);
-  if (lazyInitializationSource) {
-    state.addSymbolic(mo, contentArray, type);
-  }
   return mo;
 }
 
@@ -6048,6 +6055,7 @@ bool Executor::resolveMemoryObjects(
         RefObjectPair op = state.addressSpace.findOrLazyInitializeObject(
             idLazyInitialization.get());
         state.addressSpace.bindObject(op.first, op.second.get());
+        state.addSymbolic(*op.first, *op.second);
         mayBeResolvedMemoryObjects.push_back(idLazyInitialization);
       }
     }
@@ -6389,6 +6397,9 @@ void Executor::executeMemoryOperation(
       }
       if (isWrite) {
         ObjectState *wos = state->addressSpace.getWriteable(mo, os);
+        if (state->inSymbolics(*mo)) {
+          state->replaceSymbolic(*mo, *wos);
+        }
         maxNewWriteableOSSize =
             std::max(maxNewWriteableOSSize, wos->getSparseStorageEntries());
         wos->getDynamicType()->handleMemoryAccess(
@@ -6505,6 +6516,9 @@ void Executor::executeMemoryOperation(
           const ObjectState *os = op.second.get();
 
           ObjectState *wos = state->addressSpace.getWriteable(mo, os);
+          if (state->inSymbolics(*mo)) {
+            state->replaceSymbolic(*mo, *wos);
+          }
           maxNewWriteableOSSize =
               std::max(maxNewWriteableOSSize, wos->getSparseStorageEntries());
           if (wos->readOnly) {
@@ -6571,6 +6585,7 @@ void Executor::executeMemoryOperation(
             resolvedMemoryObjects.at(resolvedMemoryObjects.size() - 1).get();
         bound->removePointerResolutions(liMO);
         bound->addressSpace.unbindObject(liMO);
+        bound->symbolics = bound->symbolics.remove(liMO);
       }
 
       ref<Expr> offset = mo->getOffsetExpr(address);
@@ -6590,6 +6605,9 @@ void Executor::executeMemoryOperation(
 
       if (isWrite) {
         ObjectState *wos = bound->addressSpace.getWriteable(mo, os);
+        if (bound->inSymbolics(*mo)) {
+          bound->replaceSymbolic(*mo, *wos);
+        }
         maxNewWriteableOSSize =
             std::max(maxNewWriteableOSSize, wos->getSparseStorageEntries());
         wos->getDynamicType()->handleMemoryAccess(
@@ -6763,6 +6781,7 @@ void Executor::lazyInitializeLocalObject(ExecutionState &state, StackFrame &sf,
   }
   RefObjectPair op = state.addressSpace.findOrLazyInitializeObject(id.get());
   state.addressSpace.bindObject(op.first, op.second.get());
+  state.addSymbolic(*op.first, *op.second);
 }
 
 void Executor::lazyInitializeLocalObject(ExecutionState &state,
@@ -6809,7 +6828,7 @@ void Executor::executeMakeSymbolic(ExecutionState &state,
         addConstraint(state, alignmentRestrictions);
       }
     }
-    state.addSymbolic(mo, array, type);
+    state.addSymbolic(*mo, *os);
 
     std::map<ExecutionState *, std::vector<SeedInfo>>::iterator it =
         seedMap->find(&state);
@@ -7267,7 +7286,7 @@ void Executor::logState(const ExecutionState &state, int id,
   *f << state.symbolics.size() << " symbolics total. "
      << "Symbolics:\n";
   size_t sc = 0;
-  for (const auto &symbolic : state.symbolics) {
+  for (const auto &[memoryObject, symbolic] : state.symbolics) {
     *f << "Symbolic number " << sc++ << "\n";
     *f << "Associated memory object: " << symbolic.memoryObject.get()->id
        << "\n";
@@ -7428,7 +7447,8 @@ void Executor::setInitializationGraph(
 }
 
 bool isReproducible(const klee::Symbolic &symb) {
-  auto arr = symb.array;
+  auto arr = symb.array();
+  assert(arr != nullptr);
   bool bad = IrreproducibleSource::classof(arr->source.get());
   if (auto liSource = dyn_cast<LazyInitializationSource>(arr->source.get())) {
     std::vector<const Array *> arrays;
@@ -7454,7 +7474,7 @@ bool isUninitialized(const klee::Array *array) {
 }
 
 bool isMakeSymbolic(const klee::Symbolic &symb) {
-  auto array = symb.array;
+  auto array = symb.array();
   bool good = isa<MakeSymbolicSource>(array->source);
   if (!good)
     klee_warning_once(array->source.get(),
@@ -7506,14 +7526,20 @@ bool Executor::getSymbolicSolution(const ExecutionState &state, KTest &res) {
                std::back_inserter(uninitObjects), isUninitialized);
 
   std::vector<klee::Symbolic> symbolics;
+  symbolics.reserve(state.symbolics.size());
 
-  if (OnlyOutputMakeSymbolicArrays) {
-    std::copy_if(state.symbolics.begin(), state.symbolics.end(),
-                 std::back_inserter(symbolics), isMakeSymbolic);
-  } else {
-    std::copy_if(state.symbolics.begin(), state.symbolics.end(),
-                 std::back_inserter(symbolics), isReproducible);
+  for (auto &it : state.symbolics) {
+    if ((OnlyOutputMakeSymbolicArrays ? isMakeSymbolic
+                                      : isReproducible)(it.second)) {
+      symbolics.push_back(it.second);
+    }
   }
+
+  std::sort(symbolics.begin(), symbolics.end(),
+            [](const Symbolic &lhs, const Symbolic &rhs) {
+              return lhs.num < rhs.num;
+            });
+  symbolics.shrink_to_fit();
 
   // we cannot be sure that an irreproducible state proves the presence of an
   // error
@@ -7526,7 +7552,7 @@ bool Executor::getSymbolicSolution(const ExecutionState &state, KTest &res) {
 
   std::unordered_set<const Array *> objectSet;
   for (auto &symbolic : symbolics) {
-    objectSet.insert(symbolic.array);
+    objectSet.insert(symbolic.array());
   }
   for (auto &array : allObjects) {
     objectSet.insert(array);
@@ -7645,6 +7671,10 @@ bool Executor::getSymbolicSolution(const ExecutionState &state, KTest &res) {
     }
   }
 
+  for (auto binding : state.constraints.cs().concretization().bindings) {
+    model.bindings.insert(binding);
+  }
+
   res.numObjects = symbolics.size();
   res.objects = new KTestObject[res.numObjects];
   res.uninitCoeff = uninitObjects.size() * UninitMemoryTestMultiplier;
@@ -7654,13 +7684,14 @@ bool Executor::getSymbolicSolution(const ExecutionState &state, KTest &res) {
     // Remove mo->size, evaluate size expr in array
     for (auto &symbolic : symbolics) {
       auto mo = symbolic.memoryObject;
-      auto &values = model.bindings.at(symbolic.array);
+      auto &values = model.bindings.at(symbolic.array());
       KTestObject *o = &res.objects[i];
       o->name = const_cast<char *>(mo->name.c_str());
       o->address = cast<ConstantExpr>(evaluator.visit(mo->getBaseExpr()))
                        ->getZExtValue();
       o->numBytes = cast<ConstantExpr>(evaluator.visit(mo->getSizeExpr()))
                         ->getZExtValue();
+      o->finalBytes = nullptr;
       o->bytes = new unsigned char[o->numBytes];
       for (size_t j = 0; j < o->numBytes; j++) {
         o->bytes[j] = values.load(j);
@@ -7668,6 +7699,19 @@ bool Executor::getSymbolicSolution(const ExecutionState &state, KTest &res) {
       o->numPointers = 0;
       o->pointers = nullptr;
       i++;
+
+      if (state.inSymbolics(*mo)) {
+        auto os = symbolic.objectState;
+        o->finalBytes = new unsigned char[o->numBytes];
+        for (std::size_t b = 0; b < o->numBytes; ++b) {
+          auto byte = os->read8(b);
+          if (auto pointerByte = dyn_cast<PointerExpr>(byte)) {
+            byte = pointerByte->getValue();
+          }
+          auto evalRe = model.evaluate(byte);
+          o->finalBytes[b] = cast<ConstantExpr>(evalRe)->getZExtValue();
+        }
+      }
     }
   }
 
@@ -7713,6 +7757,9 @@ void Executor::doImpliedValueConcretization(ExecutionState &state, ref<Expr> e,
         assert(!os->readOnly &&
                "not possible? read only object with static read?");
         ObjectState *wos = state.addressSpace.getWriteable(mo, os);
+        if (state.inSymbolics(*mo)) {
+          state.replaceSymbolic(*mo, *wos);
+        }
         maxNewWriteableOSSize =
             std::max(maxNewWriteableOSSize, wos->getSparseStorageEntries());
         wos->write(CE, it->second);

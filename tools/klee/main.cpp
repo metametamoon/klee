@@ -718,6 +718,7 @@ void KleeHandler::processTestCase(const ExecutionState &state,
 
       for (unsigned i = 0; i < ktest.numObjects; i++) {
         delete[] ktest.objects[i].bytes;
+        delete[] ktest.objects[i].finalBytes;
         delete[] ktest.objects[i].pointers;
       }
       delete[] ktest.objects;
