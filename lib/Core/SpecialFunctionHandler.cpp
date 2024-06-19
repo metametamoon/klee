@@ -407,7 +407,7 @@ void SpecialFunctionHandler::handleDelete(ExecutionState &state,
 
   // XXX should type check args
   assert(arguments.size() == 1 && "invalid number of arguments to delete");
-  executor.executeFree(state, arguments[0]);
+  executor.executeFree(state, arguments[0], target);
 }
 
 void SpecialFunctionHandler::handleNewArray(ExecutionState &state,
@@ -437,7 +437,7 @@ void SpecialFunctionHandler::handleDeleteArray(
     std::vector<ref<Expr>> &arguments) {
   // XXX should type check args
   assert(arguments.size() == 1 && "invalid number of arguments to delete[]");
-  executor.executeFree(state, arguments[0]);
+  executor.executeFree(state, arguments[0], target);
 }
 
 void SpecialFunctionHandler::handleMalloc(ExecutionState &state,
@@ -681,8 +681,12 @@ void SpecialFunctionHandler::handleGetObjSize(
   assert(arguments.size() == 1 &&
          "invalid number of arguments to klee_get_obj_size");
   Executor::ExactResolutionList rl;
+
+  auto type = target->inst->getOperand(0)->getType();
+  unsigned bytes = executor.getWidthForLLVMType(type->getPointerElementType());
+
   executor.resolveExact(state, arguments[0],
-                        executor.typeSystemManager->getUnknownType(), rl,
+                        executor.typeSystemManager->getUnknownType(), bytes, rl,
                         "klee_get_obj_size");
   for (Executor::ExactResolutionList::iterator it = rl.begin(), ie = rl.end();
        it != ie; ++it) {
@@ -766,6 +770,10 @@ void SpecialFunctionHandler::handleRealloc(ExecutionState &state,
   ref<Expr> address = arguments[0];
   ref<Expr> size = arguments[1];
 
+  auto type = target->inst->getOperand(0)->getType();
+  unsigned baseBytes =
+      executor.getWidthForLLVMType(type->getPointerElementType());
+
   Executor::StatePair zeroSize = executor.forkInternal(
       state, Expr::createIsZero(size), BranchType::Realloc);
 
@@ -784,8 +792,8 @@ void SpecialFunctionHandler::handleRealloc(ExecutionState &state,
     if (zeroPointer.second) { // address != 0
       Executor::ExactResolutionList rl;
       executor.resolveExact(*zeroPointer.second, address,
-                            executor.typeSystemManager->getUnknownType(), rl,
-                            "realloc");
+                            executor.typeSystemManager->getUnknownType(),
+                            baseBytes, rl, "realloc");
 
       for (Executor::ExactResolutionList::iterator it = rl.begin(),
                                                    ie = rl.end();
@@ -806,7 +814,7 @@ void SpecialFunctionHandler::handleFree(ExecutionState &state,
                                         std::vector<ref<Expr>> &arguments) {
   // XXX should type check args
   assert(arguments.size() == 1 && "invalid number of arguments to free");
-  executor.executeFree(state, arguments[0]);
+  executor.executeFree(state, arguments[0], target);
 }
 
 void SpecialFunctionHandler::handleCheckMemoryAccess(
@@ -889,10 +897,14 @@ void SpecialFunctionHandler::handleMakeSymbolic(
     klee_warning("klee_make_symbolic: renamed empty name to \"unnamed\"");
   }
 
+  auto type = target->inst->getOperand(0)->getType();
+  unsigned baseBytes =
+      executor.getWidthForLLVMType(type->getPointerElementType());
+
   Executor::ExactResolutionList rl;
   executor.resolveExact(state, arguments[0],
-                        executor.typeSystemManager->getUnknownType(), rl,
-                        "make_symbolic");
+                        executor.typeSystemManager->getUnknownType(), baseBytes,
+                        rl, "make_symbolic");
 
   for (Executor::ExactResolutionList::iterator it = rl.begin(), ie = rl.end();
        it != ie; ++it) {
@@ -943,10 +955,14 @@ void SpecialFunctionHandler::handleMarkGlobal(
   assert(arguments.size() == 1 &&
          "invalid number of arguments to klee_mark_global");
 
+  auto type = target->inst->getOperand(0)->getType();
+  unsigned baseBytes =
+      executor.getWidthForLLVMType(type->getPointerElementType());
+
   Executor::ExactResolutionList rl;
   executor.resolveExact(state, arguments[0],
-                        executor.typeSystemManager->getUnknownType(), rl,
-                        "mark_global");
+                        executor.typeSystemManager->getUnknownType(), baseBytes,
+                        rl, "mark_global");
 
   for (Executor::ExactResolutionList::iterator it = rl.begin(), ie = rl.end();
        it != ie; ++it) {

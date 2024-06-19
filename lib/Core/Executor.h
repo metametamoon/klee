@@ -299,7 +299,8 @@ private:
   /// beginning of.
   typedef std::vector<std::pair<IDType, ExecutionState *>> ExactResolutionList;
   bool resolveExact(ExecutionState &state, ref<Expr> p, KType *type,
-                    ExactResolutionList &results, const std::string &name);
+                    unsigned bytes, ExactResolutionList &results,
+                    const std::string &name);
 
   void concretizeSize(ExecutionState &state, ref<Expr> size, bool isLocal,
                       KInstruction *target, KType *type, bool zeroMemory,

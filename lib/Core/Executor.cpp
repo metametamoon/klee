@@ -469,9 +469,9 @@ Executor::Executor(LLVMContext &ctx, const InterpreterOptions &opts,
                    InterpreterHandler *ih)
     : Interpreter(opts), interpreterHandler(ih), searcher(nullptr),
       externalDispatcher(new ExternalDispatcher(ctx)), statsTracker(0),
-      pathWriter(0), symPathWriter(0),
-      specialFunctionHandler(0), timers{time::Span(TimerInterval)},
-      guidanceKind(opts.Guidance), codeGraphInfo(new CodeGraphInfo()),
+      pathWriter(0), symPathWriter(0), specialFunctionHandler(0),
+      timers{time::Span(TimerInterval)}, guidanceKind(opts.Guidance),
+      codeGraphInfo(new CodeGraphInfo()),
       distanceCalculator(new DistanceCalculator(*codeGraphInfo)),
       targetCalculator(new TargetCalculator(*codeGraphInfo)),
       targetManager(new TargetManager(guidanceKind, *distanceCalculator,
@@ -5150,10 +5150,14 @@ void Executor::executeFree(ExecutionState &state, ref<Expr> address,
     if (target)
       bindLocal(target, *zeroPointer.first, Expr::createPointer(0));
   }
+
+  auto type = target->inst->getOperand(0)->getType();
+  unsigned bytes = getWidthForLLVMType(type->getPointerElementType());
+
   if (zeroPointer.second) { // address != 0
     ExactResolutionList rl;
     if (!resolveExact(*zeroPointer.second, address,
-                      typeSystemManager->getUnknownType(), rl, "free") &&
+                      typeSystemManager->getUnknownType(), bytes, rl, "free") &&
         guidanceKind == GuidanceKind::ErrorGuidance) {
       terminateStateOnTargetError(*zeroPointer.second,
                                   ReachWithError::DoubleFree);
@@ -5184,7 +5188,8 @@ void Executor::executeFree(ExecutionState &state, ref<Expr> address,
 }
 
 bool Executor::resolveExact(ExecutionState &estate, ref<Expr> address,
-                            KType *type, ExactResolutionList &results,
+                            KType *type, unsigned bytes,
+                            ExactResolutionList &results,
                             const std::string &name) {
   ref<Expr> base = address;
 
@@ -5230,7 +5235,7 @@ bool Executor::resolveExact(ExecutionState &estate, ref<Expr> address,
 
   /* We do not need this variable here, just a placeholder for resolve */
   bool success = resolveMemoryObjects(
-      state, address, type, state.prevPC, 0, rl, mayBeOutOfBound,
+      state, address, type, state.prevPC, bytes, rl, mayBeOutOfBound,
       hasLazyInitialized, incomplete,
       LazyInitialization == LazyInitializationPolicy::Only);
   assert(success);
