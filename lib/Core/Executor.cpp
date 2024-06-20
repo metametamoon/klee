@@ -7175,6 +7175,8 @@ bool Executor::getSymbolicSolution(const ExecutionState &state, KTest &res) {
     return false;
   }
 
+  Assignment model = Assignment(objects, values);
+
   res.numObjects = symbolics.size();
   res.objects = new KTestObject[res.numObjects];
 
@@ -7191,10 +7193,25 @@ bool Executor::getSymbolicSolution(const ExecutionState &state, KTest &res) {
       o->numPointers = 0;
       o->pointers = nullptr;
       ++i;
+      o->finalBytes = new unsigned char[o->numBytes];
+
+      auto op = state.addressSpace.findObject(mo.get());
+      if (op.second != nullptr) {
+        llvm::errs() << "EVALUATING " << o->name << "\n";
+        auto os = op.second;
+
+        for (std::size_t b = 0; i < o->numBytes; ++b) {
+          ref<Expr> re = os->read(Expr::Int8 * b, Expr::Int8);
+          ref<ConstantExpr> ceByte = cast<ConstantExpr>(model.evaluate(re));
+          o->finalBytes[b] = ceByte->getZExtValue();
+        }
+      } else {
+        llvm::errs() << "NO FINAL VALUE FOR " << o->name << "\n";
+        memset(o->finalBytes, 0, o->numBytes);
+      }
     }
   }
 
-  Assignment model = Assignment(objects, values);
   for (auto binding : state.constraints.cs().concretization().bindings) {
     model.bindings.insert(binding);
   }
