@@ -7176,6 +7176,9 @@ bool Executor::getSymbolicSolution(const ExecutionState &state, KTest &res) {
   }
 
   Assignment model = Assignment(objects, values);
+  for (auto binding : state.constraints.cs().concretization().bindings) {
+    model.bindings.insert(binding);
+  }
 
   res.numObjects = symbolics.size();
   res.objects = new KTestObject[res.numObjects];
@@ -7188,32 +7191,26 @@ bool Executor::getSymbolicSolution(const ExecutionState &state, KTest &res) {
       o->name = const_cast<char *>(mo->name.c_str());
       o->address = mo->address;
       o->numBytes = values[i].size();
+      o->finalBytes = nullptr;
       o->bytes = new unsigned char[o->numBytes];
+
       std::copy(values[i].begin(), values[i].end(), o->bytes);
       o->numPointers = 0;
       o->pointers = nullptr;
       ++i;
-      o->finalBytes = new unsigned char[o->numBytes];
 
       auto op = state.addressSpace.findObject(mo.get());
       if (op.second != nullptr) {
-        llvm::errs() << "EVALUATING " << o->name << "\n";
+        o->finalBytes = new unsigned char[o->numBytes];
+
         auto os = op.second;
 
-        for (std::size_t b = 0; i < o->numBytes; ++b) {
-          ref<Expr> re = os->read(Expr::Int8 * b, Expr::Int8);
-          ref<ConstantExpr> ceByte = cast<ConstantExpr>(model.evaluate(re));
-          o->finalBytes[b] = ceByte->getZExtValue();
+        for (std::size_t b = 0; b < o->numBytes; ++b) {
+          auto evalRe = model.evaluate(os->read8(b));
+          o->finalBytes[b] = cast<ConstantExpr>(evalRe)->getZExtValue();
         }
-      } else {
-        llvm::errs() << "NO FINAL VALUE FOR " << o->name << "\n";
-        memset(o->finalBytes, 0, o->numBytes);
       }
     }
-  }
-
-  for (auto binding : state.constraints.cs().concretization().bindings) {
-    model.bindings.insert(binding);
   }
 
   setInitializationGraph(state, symbolics, model, res);
