@@ -55,6 +55,10 @@ DISABLE_WARNING_POP
 #include <unordered_map>
 #include <vector>
 
+#ifdef HAVE_CTYPE_EXTERNALS
+#include <ctype.h>
+#endif
+
 struct KTest;
 
 namespace llvm {
@@ -128,6 +132,12 @@ public:
 
 private:
   int *errno_addr;
+
+#ifdef HAVE_CTYPE_EXTERNALS
+  decltype(__ctype_b_loc()) c_type_b_loc_addr;
+  decltype(__ctype_tolower_loc()) c_type_tolower_addr;
+  decltype(__ctype_toupper_loc()) c_type_toupper_addr;
+#endif
 
   size_t maxNewWriteableOSSize = 0;
   size_t maxNewStateStackSize = 0;
@@ -267,8 +277,10 @@ private:
 
   // Given a concrete object in our [klee's] address space, add it to
   // objects checked code can reference.
-  MemoryObject *addExternalObject(ExecutionState &state, void *addr, KType *,
-                                  unsigned size, bool isReadOnly);
+  ObjectPair addExternalObject(ExecutionState &state, void *addr, KType *,
+                               unsigned size, bool isReadOnly);
+  ObjectPair addExternalObjectAsNonStatic(ExecutionState &state, KType *,
+                                          unsigned size, bool isReadOnly);
 
   void initializeGlobalAlias(const llvm::Constant *c, ExecutionState &state);
   void initializeGlobalObject(ExecutionState &state, ObjectState *os,
