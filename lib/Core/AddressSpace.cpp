@@ -65,6 +65,21 @@ void AddressSpace::unbindObject(const MemoryObject *mo) {
   objects = objects.remove(mo);
 }
 
+void AddressSpace::rememberSymbolic(const MemoryObject *mo, ObjectState *os) {
+  markedSymbolic = markedSymbolic.insert({mo, os});
+}
+
+void AddressSpace::replaceMemoryObjectFromSymbolics(
+    const MemoryObject *oldMemObj, const MemoryObject *newMemObj,
+    ObjectState *newObjState) {
+  markedSymbolic = markedSymbolic.remove(oldMemObj);
+  markedSymbolic = markedSymbolic.insert({newMemObj, newObjState});
+}
+
+bool AddressSpace::isMadeSymbolic(const MemoryObject *mo) const {
+  return markedSymbolic.count(mo) > 0;
+}
+
 ObjectPair AddressSpace::findObject(const MemoryObject *mo) const {
   const auto res = objects.lookup(mo);
   return res ? ObjectPair(res->first, res->second.get())

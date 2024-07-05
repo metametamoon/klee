@@ -469,9 +469,9 @@ Executor::Executor(LLVMContext &ctx, const InterpreterOptions &opts,
                    InterpreterHandler *ih)
     : Interpreter(opts), interpreterHandler(ih), searcher(nullptr),
       externalDispatcher(new ExternalDispatcher(ctx)), statsTracker(0),
-      pathWriter(0), symPathWriter(0), specialFunctionHandler(0),
-      timers{time::Span(TimerInterval)}, guidanceKind(opts.Guidance),
-      codeGraphInfo(new CodeGraphInfo()),
+      pathWriter(0), symPathWriter(0),
+      specialFunctionHandler(0), timers{time::Span(TimerInterval)},
+      guidanceKind(opts.Guidance), codeGraphInfo(new CodeGraphInfo()),
       distanceCalculator(new DistanceCalculator(*codeGraphInfo)),
       targetCalculator(new TargetCalculator(*codeGraphInfo)),
       targetManager(new TargetManager(guidanceKind, *distanceCalculator,
@@ -5132,6 +5132,10 @@ void Executor::executeAlloc(ExecutionState &state, ref<Expr> size, bool isLocal,
         for (unsigned i = 0; i < count; i++) {
           os->write(i, reallocFrom->read8(i));
         }
+        if (state.addressSpace.isMadeSymbolic(reallocFrom->getObject())) {
+          state.addressSpace.replaceMemoryObjectFromSymbolics(
+              reallocFrom->getObject(), mo, os);
+        }
         state.removePointerResolutions(reallocFrom->getObject());
         state.addressSpace.unbindObject(reallocFrom->getObject());
       }
@@ -6211,6 +6215,8 @@ void Executor::executeMemoryOperation(
                 .first;
         bound->removePointerResolutions(liMO);
         bound->addressSpace.unbindObject(liMO);
+        bound->addressSpace.markedSymbolic =
+            bound->addressSpace.markedSymbolic.remove(liMO);
       }
 
       bound->addUniquePointerResolution(address, mo);
@@ -6429,8 +6435,14 @@ void Executor::updateStateWithSymcretes(ExecutionState &state,
      */
 
     /* Order of operations critical here. */
+    auto newObjState = new ObjectState(newMO, *oldOS.get());
+    if (state.addressSpace.isMadeSymbolic(oldMO.get())) {
+      state.addressSpace.replaceMemoryObjectFromSymbolics(oldMO.get(), newMO,
+                                                          newObjState);
+    }
+
     state.addressSpace.unbindObject(oldMO.get());
-    state.addressSpace.bindObject(newMO, new ObjectState(newMO, *oldOS.get()));
+    state.addressSpace.bindObject(newMO, newObjState);
   }
 }
 
@@ -6457,6 +6469,7 @@ void Executor::executeMakeSymbolic(ExecutionState &state,
   if (!replayKTest) {
     const Array *array = makeArray(mo->getSizeExpr(), source);
     ObjectState *os = bindObjectInState(state, mo, type, isLocal, array);
+    state.addressSpace.rememberSymbolic(mo, os);
 
     if (AlignSymbolicPointers) {
       if (ref<Expr> alignmentRestrictions =
@@ -7199,12 +7212,9 @@ bool Executor::getSymbolicSolution(const ExecutionState &state, KTest &res) {
       o->pointers = nullptr;
       ++i;
 
-      auto op = state.addressSpace.findObject(mo.get());
-      if (op.second != nullptr) {
+      if (state.addressSpace.isMadeSymbolic(mo.get())) {
+        auto os = state.addressSpace.markedSymbolic.find(mo.get())->second;
         o->finalBytes = new unsigned char[o->numBytes];
-
-        auto os = op.second;
-
         for (std::size_t b = 0; b < o->numBytes; ++b) {
           auto evalRe = model.evaluate(os->read8(b));
           o->finalBytes[b] = cast<ConstantExpr>(evalRe)->getZExtValue();
