@@ -7173,6 +7173,10 @@ bool Executor::getSymbolicSolution(const ExecutionState &state, KTest &res) {
       symbolics.push_back(symbolic);
     }
   }
+  std::sort(symbolics.begin(), symbolics.end(),
+            [](const Symbolic &lhs, const Symbolic &rhs) {
+              return lhs.num < rhs.num;
+            });
   symbolics.shrink_to_fit();
 
   std::vector<SparseStorage<unsigned char>> values;

@@ -216,10 +216,11 @@ struct CleanupPhaseUnwindingInformation : public UnwindingInformation {
 struct Symbolic {
   ref<const MemoryObject> memoryObject;
   ref<ObjectState> objectState;
+  std::size_t num;
 
   Symbolic(const MemoryObject *memObj = nullptr,
-           ObjectState *objState = nullptr)
-      : memoryObject(memObj), objectState(objState) {}
+           ObjectState *objState = nullptr, std::size_t num = 0)
+      : memoryObject(memObj), objectState(objState), num(num) {}
 
   const Array *array() const { return objectState->updates.root; }
   const KType *type() const { return objectState->getDynamicType(); }
