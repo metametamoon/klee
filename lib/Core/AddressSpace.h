@@ -67,7 +67,6 @@ public:
   ///
   /// \invariant forall o in objects, o->copyOnWriteOwner <= cowKey
   MemoryMap objects;
-  MemoryMap markedSymbolic;
 
   /// The ID -> MemoryObject map.
   //
@@ -77,8 +76,7 @@ public:
 
   AddressSpace() : cowKey(1) {}
   AddressSpace(const AddressSpace &b)
-      : cowKey(++b.cowKey), objects(b.objects),
-        markedSymbolic(b.markedSymbolic), idToObjects(b.idToObjects) {}
+      : cowKey(++b.cowKey), objects(b.objects), idToObjects(b.idToObjects) {}
   ~AddressSpace() {}
 
   /// Resolve address to an ObjectPair in result.
@@ -130,16 +128,6 @@ public:
 
   /// Remove a binding from the address space.
   void unbindObject(const MemoryObject *mo);
-
-  /// Add a record that current memory object has been marked as a symbolic.
-  void rememberSymbolic(const MemoryObject *mo, ObjectState *os);
-
-  /// Replaces key in the map of symbolics.
-  void replaceMemoryObjectFromSymbolics(const MemoryObject *oldMemObj,
-                                        const MemoryObject *newMemObj,
-                                        ObjectState *newObjState);
-
-  bool isMadeSymbolic(const MemoryObject *mo) const;
 
   /// Lookup a binding from a MemoryObject.
   ObjectPair findObject(const MemoryObject *mo) const;

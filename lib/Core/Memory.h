@@ -201,6 +201,7 @@ private:
   friend class AddressSpace;
   friend class ref<ObjectState>;
   friend class ref<const ObjectState>;
+  friend struct Symbolic;
 
   unsigned copyOnWriteOwner; // exclusively for AddressSpace
 

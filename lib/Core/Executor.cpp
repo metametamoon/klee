@@ -5132,9 +5132,9 @@ void Executor::executeAlloc(ExecutionState &state, ref<Expr> size, bool isLocal,
         for (unsigned i = 0; i < count; i++) {
           os->write(i, reallocFrom->read8(i));
         }
-        if (state.addressSpace.isMadeSymbolic(reallocFrom->getObject())) {
-          state.addressSpace.replaceMemoryObjectFromSymbolics(
-              reallocFrom->getObject(), mo, os);
+        if (state.inSymbolics(reallocFrom->getObject())) {
+          state.replaceMemoryObjectFromSymbolics(reallocFrom->getObject(), mo,
+                                                 os);
         }
         state.removePointerResolutions(reallocFrom->getObject());
         state.addressSpace.unbindObject(reallocFrom->getObject());
@@ -6215,8 +6215,7 @@ void Executor::executeMemoryOperation(
                 .first;
         bound->removePointerResolutions(liMO);
         bound->addressSpace.unbindObject(liMO);
-        bound->addressSpace.markedSymbolic =
-            bound->addressSpace.markedSymbolic.remove(liMO);
+        bound->symbolics = bound->symbolics.remove(liMO);
       }
 
       bound->addUniquePointerResolution(address, mo);
@@ -6436,9 +6435,8 @@ void Executor::updateStateWithSymcretes(ExecutionState &state,
 
     /* Order of operations critical here. */
     auto newObjState = new ObjectState(newMO, *oldOS.get());
-    if (state.addressSpace.isMadeSymbolic(oldMO.get())) {
-      state.addressSpace.replaceMemoryObjectFromSymbolics(oldMO.get(), newMO,
-                                                          newObjState);
+    if (state.inSymbolics(oldMO.get())) {
+      state.replaceMemoryObjectFromSymbolics(oldMO.get(), newMO, newObjState);
     }
 
     state.addressSpace.unbindObject(oldMO.get());
@@ -6469,7 +6467,6 @@ void Executor::executeMakeSymbolic(ExecutionState &state,
   if (!replayKTest) {
     const Array *array = makeArray(mo->getSizeExpr(), source);
     ObjectState *os = bindObjectInState(state, mo, type, isLocal, array);
-    state.addressSpace.rememberSymbolic(mo, os);
 
     if (AlignSymbolicPointers) {
       if (ref<Expr> alignmentRestrictions =
@@ -6477,7 +6474,7 @@ void Executor::executeMakeSymbolic(ExecutionState &state,
         addConstraint(state, alignmentRestrictions);
       }
     }
-    state.addSymbolic(mo, array, type);
+    state.addSymbolic(mo, os);
 
     std::map<ExecutionState *, std::vector<SeedInfo>>::iterator it =
         seedMap.find(&state);
@@ -6951,11 +6948,10 @@ void Executor::logState(const ExecutionState &state, int id,
   *f << state.symbolics.size() << " symbolics total. "
      << "Symbolics:\n";
   size_t sc = 0;
-  for (const auto &symbolic : state.symbolics) {
+  for (const auto &[memoryObject, symbolic] : state.symbolics) {
     *f << "Symbolic number " << sc++ << "\n";
-    *f << "Associated memory object: " << symbolic.memoryObject.get()->id
-       << "\n";
-    *f << "Memory object size: " << symbolic.memoryObject.get()->size << "\n";
+    *f << "Associated memory object: " << memoryObject->id << "\n";
+    *f << "Memory object size: " << memoryObject->size << "\n";
   }
   *f << "\n";
   *f << "State constraints:\n";
@@ -7002,7 +6998,7 @@ void Executor::setInitializationGraph(
   const klee::Assignment &assn = state.constraints.cs().concretization();
 
   for (const auto &symbolic : symbolics) {
-    KType *symbolicType = symbolic.type;
+    const KType *symbolicType = symbolic.type();
     if (!symbolicType->getRawType()) {
       continue;
     }
@@ -7021,7 +7017,7 @@ void Executor::setInitializationGraph(
       }
       for (const auto &offset : innerTypeOffset.second) {
         ref<Expr> address = Expr::createTempRead(
-            symbolic.array, Context::get().getPointerWidth(), offset);
+            symbolic.array(), Context::get().getPointerWidth(), offset);
         ref<Expr> addressInModel = model.evaluate(address);
         if (!isa<ConstantExpr>(addressInModel)) {
           continue;
@@ -7124,7 +7120,7 @@ Assignment Executor::computeConcretization(const ConstraintSet &constraints,
 }
 
 bool isReproducible(const klee::Symbolic &symb) {
-  auto arr = symb.array;
+  auto arr = symb.array();
   bool bad = IrreproducibleSource::classof(arr->source.get());
   if (bad)
     klee_warning_once(arr->source.get(),
@@ -7169,15 +7165,24 @@ bool Executor::getSymbolicSolution(const ExecutionState &state, KTest &res) {
     }
   }
 
-  std::vector<klee::Symbolic> symbolics;
-  std::copy_if(state.symbolics.begin(), state.symbolics.end(),
-               std::back_inserter(symbolics), isReproducible);
+  std::vector<Symbolic> symbolics;
+  symbolics.reserve(state.symbolics.size());
+  for (auto &it : state.symbolics) {
+    auto &symbolic = it.second;
+    if (isReproducible(symbolic)) {
+      symbolics.push_back(symbolic);
+    }
+  }
+  symbolics.shrink_to_fit();
 
   std::vector<SparseStorage<unsigned char>> values;
   std::vector<const Array *> objects;
+  values.reserve(symbolics.size());
+  objects.reserve(symbolics.size());
   for (auto &symbolic : symbolics) {
-    objects.push_back(symbolic.array);
+    objects.push_back(symbolic.array());
   }
+
   bool success = solver->getInitialValues(extendedConstraints.cs(), objects,
                                           values, state.queryMetaData);
   solver->setTimeout(time::Span());
@@ -7212,8 +7217,8 @@ bool Executor::getSymbolicSolution(const ExecutionState &state, KTest &res) {
       o->pointers = nullptr;
       ++i;
 
-      if (state.addressSpace.isMadeSymbolic(mo.get())) {
-        auto os = state.addressSpace.markedSymbolic.find(mo.get())->second;
+      if (state.inSymbolics(mo.get())) {
+        auto os = symbolic.objectState;
         o->finalBytes = new unsigned char[o->numBytes];
         for (std::size_t b = 0; b < o->numBytes; ++b) {
           auto evalRe = model.evaluate(os->read8(b));
