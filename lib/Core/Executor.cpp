@@ -948,7 +948,6 @@ void Executor::allocateGlobalObjects(ExecutionState &state) {
 
   if (Context::get().getPointerWidth() == 32) {
     {
-      klee_warning("Setting up ctype structures for 32-bits");
       auto ctypeBLocObj = addExternalObjectAsNonStatic(
           state, typeSystemManager->getWrappedType(pointerAddr),
           384 * sizeof(**__ctype_b_loc()), true);
@@ -5283,6 +5282,8 @@ void Executor::callExternalFunction(ExecutionState &state, KInstruction *target,
   // check if specialFunctionHandler wants it
   if (const auto *func = dyn_cast<KFunction>(callable)) {
     if (func->getName() == "raise") {
+      terminateStateOnError(state, "Call to \"raise\" is unmodelled",
+                            StateTerminationType::Model);
       return;
     }
 
@@ -5950,11 +5951,6 @@ MemoryObject *Executor::allocate(ExecutionState &state, ref<Expr> size,
           updateNameVersion(state, "const_arr"), kgb, size);
     }
   } else {
-    lazyInitializationSource->dump();
-    assert(lazyInitializationSource->hasOrderedReads());
-    lazyInitializationSource->hasOrderedReads()->dump();
-    assert(lazyInitializationSource->hasOrderedReads()->updates.root !=
-           nullptr);
     sourceAddressArray =
         lazyInitializationSource->hasOrderedReads()->updates.root->source;
   }

@@ -2332,6 +2332,22 @@ static ref<Expr> AShrExpr_create(const ref<Expr> &l, const ref<Expr> &r) {
 #define BCREATE_R(_e_op, _op, partialL, partialR, pointerL, pointerR)          \
   ref<Expr> _e_op ::create(const ref<Expr> &l, const ref<Expr> &r) {           \
     assert(l->getWidth() == r->getWidth() && "type mismatch");                 \
+    if (kind != Kind::SDiv && kind != Kind::UDiv && kind != Kind::FDiv) {      \
+      if (SelectExpr *sel = dyn_cast<SelectExpr>(l)) {                         \
+        if (isa<ConstantExpr>(sel->trueExpr)) {                                \
+          return SelectExpr::create(sel->cond,                                 \
+                                    _e_op::create(sel->trueExpr, r),           \
+                                    _e_op::create(sel->falseExpr, r));         \
+        }                                                                      \
+      }                                                                        \
+      if (SelectExpr *ser = dyn_cast<SelectExpr>(r)) {                         \
+        if (isa<ConstantExpr>(ser->trueExpr)) {                                \
+          return SelectExpr::create(ser->cond,                                 \
+                                    _e_op::create(l, ser->trueExpr),           \
+                                    _e_op::create(l, ser->falseExpr));         \
+        }                                                                      \
+      }                                                                        \
+    }                                                                          \
     if (PointerExpr *pl = dyn_cast<PointerExpr>(l)) {                          \
       if (PointerExpr *pr = dyn_cast<PointerExpr>(r))                          \
         return pl->_op(pr);                                                    \
@@ -2352,6 +2368,22 @@ static ref<Expr> AShrExpr_create(const ref<Expr> &l, const ref<Expr> &r) {
 #define BCREATE_R_C(_e_op, _op, partialL, partialR, pointerL, pointerR)        \
   ref<Expr> _e_op ::create(const ref<Expr> &l, const ref<Expr> &r) {           \
     assert(l->getWidth() == r->getWidth() && "type mismatch");                 \
+    if (kind != Kind::SDiv && kind != Kind::UDiv && kind != Kind::FDiv) {      \
+      if (SelectExpr *sel = dyn_cast<SelectExpr>(l)) {                         \
+        if (isa<ConstantExpr>(sel->trueExpr)) {                                \
+          return SelectExpr::create(sel->cond,                                 \
+                                    _e_op::create(sel->trueExpr, r),           \
+                                    _e_op::create(sel->falseExpr, r));         \
+        }                                                                      \
+      }                                                                        \
+      if (SelectExpr *ser = dyn_cast<SelectExpr>(r)) {                         \
+        if (isa<ConstantExpr>(ser->trueExpr)) {                                \
+          return SelectExpr::create(ser->cond,                                 \
+                                    _e_op::create(l, ser->trueExpr),           \
+                                    _e_op::create(l, ser->falseExpr));         \
+        }                                                                      \
+      }                                                                        \
+    }                                                                          \
     if (PointerExpr *pl = dyn_cast<PointerExpr>(l)) {                          \
       if (PointerExpr *pr = dyn_cast<PointerExpr>(r))                          \
         return pl->_op(pr);                                                    \
@@ -2385,6 +2417,22 @@ static ref<Expr> AShrExpr_create(const ref<Expr> &l, const ref<Expr> &r) {
 #define BCREATE(_e_op, _op)                                                    \
   ref<Expr> _e_op ::create(const ref<Expr> &l, const ref<Expr> &r) {           \
     assert(l->getWidth() == r->getWidth() && "type mismatch");                 \
+    if (kind != Kind::SDiv && kind != Kind::UDiv && kind != Kind::FDiv) {      \
+      if (SelectExpr *sel = dyn_cast<SelectExpr>(l)) {                         \
+        if (isa<ConstantExpr>(sel->trueExpr)) {                                \
+          return SelectExpr::create(sel->cond,                                 \
+                                    _e_op::create(sel->trueExpr, r),           \
+                                    _e_op::create(sel->falseExpr, r));         \
+        }                                                                      \
+      }                                                                        \
+      if (SelectExpr *ser = dyn_cast<SelectExpr>(r)) {                         \
+        if (isa<ConstantExpr>(ser->trueExpr)) {                                \
+          return SelectExpr::create(ser->cond,                                 \
+                                    _e_op::create(l, ser->trueExpr),           \
+                                    _e_op::create(l, ser->falseExpr));         \
+        }                                                                      \
+      }                                                                        \
+    }                                                                          \
     if (PointerExpr *pl = dyn_cast<PointerExpr>(l)) {                          \
       if (PointerExpr *pr = dyn_cast<PointerExpr>(r))                          \
         return pl->_op(pr);                                                    \
@@ -2421,16 +2469,20 @@ BCREATE(AShrExpr, AShr)
 #define CMPCREATE(_e_op, _op)                                                  \
   ref<Expr> _e_op ::create(const ref<Expr> &l, const ref<Expr> &r) {           \
     assert(l->getWidth() == r->getWidth() && "type mismatch");                 \
-    if (SelectExpr *sel = dyn_cast<SelectExpr>(l)) {                           \
-      if (isa<ConstantExpr>(sel->trueExpr) && !isa<SelectExpr>(r)) {           \
-        return SelectExpr::create(sel->cond, _e_op::create(sel->trueExpr, r),  \
-                                  _e_op::create(sel->falseExpr, r));           \
+    if (kind != Kind::SDiv && kind != Kind::UDiv && kind != Kind::FDiv) {      \
+      if (SelectExpr *sel = dyn_cast<SelectExpr>(l)) {                         \
+        if (isa<ConstantExpr>(sel->trueExpr) && !isa<SelectExpr>(r)) {         \
+          return SelectExpr::create(sel->cond,                                 \
+                                    _e_op::create(sel->trueExpr, r),           \
+                                    _e_op::create(sel->falseExpr, r));         \
+        }                                                                      \
       }                                                                        \
-    }                                                                          \
-    if (SelectExpr *ser = dyn_cast<SelectExpr>(r)) {                           \
-      if (isa<ConstantExpr>(ser->trueExpr) && !isa<SelectExpr>(l)) {           \
-        return SelectExpr::create(ser->cond, _e_op::create(l, ser->trueExpr),  \
-                                  _e_op::create(l, ser->falseExpr));           \
+      if (SelectExpr *ser = dyn_cast<SelectExpr>(r)) {                         \
+        if (isa<ConstantExpr>(ser->trueExpr) && !isa<SelectExpr>(l)) {         \
+          return SelectExpr::create(ser->cond,                                 \
+                                    _e_op::create(l, ser->trueExpr),           \
+                                    _e_op::create(l, ser->falseExpr));         \
+        }                                                                      \
       }                                                                        \
     }                                                                          \
     if (PointerExpr *pl = dyn_cast<PointerExpr>(l)) {                          \
@@ -2449,16 +2501,20 @@ BCREATE(AShrExpr, AShr)
 #define CMPCREATE_T(_e_op, _op, _reflexive_e_op, partialL, partialR)           \
   ref<Expr> _e_op ::create(const ref<Expr> &l, const ref<Expr> &r) {           \
     assert(l->getWidth() == r->getWidth() && "type mismatch");                 \
-    if (SelectExpr *sel = dyn_cast<SelectExpr>(l)) {                           \
-      if (isa<ConstantExpr>(sel->trueExpr) && !isa<SelectExpr>(r)) {           \
-        return SelectExpr::create(sel->cond, _e_op::create(sel->trueExpr, r),  \
-                                  _e_op::create(sel->falseExpr, r));           \
+    if (kind != Kind::SDiv && kind != Kind::UDiv && kind != Kind::FDiv) {      \
+      if (SelectExpr *sel = dyn_cast<SelectExpr>(l)) {                         \
+        if (isa<ConstantExpr>(sel->trueExpr) && !isa<SelectExpr>(r)) {         \
+          return SelectExpr::create(sel->cond,                                 \
+                                    _e_op::create(sel->trueExpr, r),           \
+                                    _e_op::create(sel->falseExpr, r));         \
+        }                                                                      \
       }                                                                        \
-    }                                                                          \
-    if (SelectExpr *ser = dyn_cast<SelectExpr>(r)) {                           \
-      if (isa<ConstantExpr>(ser->trueExpr) && !isa<SelectExpr>(l)) {           \
-        return SelectExpr::create(ser->cond, _e_op::create(l, ser->trueExpr),  \
-                                  _e_op::create(l, ser->falseExpr));           \
+      if (SelectExpr *ser = dyn_cast<SelectExpr>(r)) {                         \
+        if (isa<ConstantExpr>(ser->trueExpr) && !isa<SelectExpr>(l)) {         \
+          return SelectExpr::create(ser->cond,                                 \
+                                    _e_op::create(l, ser->trueExpr),           \
+                                    _e_op::create(l, ser->falseExpr));         \
+        }                                                                      \
       }                                                                        \
     }                                                                          \
     if (PointerExpr *pl = dyn_cast<PointerExpr>(l)) {                          \
