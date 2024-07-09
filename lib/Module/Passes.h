@@ -19,6 +19,7 @@ DISABLE_WARNING_DEPRECATED_DECLARATIONS
 #include "llvm/CodeGen/IntrinsicLowering.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/Instructions.h"
+#include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Pass.h"
 DISABLE_WARNING_POP
@@ -65,6 +66,9 @@ class IntrinsicCleanerPass : public llvm::ModulePass {
   llvm::IntrinsicLowering *IL;
   bool WithFPRuntime;
 
+  void replaceWithCall(llvm::Module &M, llvm::IntrinsicInst *&ii,
+                       std::string name, llvm::FunctionType *&CtlzFnType,
+                       std::vector<llvm::Value *> &CtlzArgs);
   bool runOnBasicBlock(llvm::BasicBlock &b, llvm::Module &M);
 
 public:

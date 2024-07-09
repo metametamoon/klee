@@ -67,6 +67,13 @@ const std::vector<std::pair<std::string, std::string>> floatReplacements = {
     addIntrinsicReplacement(ceil, ceil)};
 #undef addIntrinsicReplacement
 
+#define addIntrinsicReplacement(from, to)                                      \
+  {"llvm." #from ".i32", #to}, { "llvm." #from ".f64", #to "l" }               \
+
+const std::vector<std::pair<std::string, std::string>> intrinsicReplacements = {
+    addIntrinsicReplacement(ctlz, ctlz)};
+#undef addIntrinsicReplacement
+
 /// Return the Function* target of a Call or Invoke instruction, or
 /// null if it cannot be determined (should be only for indirect
 /// calls, although complicated constant expressions might be

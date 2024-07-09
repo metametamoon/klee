@@ -15,6 +15,7 @@
 #include "klee/Support/CompilerWarning.h"
 DISABLE_WARNING_PUSH
 DISABLE_WARNING_DEPRECATED_DECLARATIONS
+#include "llvm/ADT/StringRef.h"
 #include "llvm/Analysis/ConstantFolding.h"
 #include "llvm/Analysis/MemoryBuiltins.h"
 #include "llvm/IR/Constants.h"
@@ -51,6 +52,17 @@ bool IntrinsicCleanerPass::runOnModule(Module &M) {
     dirty = true;
   }
   return dirty;
+}
+
+void IntrinsicCleanerPass::replaceWithCall(Module &M, IntrinsicInst *&ii,
+                                           std::string name,
+                                           FunctionType *&fnType,
+                                           std::vector<llvm::Value *> &args) {
+  auto NM = M.getOrInsertFunction(name, fnType);
+  llvm::IRBuilder<> Builder(ii);
+  auto result = Builder.CreateCall(NM, args);
+  ii->replaceAllUsesWith(result);
+  ii->eraseFromParent();
 }
 
 bool IntrinsicCleanerPass::runOnBasicBlock(BasicBlock &b, Module &M) {
@@ -327,6 +339,44 @@ bool IntrinsicCleanerPass::runOnBasicBlock(BasicBlock &b, Module &M) {
         break;
       }
 
+      case Intrinsic::ctlz: {
+        const Function *Callee = ii->getCalledFunction();
+        llvm::StringRef name = Callee->getName();
+        if (name.equals("llvm.ctlz.i32")) {
+          std::vector<llvm::Type *> CtlzArgsType = {
+              llvm::Type::getInt32Ty(ctx)};
+          Value *op1 = ii->getArgOperand(0);
+          std::vector<llvm::Value *> CtlzArgs;
+          CtlzArgs.push_back(op1);
+          auto CtlzFnType = llvm::FunctionType::get(llvm::Type::getInt32Ty(ctx),
+                                                    CtlzArgsType, false);
+          replaceWithCall(M, ii, "ctlz", CtlzFnType, CtlzArgs);
+          dirty = true;
+        }
+        if (name.equals("llvm.ctlz.i64")) {
+          std::vector<llvm::Type *> CtlzArgsType = {
+              llvm::Type::getInt64Ty(ctx)};
+          auto CtlzFnType = llvm::FunctionType::get(llvm::Type::getInt64Ty(ctx),
+                                                    CtlzArgsType, false);
+          Value *op1 = ii->getArgOperand(0);
+          std::vector<llvm::Value *> CtlzArgs;
+          CtlzArgs.push_back(op1);
+          replaceWithCall(M, ii, "ctlzl", CtlzFnType, CtlzArgs);
+          dirty = true;
+        }
+        if (name.equals("llvm.ctlz.i8")) {
+          std::vector<llvm::Type *> CtlzArgsType = {llvm::Type::getInt8Ty(ctx)};
+          auto CtlzFnType = llvm::FunctionType::get(llvm::Type::getInt8Ty(ctx),
+                                                    CtlzArgsType, false);
+          Value *op1 = ii->getArgOperand(0);
+          std::vector<llvm::Value *> CtlzArgs;
+          CtlzArgs.push_back(op1);
+          replaceWithCall(M, ii, "ctlzc", CtlzFnType, CtlzArgs);
+          dirty = true;
+        }
+        break;
+      }
+
       case Intrinsic::trap: {
         // Intrinsic instruction "llvm.trap" found. Directly lower it to
         // a call of the abort() function.
@@ -381,7 +431,7 @@ bool IntrinsicCleanerPass::runOnBasicBlock(BasicBlock &b, Module &M) {
       case Intrinsic::annotation:
       case Intrinsic::assume:
       case Intrinsic::bswap:
-      case Intrinsic::ctlz:
+      // case Intrinsic::ctlz:
       case Intrinsic::ctpop:
       case Intrinsic::cttz:
       case Intrinsic::dbg_declare:

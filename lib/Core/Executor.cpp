@@ -667,6 +667,7 @@ llvm::Module *Executor::setModule(
   preservedFunctions.push_back("memcpy");
   preservedFunctions.push_back("memcmp");
   preservedFunctions.push_back("memmove");
+  preservedFunctions.push_back("ctlz");
 
   if (FunctionCallReproduce != "") {
     preservedFunctions.push_back(FunctionCallReproduce.c_str());
