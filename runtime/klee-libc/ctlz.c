@@ -24,7 +24,7 @@ unsigned long ctlzl(unsigned long val) {
     unsigned long total_bits = sizeof(val) * 8;
 
     unsigned long res = 0;
-    unsigned long mask = 1 << (total_bits - 1);
+    unsigned long mask = 1llu << (total_bits - 1);
     while (!(val & mask)) {
         mask = (mask >> 1);
         res++;
