@@ -161,7 +161,7 @@ public:
   ///
   /// \retval true The copy succeeded.
   /// \retval false The copy failed because a read-only object was modified.
-  bool copyInConcretes();
+  bool copyInConcretes(ExecutionState &state);
 
   /// Updates the memory object with the raw memory from the address
   ///
@@ -169,8 +169,8 @@ public:
   /// @param os The associated memory state containing the actual data
   /// @param src_address the address to copy from
   /// @return
-  bool copyInConcrete(const MemoryObject *mo, const ObjectState *os,
-                      uint64_t src_address);
+  bool copyInConcrete(ExecutionState &state, const MemoryObject *mo,
+                      const ObjectState *os, uint64_t src_address);
 };
 } // namespace klee
 

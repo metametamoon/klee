@@ -246,6 +246,11 @@ void ExecutionState::addSymbolic(const MemoryObject *mo, ObjectState *os) {
   symbolics = symbolics.insert({mo, Symbolic(mo, os, symbolics.size())});
 }
 
+void ExecutionState::replaceSymbolic(const MemoryObject *mo, ObjectState *os) {
+  auto &symbolic = *symbolics.find(mo);
+  symbolics = symbolics.replace({mo, Symbolic(mo, os, symbolic.second.num)});
+}
+
 ref<const MemoryObject>
 ExecutionState::findMemoryObject(const Array *array) const {
   // FIXME: use hash map instead

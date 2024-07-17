@@ -469,9 +469,9 @@ Executor::Executor(LLVMContext &ctx, const InterpreterOptions &opts,
                    InterpreterHandler *ih)
     : Interpreter(opts), interpreterHandler(ih), searcher(nullptr),
       externalDispatcher(new ExternalDispatcher(ctx)), statsTracker(0),
-      pathWriter(0), symPathWriter(0),
-      specialFunctionHandler(0), timers{time::Span(TimerInterval)},
-      guidanceKind(opts.Guidance), codeGraphInfo(new CodeGraphInfo()),
+      pathWriter(0), symPathWriter(0), specialFunctionHandler(0),
+      timers{time::Span(TimerInterval)}, guidanceKind(opts.Guidance),
+      codeGraphInfo(new CodeGraphInfo()),
       distanceCalculator(new DistanceCalculator(*codeGraphInfo)),
       targetCalculator(new TargetCalculator(*codeGraphInfo)),
       targetManager(new TargetManager(guidanceKind, *distanceCalculator,
@@ -4979,7 +4979,7 @@ void Executor::callExternalFunction(ExecutionState &state, KInstruction *target,
     return;
   }
 
-  if (!state.addressSpace.copyInConcretes()) {
+  if (!state.addressSpace.copyInConcretes(state)) {
     terminateStateOnExecError(state, "external modified read-only object",
                               StateTerminationType::External);
     return;
@@ -4988,7 +4988,7 @@ void Executor::callExternalFunction(ExecutionState &state, KInstruction *target,
 #ifndef WINDOWS
   // Update errno memory object with the errno value from the call
   int error = externalDispatcher->getLastErrno();
-  state.addressSpace.copyInConcrete(result.first, result.second,
+  state.addressSpace.copyInConcrete(state, result.first, result.second,
                                     (uint64_t)&error);
 #endif
 
@@ -5905,6 +5905,9 @@ void Executor::collectReads(
         !targetType->getRawType()->isPointerTy()) {
       result = makeMockValue(state, "mockGlobalValue", result->getWidth());
       ObjectState *wos = state.addressSpace.getWriteable(mo, os);
+      if (state.inSymbolics(mo)) {
+        state.replaceSymbolic(mo, wos);
+      }
       wos->write(mo->getOffsetExpr(address), result);
     }
 
@@ -6044,6 +6047,9 @@ void Executor::executeMemoryOperation(
       state->addPointerResolution(address, mo);
       if (isWrite) {
         ObjectState *wos = state->addressSpace.getWriteable(mo, os);
+        if (state->inSymbolics(mo)) {
+          state->replaceSymbolic(mo, wos);
+        }
         wos->getDynamicType()->handleMemoryAccess(
             targetType, mo->getOffsetExpr(address),
             ConstantExpr::alloc(size, Context::get().getPointerWidth()), true);
@@ -6064,6 +6070,9 @@ void Executor::executeMemoryOperation(
             !targetType->getRawType()->isPointerTy()) {
           result = makeMockValue(*state, "mockGlobalValue", result->getWidth());
           ObjectState *wos = state->addressSpace.getWriteable(mo, os);
+          if (state->inSymbolics(mo)) {
+            state->replaceSymbolic(mo, wos);
+          }
           wos->write(mo->getOffsetExpr(address), result);
         }
 
@@ -6159,6 +6168,9 @@ void Executor::executeMemoryOperation(
           const ObjectState *os = op.second;
 
           ObjectState *wos = state->addressSpace.getWriteable(mo, os);
+          if (state->inSymbolics(mo)) {
+            state->replaceSymbolic(mo, wos);
+          }
           if (wos->readOnly) {
             branches =
                 forkInternal(*state, Expr::createIsZero(unboundConditions[i]),
@@ -6229,6 +6241,9 @@ void Executor::executeMemoryOperation(
 
       if (isWrite) {
         ObjectState *wos = bound->addressSpace.getWriteable(mo, os);
+        if (bound->inSymbolics(mo)) {
+          bound->replaceSymbolic(mo, wos);
+        }
         wos->getDynamicType()->handleMemoryAccess(
             targetType, mo->getOffsetExpr(address),
             ConstantExpr::alloc(size, Context::get().getPointerWidth()), true);
@@ -6246,6 +6261,9 @@ void Executor::executeMemoryOperation(
             !targetType->getRawType()->isPointerTy()) {
           result = makeMockValue(*bound, "mockGlobalValue", result->getWidth());
           ObjectState *wos = bound->addressSpace.getWriteable(mo, os);
+          if (bound->inSymbolics(mo)) {
+            bound->replaceSymbolic(mo, wos);
+          }
           wos->write(mo->getOffsetExpr(address), result);
         }
 
@@ -7274,6 +7292,9 @@ void Executor::doImpliedValueConcretization(ExecutionState &state, ref<Expr> e,
         assert(!os->readOnly &&
                "not possible? read only object with static read?");
         ObjectState *wos = state.addressSpace.getWriteable(mo, os);
+        if (state.inSymbolics(mo)) {
+          state.replaceSymbolic(mo, wos);
+        }
         wos->write(CE, it->second);
       }
     }

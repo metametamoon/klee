@@ -417,6 +417,7 @@ public:
   void popFrame();
 
   void addSymbolic(const MemoryObject *mo, ObjectState *os);
+  void replaceSymbolic(const MemoryObject *mo, ObjectState *os);
   void replaceMemoryObjectFromSymbolics(const MemoryObject *oldMemObj,
                                         const MemoryObject *newMemObj,
                                         ObjectState *newObjState);
