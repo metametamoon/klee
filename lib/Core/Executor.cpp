@@ -63,6 +63,7 @@
 #include "klee/Solver/Common.h"
 #include "klee/Solver/Solver.h"
 #include "klee/Solver/SolverCmdLine.h"
+#include "klee/Solver/SolverUtil.h"
 #include "klee/Statistics/TimerStatIncrementer.h"
 #include "klee/Support/Casting.h"
 #include "klee/Support/ErrorHandling.h"
@@ -6701,7 +6702,7 @@ ref<const MemoryObject> Executor::lazyInitializeObject(
 
     addConstraint(state, AndExpr::create(lowerBound, upperBound));
     conditionExpr =
-        AddExpr::create(conditionExpr, AndExpr::create(lowerBound, upperBound));
+        AndExpr::create(conditionExpr, AndExpr::create(lowerBound, upperBound));
   } else {
     sizeExpr = Expr::createPointer(concreteSize);
   }
@@ -7563,7 +7564,8 @@ bool Executor::getSymbolicSolution(const ExecutionState &state, KTest &res) {
     if (success) {
       Assignment symcreteModel = Assignment(symcreteObjects, symcreteValues);
 
-      for (auto &i : model.diffWith(symcreteModel).bindings) {
+      auto diffAssignment = model.diffWith(symcreteModel).bindings;
+      for (auto &i : diffAssignment) {
         model.bindings.replace({i.first, i.second});
       }
     }
