@@ -137,6 +137,15 @@ cl::OptionCategory TestGenCat("Test generation options",
 cl::OptionCategory LazyInitCat("Lazy initialization option",
                                "These options configure lazy initialization.");
 
+cl::OptionCategory
+    TestComp("TestComp options",
+             "These options configure execution on \"TestComp\" competition.");
+
+cl::opt<bool> UseCoveredNewError(
+    "use-covered-new-error",
+    cl::desc("Do not output tests leading to the same \"abort\" errors."),
+    cl::init(false), cl::cat(TestComp));
+
 cl::opt<bool> UseAdvancedTypeSystem(
     "use-advanced-type-system",
     cl::desc("Use advanced information about type system from "
@@ -4742,7 +4751,8 @@ void Executor::initializeTypeManager() {
 
 static bool shouldWriteTest(const ExecutionState &state, bool isError = false) {
   state.updateCoveredNew();
-  bool coveredNew = isError ? state.isCoveredNewError() : state.isCoveredNew();
+  bool coveredNew = isError ? !UseCoveredNewError || state.isCoveredNewError()
+                            : state.isCoveredNew();
   return !OnlyOutputStatesCoveringNew || coveredNew;
 }
 
@@ -5095,7 +5105,8 @@ void Executor::terminateStateOnError(ExecutionState &state,
 
   if ((EmitAllErrors ||
        emittedErrors.insert(std::make_pair(lastInst, message)).second) &&
-      shouldWriteTest(state, true)) {
+      (terminationType != StateTerminationType::Abort ||
+       shouldWriteTest(state, true))) {
     std::string filepath = ki->getSourceFilepath();
     if (!filepath.empty()) {
       klee_message("ERROR: %s:%zu: %s", filepath.c_str(), ki->getLine(),
