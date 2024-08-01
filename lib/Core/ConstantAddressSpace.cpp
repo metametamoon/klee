@@ -1,0 +1,177 @@
+#include "ConstantAddressSpace.h"
+
+#include "AddressSpace.h"
+#include "klee/Core/Context.h"
+
+#include <queue>
+
+using namespace klee;
+
+void ConstantPointerGraph::addObject(const ObjectPair &objectPair) {
+  if (objectGraph.count(objectPair.first) != 0) {
+    return;
+  }
+  addReachableFrom(objectPair);
+}
+
+void ConstantPointerGraph::addReachableFrom(const ObjectPair &objectPair) {
+  std::queue<ObjectPair> objectQueue;
+  objectQueue.push(objectPair);
+
+  while (!objectQueue.empty()) {
+    auto frontObjectPair = objectQueue.front();
+    objectQueue.pop();
+
+    auto references = owningAddressSpace.referencesIn(frontObjectPair);
+
+    for (auto &[offset, referencedResolution] : references) {
+      auto [referencedObject, referencedState] =
+          referencedResolution.resolution;
+
+      if (objectGraph.count(referencedObject) == 0) {
+        objectQueue.push(referencedResolution.resolution);
+        objectGraph.emplace(referencedObject, ConstantResolutionList{});
+      }
+    }
+
+    objectGraph[frontObjectPair.first] = std::move(references);
+  }
+}
+
+const ConstantResolutionList &
+ConstantPointerGraph::at(const MemoryObject &object) const {
+  return objectGraph.at(&object);
+}
+
+std::size_t ConstantPointerGraph::size() const { return objectGraph.size(); }
+
+ConstantPointerGraph::ObjectGraphContainer::const_iterator
+ConstantPointerGraph::begin() const {
+  return objectGraph.begin();
+}
+
+ConstantPointerGraph::ObjectGraphContainer::const_iterator
+ConstantPointerGraph::end() const {
+  return objectGraph.end();
+}
+
+////////////////////////////////////////////////////////////////
+
+ConstantAddressSpace::ConstantAddressSpace(const AddressSpace &addressSpace,
+                                           const Assignment &model)
+    : addressSpace(addressSpace), model(model) {
+  for (const auto &[object, state] : addressSpace.objects) {
+    insert(ObjectPair{object, state.get()});
+  }
+}
+
+bool ConstantAddressSpace::isResolution(ref<ConstantPointerExpr> address,
+                                        const MemoryObject &object) const {
+  auto condition = object.getBoundsCheckPointer(address);
+  return model.evaluate(condition)->isTrue();
+}
+
+std::uint64_t
+ConstantAddressSpace::addressOf(const MemoryObject &object) const {
+  auto addressExpr = PointerExpr::create(object.getBaseExpr());
+
+  addressExpr->dump();
+  model.evaluate(addressExpr)->dump();
+
+  ref<ConstantPointerExpr> constantAddressExpr =
+      dyn_cast<ConstantPointerExpr>(model.evaluate(addressExpr));
+  assert(!constantAddressExpr.isNull());
+  return constantAddressExpr->getConstantValue()->getZExtValue();
+}
+
+std::uint64_t ConstantAddressSpace::sizeOf(const MemoryObject &object) const {
+  auto sizeExpr = object.getSizeExpr();
+  ref<ConstantExpr> constantSizeExpr =
+      dyn_cast<ConstantExpr>(model.evaluate(sizeExpr));
+  assert(!constantSizeExpr.isNull());
+  return constantSizeExpr->getZExtValue();
+}
+
+ConstantAddressSpace::Iterator ConstantAddressSpace::begin() const {
+  return Iterator(objects.begin());
+}
+
+ConstantAddressSpace::Iterator ConstantAddressSpace::end() const {
+  return Iterator(objects.end());
+}
+
+ConstantResolutionList
+ConstantAddressSpace::referencesIn(const ObjectPair &objectPair) const {
+  auto [object, objectState] = objectPair;
+
+  auto pointerWidth = Context::get().getPointerWidth();
+  auto objectSize =
+      cast<ConstantExpr>(model.evaluate(object->getSizeExpr(), false))
+          ->getZExtValue();
+
+  ConstantResolutionList references;
+
+  for (Expr::Width i = 0; i + pointerWidth / CHAR_BIT <= objectSize; ++i) {
+    // TODO: Make exract 1 from end and Concat 1 to the beginning instead
+    auto contentPart = objectState->read(i, pointerWidth);
+
+    auto pointer = PointerExpr::create(contentPart);
+    ref<ConstantPointerExpr> constantPointer =
+        dyn_cast<ConstantPointerExpr>(model.evaluate(pointer, false));
+
+    assert(!constantPointer.isNull());
+
+    if (auto resolution = resolve(constantPointer)) {
+      references.emplace(
+          i, ConstantResolution{
+                 constantPointer->getConstantValue()->getZExtValue(),
+                 std::move(*resolution)});
+    }
+  }
+
+  // llvm::errs() << "References in " << object.id << ": ";
+  // for (auto reference : references) {
+  //   llvm::errs() << reference.second.first->id << " ";
+  // }
+  // llvm::errs() << "\n";
+
+  return references;
+}
+
+std::optional<ObjectPair>
+ConstantAddressSpace::resolve(ref<ConstantPointerExpr> address) const {
+  auto valueOfAddress = address->getConstantBase()->getZExtValue();
+  auto itNextToObject = objects.upper_bound(valueOfAddress);
+
+  if (itNextToObject != objects.begin()) {
+    auto object = std::prev(itNextToObject)->second;
+    if (isResolution(address, *object)) {
+      return {addressSpace.findObject(object)};
+    }
+  }
+
+  if (itNextToObject != objects.end()) {
+    auto object = itNextToObject->second;
+    if (isResolution(address, *object)) {
+      return {addressSpace.findObject(object)};
+    }
+  }
+
+  return std::nullopt;
+}
+
+ConstantPointerGraph ConstantAddressSpace::createPointerGraph() const {
+  return ConstantPointerGraph(*this);
+}
+
+void ConstantAddressSpace::insert(const ObjectPair &objectPair) {
+  auto object = objectPair.first;
+
+  auto addressOfObject = model.evaluate(object->getBaseExpr());
+
+  assert(isa<ConstantExpr>(addressOfObject));
+  auto valueOfAddressOfObject =
+      cast<ConstantExpr>(addressOfObject)->getZExtValue();
+  assert(objects.count(valueOfAddressOfObject) == 0);
+  objects.emplace(valueOfAddressOfObject, object);
+}

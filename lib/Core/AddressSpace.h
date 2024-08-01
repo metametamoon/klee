@@ -17,6 +17,9 @@
 #include "klee/Expr/Expr.h"
 #include "klee/System/Time.h"
 
+#include <cstdint>
+#include <functional>
+
 namespace klee {
 class ExecutionState;
 class MemoryObject;

@@ -57,25 +57,26 @@ static void push_random_obj(KTest *b, const char *name, unsigned non_zero_bytes,
   KTestObject *o = &b->objects[b->numObjects++];
   assert(b->numObjects < MAX);
 
-  o->numPointers = 0;
-  o->pointers = nullptr;
+  o->content.numPointers = 0;
+  o->content.pointers = nullptr;
   o->address = 0;
 
   if ((o->name = strdup(name)) == NULL) {
     error_exit("%s:%d: strdup() failure\n", __FILE__, __LINE__);
   }
-  o->numBytes = total_bytes;
-  if ((o->bytes = (unsigned char *)malloc(o->numBytes)) == NULL) {
+  o->content.numBytes = total_bytes;
+  if ((o->content.bytes = (unsigned char *)malloc(o->content.numBytes)) ==
+      NULL) {
     error_exit("%s:%d: malloc() failure\n", __FILE__, __LINE__);
   }
 
   unsigned i;
   for (i = 0; i < non_zero_bytes; i++) {
-    o->bytes[i] = random() % 255 + 1;
+    o->content.bytes[i] = random() % 255 + 1;
   }
 
   for (i = non_zero_bytes; i < total_bytes; i++)
-    o->bytes[i] = 0;
+    o->content.bytes[i] = 0;
 }
 
 static void push_obj(KTest *b, const char *name, unsigned total_bytes,
@@ -83,18 +84,18 @@ static void push_obj(KTest *b, const char *name, unsigned total_bytes,
   KTestObject *o = &b->objects[b->numObjects++];
   assert(b->numObjects < MAX);
 
-  o->numPointers = 0;
-  o->pointers = nullptr;
+  o->content.numPointers = 0;
+  o->content.pointers = nullptr;
   o->address = 0;
 
   if ((o->name = strdup(name)) == NULL) {
     error_exit("%s:%d: strdup() failure\n", __FILE__, __LINE__);
   }
-  o->numBytes = total_bytes;
-  if ((o->bytes = (unsigned char *)malloc(total_bytes)) == NULL) {
+  o->content.numBytes = total_bytes;
+  if ((o->content.bytes = (unsigned char *)malloc(total_bytes)) == NULL) {
     error_exit("%s:%d: malloc() failure\n", __FILE__, __LINE__);
   }
-  memcpy(o->bytes, content, total_bytes);
+  memcpy(o->content.bytes, content, total_bytes);
 }
 
 static void push_range(KTest *b, const char *name, unsigned value) {
@@ -307,7 +308,7 @@ int main(int argc, char *argv[]) {
 
   for (i = 0; i < b.numObjects; ++i) {
     free(b.objects[i].name);
-    free(b.objects[i].bytes);
+    free(b.objects[i].content.bytes);
   }
 
   free(b.objects);

@@ -19,19 +19,26 @@ extern "C" {
 typedef struct Pointer Pointer;
 struct Pointer {
   uint64_t offset;
-  uint64_t index;
+  uint64_t indexOfObject;
   uint64_t indexOffset;
+};
+
+typedef struct KTestValue KTestValue;
+struct KTestValue {
+  unsigned numBytes;
+  unsigned char *bytes;
+  unsigned char *finalBytes;
+
+  unsigned numPointers;
+  Pointer *pointers;
 };
 
 typedef struct KTestObject KTestObject;
 struct KTestObject {
   char *name;
   uint64_t address; // As a heuristic for now
-  unsigned numBytes;
-  unsigned char *bytes;
-  unsigned char *finalBytes;
-  unsigned numPointers;
-  Pointer *pointers;
+
+  KTestValue content;
 };
 
 typedef struct KTest KTest;

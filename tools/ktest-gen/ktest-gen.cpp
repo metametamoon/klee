@@ -31,12 +31,12 @@ static void push_obj(KTest *b, const char *name, unsigned total_bytes,
 
   o->name = strdup(name);
   o->address = 0;
-  o->numBytes = total_bytes;
-  o->bytes = (unsigned char *)malloc(o->numBytes);
-  o->numPointers = 0;
-  o->pointers = nullptr;
+  o->content.numBytes = total_bytes;
+  o->content.bytes = (unsigned char *)malloc(o->content.numBytes);
+  o->content.numPointers = 0;
+  o->content.pointers = nullptr;
 
-  memcpy(o->bytes, bytes, total_bytes);
+  memcpy(o->content.bytes, bytes, total_bytes);
 }
 
 void print_usage_and_exit(char *program_name) {
@@ -318,7 +318,7 @@ int main(int argc, char *argv[]) {
 
   for (int i = 0; i < (int)b.numObjects; ++i) {
     free(b.objects[i].name);
-    free(b.objects[i].bytes);
+    free(b.objects[i].content.bytes);
   }
   free(b.objects);
 

@@ -476,16 +476,16 @@ void klee_make_symbolic(void *addr, size_t nbytes, const char *name) {
     __emit_error("ran out of appropriate inputs");
   } else {
     KTestObject *boo = &input->objects[obj_index];
-    if (boo->numBytes != nbytes) {
+    if (boo->content.numBytes != nbytes) {
       fprintf(stderr, "%s\n", name);
       fprintf(stderr, "%s\n", boo->name);
       fprintf(stderr,
               "KLEE-REPLAY: ERROR: make_symbolic mismatch, different sizes: "
               "%d in input file, %lu in code\n",
-              boo->numBytes, (unsigned long)nbytes);
+              boo->content.numBytes, (unsigned long)nbytes);
       exit(1);
     } else {
-      memcpy(addr, boo->bytes, nbytes);
+      memcpy(addr, boo->content.bytes, nbytes);
       obj_index++;
     }
   }

@@ -42,11 +42,11 @@ KTestObject *SeedInfo::getNextInput(const MemoryObject *mo, bool byName) {
       KTestObject *obj = &input->objects[i];
       if (ref<ConstantExpr> sizeExpr =
               dyn_cast<ConstantExpr>(mo->getSizeExpr())) {
-        if (obj->numBytes == sizeExpr->getZExtValue()) {
+        if (obj->content.numBytes == sizeExpr->getZExtValue()) {
           used.insert(obj);
           klee_warning_once(mo,
                             "using seed input %s[%d] for: %s (no name match)",
-                            obj->name, obj->numBytes, mo->name.c_str());
+                            obj->name, obj->content.numBytes, mo->name.c_str());
           return obj;
         }
       }

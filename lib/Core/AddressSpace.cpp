@@ -15,6 +15,7 @@
 
 #include "klee/Expr/ArrayExprVisitor.h"
 #include "klee/Expr/Expr.h"
+#include "klee/Expr/ExprUtil.h"
 #include "klee/Module/KType.h"
 #include "klee/Statistics/TimerStatIncrementer.h"
 

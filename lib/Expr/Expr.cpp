@@ -2874,7 +2874,8 @@ ref<Expr> PointerExpr::createSymbolic(const ref<Expr> &expr,
                                       const ref<Expr> &off) {
   ref<Expr> pointer;
   auto updates = read->updates;
-  if (isa<LazyInitializationAddressSource>(updates.root->source)) {
+  if (isa<LazyInitializationAddressSource>(updates.root->source) ||
+      isa<SymbolicSizeConstantAddressSource>(updates.root->source)) {
     pointer = PointerExpr::create(expr, expr);
   } else {
     auto baseArray = Array::create(

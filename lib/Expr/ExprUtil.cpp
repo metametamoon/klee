@@ -253,6 +253,10 @@ void klee::findObjects(ref<Expr> e, std::vector<const Array *> &results) {
 typedef std::vector<ref<Expr>>::iterator A;
 template void klee::findSymbolicObjects<A>(A, A, std::vector<const Array *> &);
 
+typedef std::vector<ref<Expr>>::const_iterator cA;
+template void klee::findSymbolicObjects<cA>(cA, cA,
+                                            std::vector<const Array *> &);
+
 typedef std::set<ref<Expr>>::iterator B;
 template void klee::findSymbolicObjects<B>(B, B, std::vector<const Array *> &);
 

@@ -12,6 +12,7 @@ add_library(kleeCore
   CallPathManager.cpp
   CodeLocation.cpp
   Context.cpp
+  ConstantAddressSpace.cpp
   CoreStats.cpp
   CXXTypeSystem/CXXTypeManager.cpp
   DistanceCalculator.cpp

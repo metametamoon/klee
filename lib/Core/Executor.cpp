@@ -11,6 +11,7 @@
 
 #include "AddressSpace.h"
 #include "CXXTypeSystem/CXXTypeManager.h"
+#include "ConstantAddressSpace.h"
 #include "ConstructStorage.h"
 #include "CoreStats.h"
 #include "DistanceCalculator.h"
@@ -104,9 +105,12 @@
 #include <cxxabi.h>
 #include <iosfwd>
 #include <iostream>
+#include <memory>
+#include <set>
 #include <sys/mman.h>
 #include <sys/resource.h>
 #include <type_traits>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -6854,14 +6858,14 @@ void Executor::executeMakeSymbolic(ExecutionState &state,
               dyn_cast<ConstantExpr>(mo->getSizeExpr());
           if (sizeExpr) {
             unsigned moSize = sizeExpr->getZExtValue();
-            if (obj->numBytes != moSize &&
+            if (obj->content.numBytes != moSize &&
                 ((!(AllowSeedExtension || ZeroSeedExtension) &&
-                  obj->numBytes < moSize) ||
-                 (!AllowSeedTruncation && obj->numBytes > moSize))) {
+                  obj->content.numBytes < moSize) ||
+                 (!AllowSeedTruncation && obj->content.numBytes > moSize))) {
               std::stringstream msg;
               msg << "replace size mismatch: " << mo->name << "[" << moSize
                   << "]"
-                  << " vs " << obj->name << "[" << obj->numBytes << "]"
+                  << " vs " << obj->name << "[" << obj->content.numBytes << "]"
                   << " in test\n";
 
               terminateStateOnUserError(state, msg.str());
@@ -6872,8 +6876,9 @@ void Executor::executeMakeSymbolic(ExecutionState &state,
                   si.assignment.bindings.end()) {
                 values = si.assignment.bindings.at(array);
               }
-              values.store(0, obj->bytes,
-                           obj->bytes + std::min(obj->numBytes, moSize));
+              values.store(0, obj->content.bytes,
+                           obj->content.bytes +
+                               std::min(obj->content.numBytes, moSize));
               si.assignment.bindings.replace({array, values});
             }
           }
@@ -6887,9 +6892,9 @@ void Executor::executeMakeSymbolic(ExecutionState &state,
     } else {
       KTestObject *obj = &replayKTest->objects[replayPosition++];
       ref<ConstantExpr> sizeExpr = dyn_cast<ConstantExpr>(mo->getSizeExpr());
-      if (sizeExpr && obj->numBytes != sizeExpr->getZExtValue()) {
+      if (sizeExpr && obj->content.numBytes != sizeExpr->getZExtValue()) {
         for (unsigned i = 0; i < sizeExpr->getZExtValue(); i++)
-          os->write8(i, obj->bytes[i]);
+          os->write8(i, obj->content.bytes[i]);
       } else {
         terminateStateOnUserError(state, "replay size mismatch");
       }
@@ -7354,6 +7359,69 @@ void resolvePointer(const ExecutionState &state,
   }
 }
 
+static std::unordered_map<const MemoryObject *, std::size_t>
+enumerateObjectsForKTest(const ExecutionState &state,
+                         const ConstantPointerGraph &pointerGraph) {
+  auto constantNumCounter = state.symbolics.size();
+
+  std::unordered_map<const MemoryObject *, std::size_t> enumeration;
+  enumeration.reserve(pointerGraph.size());
+
+  for (const auto &[object, resolution] : pointerGraph) {
+    if (state.inSymbolics(*object)) {
+      auto &wrappingSymbolic = state.symbolics.at(object);
+      enumeration[object] = wrappingSymbolic.num;
+    } else {
+      enumeration[object] = constantNumCounter;
+      ++constantNumCounter;
+    }
+  }
+
+  return enumeration;
+}
+
+static std::unique_ptr<KTestObject>
+formObjectsForKTest(const ExecutionState &state,
+                    const ConstantPointerGraph &pointerGraph) {
+  const auto enumeration = enumerateObjectsForKTest(state, pointerGraph);
+
+  KTestObject *objects = new KTestObject[enumeration.size()]();
+  for (const auto &[object, resolution] : pointerGraph) {
+    // Select KTestObject for the object
+    const auto objectNum = enumeration.at(object);
+    auto &ktestObject = objects[objectNum];
+
+    ktestObject.address = pointerGraph.owningAddressSpace.addressOf(*object);
+    ktestObject.name = const_cast<char *>(object->name.c_str());
+
+    // Allocate memory for pointers
+    if (resolution.empty()) {
+      continue;
+    }
+    ktestObject.content.numPointers = resolution.size();
+    ktestObject.content.pointers = new Pointer[resolution.size()];
+
+    std::size_t currentPointerIdx = 0;
+    // Populate pointers
+    for (const auto &[offset, singleResolution] : resolution) {
+      auto [writtenAddress, resolvedObjectPair] = singleResolution;
+
+      auto referencesToObjectNum = enumeration.at(resolvedObjectPair.first);
+      auto addressOfReferencedObject =
+          pointerGraph.owningAddressSpace.addressOf(*resolvedObjectPair.first);
+
+      auto &pointerObject = ktestObject.content.pointers[currentPointerIdx];
+      pointerObject.indexOfObject = referencesToObjectNum;
+      pointerObject.indexOffset = offset;
+      pointerObject.offset = writtenAddress - addressOfReferencedObject;
+
+      ++currentPointerIdx;
+    }
+  }
+
+  return std::unique_ptr<KTestObject>(objects);
+}
+
 void Executor::setInitializationGraph(
     const ExecutionState &state, const std::vector<klee::Symbolic> &symbolics,
     const Assignment &model, KTest &ktest) {
@@ -7422,25 +7490,26 @@ void Executor::setInitializationGraph(
             model.evaluate(pointer.second.second, false);
         Pointer o;
         o.offset = cast<ConstantExpr>(offset)->getZExtValue();
-        o.index = pointeeIndex;
+        o.indexOfObject = pointeeIndex;
         o.indexOffset = cast<ConstantExpr>(indexOffset)->getZExtValue();
         if (s[pointerIndex].count(o.offset) &&
             s[pointerIndex][o.offset] !=
-                std::make_pair(o.index, o.indexOffset)) {
+                std::make_pair(o.indexOfObject, o.indexOffset)) {
           assert(0 && "unreachable");
         }
         if (!s[pointerIndex].count(o.offset)) {
           pointers[pointerIndex].push_back(o);
-          s[pointerIndex][o.offset] = std::make_pair(o.index, o.indexOffset);
+          s[pointerIndex][o.offset] =
+              std::make_pair(o.indexOfObject, o.indexOffset);
         }
       }
     }
   }
   for (auto i : pointers) {
-    ktest.objects[i.first].numPointers = i.second.size();
-    ktest.objects[i.first].pointers = new Pointer[i.second.size()];
+    ktest.objects[i.first].content.numPointers = i.second.size();
+    ktest.objects[i.first].content.pointers = new Pointer[i.second.size()];
     for (size_t j = 0; j < i.second.size(); j++) {
-      ktest.objects[i.first].pointers[j] = i.second[j];
+      ktest.objects[i.first].content.pointers[j] = i.second[j];
     }
   }
   return;
@@ -7524,6 +7593,11 @@ bool Executor::getSymbolicSolution(const ExecutionState &state, KTest &res) {
   std::vector<const Array *> uninitObjects;
   std::copy_if(allObjects.begin(), allObjects.end(),
                std::back_inserter(uninitObjects), isUninitialized);
+
+  for (auto symcrete : state.constraints.cs().symcretes()) {
+    auto dependent = symcrete->dependentArrays();
+    allObjects.insert(allObjects.end(), dependent.begin(), dependent.end());
+  }
 
   std::vector<klee::Symbolic> symbolics;
   symbolics.reserve(state.symbolics.size());
@@ -7671,49 +7745,55 @@ bool Executor::getSymbolicSolution(const ExecutionState &state, KTest &res) {
     }
   }
 
-  for (auto binding : state.constraints.cs().concretization().bindings) {
-    model.bindings.insert(binding);
-  }
-
   res.numObjects = symbolics.size();
   res.objects = new KTestObject[res.numObjects];
   res.uninitCoeff = uninitObjects.size() * UninitMemoryTestMultiplier;
+
+  ConstantAddressSpace constantAddressSpace(state.addressSpace, model);
+  ConstantPointerGraph pointerGraph = constantAddressSpace.createPointerGraph();
 
   {
     size_t i = 0;
     // Remove mo->size, evaluate size expr in array
     for (auto &symbolic : symbolics) {
       auto mo = symbolic.memoryObject;
+      pointerGraph.addObject(
+          ObjectPair{symbolic.memoryObject.get(), symbolic.objectState.get()});
+
       auto &values = model.bindings.at(symbolic.array());
       KTestObject *o = &res.objects[i];
       o->name = const_cast<char *>(mo->name.c_str());
-      o->address = cast<ConstantExpr>(evaluator.visit(mo->getBaseExpr()))
-                       ->getZExtValue();
-      o->numBytes = cast<ConstantExpr>(evaluator.visit(mo->getSizeExpr()))
-                        ->getZExtValue();
-      o->finalBytes = nullptr;
-      o->bytes = new unsigned char[o->numBytes];
-      for (size_t j = 0; j < o->numBytes; j++) {
-        o->bytes[j] = values.load(j);
+
+      o->address = constantAddressSpace.addressOf(*mo);
+      o->content.numBytes = constantAddressSpace.sizeOf(*mo);
+
+      o->content.finalBytes = nullptr;
+      o->content.bytes = new unsigned char[o->content.numBytes];
+      for (size_t j = 0; j < o->content.numBytes; j++) {
+        o->content.bytes[j] = values.load(j);
       }
-      o->numPointers = 0;
-      o->pointers = nullptr;
+      o->content.numPointers = 0;
+      o->content.pointers = nullptr;
       i++;
 
       if (state.inSymbolics(*mo)) {
         auto os = symbolic.objectState;
-        o->finalBytes = new unsigned char[o->numBytes];
-        for (std::size_t b = 0; b < o->numBytes; ++b) {
+        o->content.finalBytes = new unsigned char[o->content.numBytes];
+        for (std::size_t b = 0; b < o->content.numBytes; ++b) {
           auto byte = os->read8(b);
           if (auto pointerByte = dyn_cast<PointerExpr>(byte)) {
             byte = pointerByte->getValue();
           }
           auto evalRe = model.evaluate(byte);
-          o->finalBytes[b] = cast<ConstantExpr>(evalRe)->getZExtValue();
+          o->content.finalBytes[b] = cast<ConstantExpr>(evalRe)->getZExtValue();
         }
       }
     }
   }
+
+  auto ktestObjects = formObjectsForKTest(state, pointerGraph);
+  // res.numObjects = pointerGraph.size();
+  // res.objects = ktestObjects.release();
 
   setInitializationGraph(state, symbolics, model, res);
 

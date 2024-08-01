@@ -717,9 +717,9 @@ void KleeHandler::processTestCase(const ExecutionState &state,
       }
 
       for (unsigned i = 0; i < ktest.numObjects; i++) {
-        delete[] ktest.objects[i].bytes;
-        delete[] ktest.objects[i].finalBytes;
-        delete[] ktest.objects[i].pointers;
+        delete[] ktest.objects[i].content.bytes;
+        delete[] ktest.objects[i].content.finalBytes;
+        delete[] ktest.objects[i].content.pointers;
       }
       delete[] ktest.objects;
     }
@@ -860,11 +860,11 @@ void KleeHandler::writeTestCaseXML(bool isError, const KTest &assignments,
     *file << item.name;
     *file << "\">";
     // Ignore the type
-    auto type_size_bytes = item.numBytes * 8;
+    auto type_size_bytes = item.content.numBytes * 8;
     llvm::APInt v(type_size_bytes, 0, false);
-    for (int i = item.numBytes - 1; i >= 0; i--) {
+    for (int i = item.content.numBytes - 1; i >= 0; i--) {
       v <<= 8;
-      v |= item.bytes[i];
+      v |= item.content.bytes[i];
     }
     // print value
 

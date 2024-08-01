@@ -55,21 +55,24 @@ static void report_internal_error(const char *msg, ...) {
 void recursively_allocate(KTestObject *obj, size_t index, void *addr,
                           int lazy) {
   if (!lazy) {
-    memcpy(addr, obj->bytes, obj->numBytes);
+    memcpy(addr, obj->content.bytes, obj->content.numBytes);
     addresses[index] = (uintptr_t)addr;
   } else {
-    void *address = malloc(obj->numBytes);
-    memcpy(address, obj->bytes, obj->numBytes);
+    void *address = malloc(obj->content.numBytes);
+    memcpy(address, obj->content.bytes, obj->content.numBytes);
     addresses[index] = (uintptr_t)address;
   }
-  for (size_t i = 0; i < obj->numPointers; i++) {
-    if (!addresses[obj->pointers[i].index]) {
-      recursively_allocate(&testData->objects[obj->pointers[i].index],
-                           obj->pointers[i].index, 0, 1);
+  for (size_t i = 0; i < obj->content.numPointers; i++) {
+    if (!addresses[obj->content.pointers[i].indexOfObject]) {
+      recursively_allocate(
+          &testData->objects[obj->content.pointers[i].indexOfObject],
+          obj->content.pointers[i].indexOfObject, 0, 1);
     }
-    void *offset_addr = (void *)(addresses[index] + (obj->pointers[i].offset));
-    void *pointee_addr = (void *)(addresses[obj->pointers[i].index]);
-    pointee_addr += obj->pointers[i].indexOffset;
+    void *offset_addr =
+        (void *)(addresses[index] + (obj->content.pointers[i].offset));
+    void *pointee_addr =
+        (void *)(addresses[obj->content.pointers[i].indexOfObject]);
+    pointee_addr += obj->content.pointers[i].indexOffset;
     memcpy(offset_addr, &pointee_addr, sizeof(void *));
   }
   return;
@@ -145,9 +148,9 @@ static void klee_make_symbol(void *array, size_t nbytes, const char *name) {
             "object name mismatch. Requesting \"%s\" but returning \"%s\"",
             name, o->name);
       }
-      if (nbytes != o->numBytes) {
+      if (nbytes != o->content.numBytes) {
         report_internal_error("object sizes differ. Expected %zu but got %u",
-                              nbytes, o->numBytes);
+                              nbytes, o->content.numBytes);
       }
       recursively_allocate(o, testPosition, array, 0);
       ++testPosition;
