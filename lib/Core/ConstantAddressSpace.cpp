@@ -7,8 +7,8 @@
 
 using namespace klee;
 
-void ConstantPointerGraph::addObject(const ObjectPair &objectPair) {
-  if (objectGraph.count(objectPair.first) != 0) {
+void ConstantPointerGraph::addSource(const ObjectPair &objectPair) {
+  if (objectGraph.count(objectPair) != 0) {
     return;
   }
   addReachableFrom(objectPair);
@@ -25,22 +25,15 @@ void ConstantPointerGraph::addReachableFrom(const ObjectPair &objectPair) {
     auto references = owningAddressSpace.referencesIn(frontObjectPair);
 
     for (auto &[offset, referencedResolution] : references) {
-      auto [referencedObject, referencedState] =
-          referencedResolution.resolution;
-
-      if (objectGraph.count(referencedObject) == 0) {
-        objectQueue.push(referencedResolution.resolution);
-        objectGraph.emplace(referencedObject, ConstantResolutionList{});
+      if (objectGraph.count(referencedResolution.objectPair) == 0) {
+        objectQueue.push(referencedResolution.objectPair);
+        objectGraph.emplace(referencedResolution.objectPair,
+                            ConstantResolutionList{});
       }
     }
 
-    objectGraph[frontObjectPair.first] = std::move(references);
+    objectGraph[frontObjectPair] = std::move(references);
   }
-}
-
-const ConstantResolutionList &
-ConstantPointerGraph::at(const MemoryObject &object) const {
-  return objectGraph.at(&object);
 }
 
 std::size_t ConstantPointerGraph::size() const { return objectGraph.size(); }
@@ -74,9 +67,6 @@ bool ConstantAddressSpace::isResolution(ref<ConstantPointerExpr> address,
 std::uint64_t
 ConstantAddressSpace::addressOf(const MemoryObject &object) const {
   auto addressExpr = PointerExpr::create(object.getBaseExpr());
-
-  addressExpr->dump();
-  model.evaluate(addressExpr)->dump();
 
   ref<ConstantPointerExpr> constantAddressExpr =
       dyn_cast<ConstantPointerExpr>(model.evaluate(addressExpr));
@@ -128,12 +118,6 @@ ConstantAddressSpace::referencesIn(const ObjectPair &objectPair) const {
                  std::move(*resolution)});
     }
   }
-
-  // llvm::errs() << "References in " << object.id << ": ";
-  // for (auto reference : references) {
-  //   llvm::errs() << reference.second.first->id << " ";
-  // }
-  // llvm::errs() << "\n";
 
   return references;
 }

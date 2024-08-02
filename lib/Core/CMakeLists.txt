@@ -22,6 +22,7 @@ add_library(kleeCore
   ExecutorUtil.cpp
   ExternalDispatcher.cpp
   ImpliedValue.cpp
+  KTestBuilder.cpp
   Memory.cpp
   MemoryManager.cpp
   ObjectManager.cpp

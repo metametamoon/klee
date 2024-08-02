@@ -19,6 +19,7 @@
 #include "ExternalDispatcher.h"
 #include "GetElementPtrTypeIterator.h"
 #include "ImpliedValue.h"
+#include "KTestBuilder.h"
 #include "Memory.h"
 #include "MemoryManager.h"
 #include "PForest.h"
@@ -7359,69 +7360,6 @@ void resolvePointer(const ExecutionState &state,
   }
 }
 
-static std::unordered_map<const MemoryObject *, std::size_t>
-enumerateObjectsForKTest(const ExecutionState &state,
-                         const ConstantPointerGraph &pointerGraph) {
-  auto constantNumCounter = state.symbolics.size();
-
-  std::unordered_map<const MemoryObject *, std::size_t> enumeration;
-  enumeration.reserve(pointerGraph.size());
-
-  for (const auto &[object, resolution] : pointerGraph) {
-    if (state.inSymbolics(*object)) {
-      auto &wrappingSymbolic = state.symbolics.at(object);
-      enumeration[object] = wrappingSymbolic.num;
-    } else {
-      enumeration[object] = constantNumCounter;
-      ++constantNumCounter;
-    }
-  }
-
-  return enumeration;
-}
-
-static std::unique_ptr<KTestObject>
-formObjectsForKTest(const ExecutionState &state,
-                    const ConstantPointerGraph &pointerGraph) {
-  const auto enumeration = enumerateObjectsForKTest(state, pointerGraph);
-
-  KTestObject *objects = new KTestObject[enumeration.size()]();
-  for (const auto &[object, resolution] : pointerGraph) {
-    // Select KTestObject for the object
-    const auto objectNum = enumeration.at(object);
-    auto &ktestObject = objects[objectNum];
-
-    ktestObject.address = pointerGraph.owningAddressSpace.addressOf(*object);
-    ktestObject.name = const_cast<char *>(object->name.c_str());
-
-    // Allocate memory for pointers
-    if (resolution.empty()) {
-      continue;
-    }
-    ktestObject.content.numPointers = resolution.size();
-    ktestObject.content.pointers = new Pointer[resolution.size()];
-
-    std::size_t currentPointerIdx = 0;
-    // Populate pointers
-    for (const auto &[offset, singleResolution] : resolution) {
-      auto [writtenAddress, resolvedObjectPair] = singleResolution;
-
-      auto referencesToObjectNum = enumeration.at(resolvedObjectPair.first);
-      auto addressOfReferencedObject =
-          pointerGraph.owningAddressSpace.addressOf(*resolvedObjectPair.first);
-
-      auto &pointerObject = ktestObject.content.pointers[currentPointerIdx];
-      pointerObject.indexOfObject = referencesToObjectNum;
-      pointerObject.indexOffset = offset;
-      pointerObject.offset = writtenAddress - addressOfReferencedObject;
-
-      ++currentPointerIdx;
-    }
-  }
-
-  return std::unique_ptr<KTestObject>(objects);
-}
-
 void Executor::setInitializationGraph(
     const ExecutionState &state, const std::vector<klee::Symbolic> &symbolics,
     const Assignment &model, KTest &ktest) {
@@ -7750,15 +7688,12 @@ bool Executor::getSymbolicSolution(const ExecutionState &state, KTest &res) {
   res.uninitCoeff = uninitObjects.size() * UninitMemoryTestMultiplier;
 
   ConstantAddressSpace constantAddressSpace(state.addressSpace, model);
-  ConstantPointerGraph pointerGraph = constantAddressSpace.createPointerGraph();
 
   {
     size_t i = 0;
     // Remove mo->size, evaluate size expr in array
     for (auto &symbolic : symbolics) {
       auto mo = symbolic.memoryObject;
-      pointerGraph.addObject(
-          ObjectPair{symbolic.memoryObject.get(), symbolic.objectState.get()});
 
       auto &values = model.bindings.at(symbolic.array());
       KTestObject *o = &res.objects[i];
@@ -7791,7 +7726,13 @@ bool Executor::getSymbolicSolution(const ExecutionState &state, KTest &res) {
     }
   }
 
-  auto ktestObjects = formObjectsForKTest(state, pointerGraph);
+  KTest todo = KTestBuilder(state, model)
+                   .constructPointerGraph()
+                   .fillContent()
+                   .fillFinalContent()
+                   .build();
+
+  // auto ktestObjects = formObjectsForKTest(state, pointerGraph);
   // res.numObjects = pointerGraph.size();
   // res.objects = ktestObjects.release();
 

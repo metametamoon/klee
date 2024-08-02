@@ -22,7 +22,7 @@ class ConstantAddressSpace;
 
 struct ConstantResolution {
   std::uint64_t writtenAddress;
-  ObjectPair resolution;
+  ObjectPair objectPair;
 };
 
 typedef std::unordered_map<Expr::Width, ConstantResolution>
@@ -31,12 +31,18 @@ typedef std::unordered_map<Expr::Width, ConstantResolution>
 class ConstantPointerGraph {
   friend class ConstantAddressSpace;
 
-  typedef std::unordered_map<const MemoryObject *, ConstantResolutionList>
+  struct InternalObjectPairHash {
+    std::size_t operator()(const ObjectPair &objectPair) const {
+      return std::hash<const MemoryObject *>{}(objectPair.first);
+    }
+  };
+
+  typedef std::unordered_map<ObjectPair, ConstantResolutionList,
+                             InternalObjectPairHash>
       ObjectGraphContainer;
 
 public:
-  void addObject(const ObjectPair &objectPair);
-  const ConstantResolutionList &at(const MemoryObject &object) const;
+  void addSource(const ObjectPair &objectPair);
 
   std::size_t size() const;
 
@@ -55,8 +61,6 @@ private:
 
 private:
   ObjectGraphContainer objectGraph;
-
-public:
   const ConstantAddressSpace &owningAddressSpace;
 };
 

@@ -215,6 +215,7 @@ public:
 
 class ObjectStage {
   friend struct Symbolic;
+
 private:
   using storage_ty = SparseStorage<ref<Expr>, OptionalRefEq<Expr>>;
   using bool_storage_ty = SparseStorage<bool>;
