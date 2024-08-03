@@ -165,14 +165,20 @@ KTest *kTest_fromFile(const char *path) {
     if (!read_uint32(f, &o->content.numBytes))
       goto error;
 
-    o->content.bytes = (unsigned char *)malloc(o->content.numBytes);
-    if (fread(o->content.bytes, o->content.numBytes, 1, f) != 1)
+    // Read intiial values
+    char hasInitValue;
+    if (fread(&hasInitValue, 1, 1, f) != 1)
       goto error;
+    if (hasInitValue == 'Y') {
+      o->content.bytes = (unsigned char *)malloc(o->content.numBytes);
+      if (fread(o->content.bytes, o->content.numBytes, 1, f) != 1)
+        goto error;
+    }
 
+    // Read final values
     char hasFinalValue;
     if (fread(&hasFinalValue, 1, 1, f) != 1)
       goto error;
-
     if (hasFinalValue == 'Y') {
       o->content.finalBytes = (unsigned char *)malloc(o->content.numBytes);
       if (fread(o->content.finalBytes, o->content.numBytes, 1, f) != 1)
@@ -265,11 +271,20 @@ int kTest_toFile(const KTest *bo, const char *path) {
       goto error;
     if (!write_uint32(f, o->content.numBytes))
       goto error;
-    if (o->content.numBytes &&
-        fwrite(o->content.bytes, o->content.numBytes, 1, f) != 1)
-      goto error;
+    // Optional value
+    if (o->content.bytes != nullptr) {
+      if (fwrite("Y", 1, 1, f) != 1)
+        goto error;
+      if (o->content.numBytes &&
+          fwrite(o->content.bytes, o->content.numBytes, 1, f) != 1)
+        goto error;
+    } else {
+      if (fwrite("N", 1, 1, f) != 1)
+        goto error;
+    }
 
-    if (o->content.finalBytes) {
+    // Optional value
+    if (o->content.finalBytes != nullptr) {
       if (fwrite("Y", 1, 1, f) != 1)
         goto error;
       if (o->content.numBytes &&

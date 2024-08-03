@@ -60,7 +60,10 @@ class KTest:
             name = f.read(size).decode('utf-8')
             address = struct.unpack('>Q', f.read(8))
             size, = struct.unpack('>i', f.read(4))
-            bytes = f.read(size)
+            
+            hasInitialBytes = f.read(1)
+            bytes = f.read(size) if hasInitialBytes == b'Y' else None
+
             hasFinalBytes = f.read(1)
             finalBytes = f.read(size) if hasFinalBytes == b'Y' else None 
             
@@ -72,7 +75,7 @@ class KTest:
                     index, = struct.unpack('>q', f.read(8))
                     indexOffset, = struct.unpack('>q', f.read(8))
                     pointers.append((offset, index, indexOffset))
-            objects.append((name, address, bytes, finalBytes, pointers))
+            objects.append((name, address, size, bytes, finalBytes, pointers))
 
 
         # Create an instance
@@ -115,26 +118,25 @@ class KTest:
         fmt['pointers'] = "object {0:" + width + "d}: pointers: {1}"
 
         # print objects
-        for i, (name, address, data, finalData, pointers) in enumerate(self.objects):
+        for i, (name, address, size, data, finalData, pointers) in enumerate(self.objects):
             def p(key, arg): print(fmt[key].format(i, arg), file=sio)
-
-            blob = data.rstrip(b'\x00') if format_spec.endswith('trimzeros') else data
-
-            txt = ''.join(c if c in self.valid_chars else '.' for c in blob.decode('ascii', errors='replace').replace('�', '.'))
-            
-            size = len(data)
 
             p('name', name)
             p('address', address)
             p('size', size)
-            p('data', blob)
-            p('hex', binascii.hexlify(blob).decode('ascii'))
-            for n, m in [(1, 'b'), (2, 'h'), (4, 'i'), (8, 'q')]:
-                if size == n:
-                    p('int', struct.unpack(m, data)[0])
-                    p('uint', struct.unpack(m.upper(), data)[0])
-                    break
-            p('text', txt)
+
+            if data is not None:
+                initialBlob = data.rstrip(b'\x00') if format_spec.endswith('trimzeros') else data
+                initialTxt = ''.join(c if c in self.valid_chars else '.' for c in initialBlob.decode('ascii', errors='replace').replace('�', '.'))
+                
+                p('data', initialBlob)
+                p('hex', binascii.hexlify(initialBlob).decode('ascii'))
+                for n, m in [(1, 'b'), (2, 'h'), (4, 'i'), (8, 'q')]:
+                    if size == n:
+                        p('int', struct.unpack(m, data)[0])
+                        p('uint', struct.unpack(m.upper(), data)[0])
+                        break
+                p('text', initialTxt)
 
             if finalData is not None:
                 finalBlob = finalData.rstrip(b'\x00') if format_spec.endswith('trimzeros') else finalData
