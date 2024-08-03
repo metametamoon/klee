@@ -677,25 +677,21 @@ void KleeHandler::processTestCase(const ExecutionState &state,
   if (!WriteNone &&
       (FunctionCallReproduce == "" || strcmp(suffix, "assert.err") == 0 ||
        strcmp(suffix, "reachable.err") == 0)) {
-    KTest ktest;
-    ktest.numArgs = m_argc;
-    ktest.args = m_argv;
-    ktest.symArgvs = 0;
-    ktest.symArgvLen = 0;
-
-    bool success = m_interpreter->getSymbolicSolution(state, ktest);
-
-    if (!success)
-      klee_warning("unable to get symbolic solution, losing test case");
 
     const auto start_time = time::getWallTime();
     bool atLeastOneGenerated = false;
 
-    if (success) {
+    auto ktest = m_interpreter->getSymbolicSolution(state);
+    if (ktest) {
+      ktest->numArgs = m_argc;
+      ktest->args = m_argv;
+      ktest->symArgvLen = 0;
+      ktest->symArgvs = 0;
+
       if (WriteKTests) {
-        for (unsigned i = 0; i < ktest.uninitCoeff + 1; ++i) {
+        for (unsigned i = 0; i < ktest->uninitCoeff + 1; ++i) {
           if (!kTest_toFile(
-                  &ktest,
+                  &*ktest,
                   getOutputFilename(getTestFilename("ktest", id, i)).c_str())) {
             klee_warning("unable to write output test case, losing it");
           } else {
@@ -710,18 +706,20 @@ void KleeHandler::processTestCase(const ExecutionState &state,
       }
 
       if (WriteXMLTests) {
-        for (unsigned i = 0; i < ktest.uninitCoeff + 1; ++i) {
-          writeTestCaseXML(message != nullptr, ktest, id, i);
+        for (unsigned i = 0; i < ktest->uninitCoeff + 1; ++i) {
+          writeTestCaseXML(message != nullptr, *ktest, id, i);
           atLeastOneGenerated = true;
         }
       }
 
-      for (unsigned i = 0; i < ktest.numObjects; i++) {
-        delete[] ktest.objects[i].content.bytes;
-        delete[] ktest.objects[i].content.finalBytes;
-        delete[] ktest.objects[i].content.pointers;
+      for (unsigned i = 0; i < ktest->numObjects; i++) {
+        delete[] ktest->objects[i].content.bytes;
+        delete[] ktest->objects[i].content.finalBytes;
+        delete[] ktest->objects[i].content.pointers;
       }
-      delete[] ktest.objects;
+      delete[] ktest->objects;
+    } else {
+      klee_warning("unable to get symbolic solution, losing test case");
     }
 
     if (message) {

@@ -95,9 +95,7 @@ ConstantAddressSpace::referencesIn(const ObjectPair &objectPair) const {
   auto [object, objectState] = objectPair;
 
   auto pointerWidth = Context::get().getPointerWidth();
-  auto objectSize =
-      cast<ConstantExpr>(model.evaluate(object->getSizeExpr(), false))
-          ->getZExtValue();
+  auto objectSize = sizeOf(*object);
 
   ConstantResolutionList references;
 

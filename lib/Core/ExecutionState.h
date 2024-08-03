@@ -259,6 +259,25 @@ struct Symbolic {
   }
   const KType *type() const { return objectState->getDynamicType(); }
 
+  bool isMakeSymbolic() const {
+    assert(array() != nullptr);
+    return isa<MakeSymbolicSource>(array()->source);
+  }
+
+  bool isReproducible() const {
+    assert(array() != nullptr);
+    bool bad = isa<IrreproducibleSource>(array()->source.get());
+    if (auto liSource =
+            dyn_cast<LazyInitializationSource>(array()->source.get())) {
+      std::vector<const Array *> arrays;
+      findObjects(liSource->pointer, arrays);
+      for (auto innerArr : arrays) {
+        bad |= IrreproducibleSource::classof(innerArr->source.get());
+      }
+    }
+    return !bad;
+  }
+
   Symbolic(const Symbolic &other) = default;
   Symbolic &operator=(const Symbolic &other) = default;
 };

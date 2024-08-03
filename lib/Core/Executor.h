@@ -845,7 +845,8 @@ public:
   void logState(const ExecutionState &state, int id,
                 std::unique_ptr<llvm::raw_fd_ostream> &f) override;
 
-  bool getSymbolicSolution(const ExecutionState &state, KTest &res) override;
+  std::optional<KTest>
+  getSymbolicSolution(const ExecutionState &state) override;
 
   void getCoveredLines(const ExecutionState &state,
                        std::map<std::string, std::set<unsigned>> &res) override;

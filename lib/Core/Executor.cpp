@@ -11,7 +11,6 @@
 
 #include "AddressSpace.h"
 #include "CXXTypeSystem/CXXTypeManager.h"
-#include "ConstantAddressSpace.h"
 #include "ConstructStorage.h"
 #include "CoreStats.h"
 #include "DistanceCalculator.h"
@@ -284,13 +283,6 @@ cl::opt<std::string> DelayCoverOnTheFly(
              "Set to 0s to disable (default=0s)"),
     cl::cat(TestGenCat));
 
-cl::opt<unsigned> UninitMemoryTestMultiplier(
-    "uninit-memory-test-multiplier", cl::init(6),
-    cl::desc("Generate additional number of duplicate tests due to "
-             "irreproducibility of uninitialized memory "
-             "(default=6)"),
-    cl::cat(TestGenCat));
-
 /* Constraint solving options */
 
 cl::opt<unsigned> MaxSymArraySize(
@@ -311,12 +303,6 @@ cl::opt<bool>
                          cl::desc("Simplify equality expressions before "
                                   "querying the solver (default=true)"),
                          cl::cat(SolvingCat));
-
-cl::opt<bool> OnlyOutputMakeSymbolicArrays(
-    "only-output-make-symbolic-arrays", cl::init(false),
-    cl::desc(
-        "Only output test data with klee_make_symbolic source (default=false)"),
-    cl::cat(TestGenCat));
 
 /*** External call policy options ***/
 
@@ -481,6 +467,9 @@ extern llvm::cl::opt<unsigned long> MaxConstantAllocationSize;
 extern llvm::cl::opt<unsigned long> MaxSymbolicAllocationSize;
 extern llvm::cl::opt<bool> UseSymbolicSizeAllocation;
 extern llvm::cl::opt<TrackCoverageBy> TrackCoverage;
+
+extern llvm::cl::opt<bool> OnlyOutputMakeSymbolicArrays;
+extern llvm::cl::opt<unsigned> UninitMemoryTestMultiplier;
 
 // XXX hack
 extern "C" unsigned dumpStates, dumpPForest;
@@ -7471,26 +7460,8 @@ bool isReproducible(const klee::Symbolic &symb) {
   return !bad;
 }
 
-bool isUninitialized(const klee::Array *array) {
-  bool bad = isa<UninitializedSource>(array->source);
-  if (bad)
-    klee_warning_once(array->source.get(),
-                      "A uninitialized array %s reaches a test",
-                      array->getIdentifier().c_str());
-  return bad;
-}
-
-bool isMakeSymbolic(const klee::Symbolic &symb) {
-  auto array = symb.array();
-  bool good = isa<MakeSymbolicSource>(array->source);
-  if (!good)
-    klee_warning_once(array->source.get(),
-                      "A not make_symbolic array %s reaches a test",
-                      array->getIdentifier().c_str());
-  return good;
-}
-
-bool Executor::getSymbolicSolution(const ExecutionState &state, KTest &res) {
+std::optional<KTest>
+Executor::getSymbolicSolution(const ExecutionState &state) {
   solver->setTimeout(coreSolverTimeout);
 
   PathConstraints extendedConstraints(state.constraints);
@@ -7530,7 +7501,9 @@ bool Executor::getSymbolicSolution(const ExecutionState &state, KTest &res) {
                       state.constraints.cs().cs().end(), allObjects);
   std::vector<const Array *> uninitObjects;
   std::copy_if(allObjects.begin(), allObjects.end(),
-               std::back_inserter(uninitObjects), isUninitialized);
+               std::back_inserter(uninitObjects), [](const Array *array) {
+                 return isa<UninitializedSource>(array->source);
+               });
 
   for (auto symcrete : state.constraints.cs().symcretes()) {
     auto dependent = symcrete->dependentArrays();
@@ -7541,8 +7514,8 @@ bool Executor::getSymbolicSolution(const ExecutionState &state, KTest &res) {
   symbolics.reserve(state.symbolics.size());
 
   for (auto &it : state.symbolics) {
-    if ((OnlyOutputMakeSymbolicArrays ? isMakeSymbolic
-                                      : isReproducible)(it.second)) {
+    if ((OnlyOutputMakeSymbolicArrays ? it.second.isMakeSymbolic()
+                                      : it.second.isReproducible())) {
       symbolics.push_back(it.second);
     }
   }
@@ -7582,7 +7555,7 @@ bool Executor::getSymbolicSolution(const ExecutionState &state, KTest &res) {
     klee_warning("unable to compute initial values (invalid constraints?)!");
     ExprPPrinter::printQuery(llvm::errs(), state.constraints.cs(),
                              ConstantExpr::alloc(0, Expr::Bool));
-    return false;
+    return std::nullopt;
   }
   assert(isa<InvalidResponse>(response));
 
@@ -7683,62 +7656,13 @@ bool Executor::getSymbolicSolution(const ExecutionState &state, KTest &res) {
     }
   }
 
-  res.numObjects = symbolics.size();
-  res.objects = new KTestObject[res.numObjects];
-  res.uninitCoeff = uninitObjects.size() * UninitMemoryTestMultiplier;
+  KTest ktest = KTestBuilder(state, model)
+                    .fillPointer()
+                    .fillInitialContent()
+                    .fillFinalContent()
+                    .build();
 
-  ConstantAddressSpace constantAddressSpace(state.addressSpace, model);
-
-  {
-    size_t i = 0;
-    // Remove mo->size, evaluate size expr in array
-    for (auto &symbolic : symbolics) {
-      auto mo = symbolic.memoryObject;
-
-      auto &values = model.bindings.at(symbolic.array());
-      KTestObject *o = &res.objects[i];
-      o->name = const_cast<char *>(mo->name.c_str());
-
-      o->address = constantAddressSpace.addressOf(*mo);
-      o->content.numBytes = constantAddressSpace.sizeOf(*mo);
-
-      o->content.finalBytes = nullptr;
-      o->content.bytes = new unsigned char[o->content.numBytes];
-      for (size_t j = 0; j < o->content.numBytes; j++) {
-        o->content.bytes[j] = values.load(j);
-      }
-      o->content.numPointers = 0;
-      o->content.pointers = nullptr;
-      i++;
-
-      if (state.inSymbolics(*mo)) {
-        auto os = symbolic.objectState;
-        o->content.finalBytes = new unsigned char[o->content.numBytes];
-        for (std::size_t b = 0; b < o->content.numBytes; ++b) {
-          auto byte = os->read8(b);
-          if (auto pointerByte = dyn_cast<PointerExpr>(byte)) {
-            byte = pointerByte->getValue();
-          }
-          auto evalRe = model.evaluate(byte);
-          o->content.finalBytes[b] = cast<ConstantExpr>(evalRe)->getZExtValue();
-        }
-      }
-    }
-  }
-
-  KTest todo = KTestBuilder(state, model)
-                   .constructPointerGraph()
-                   .fillContent()
-                   .fillFinalContent()
-                   .build();
-
-  // auto ktestObjects = formObjectsForKTest(state, pointerGraph);
-  // res.numObjects = pointerGraph.size();
-  // res.objects = ktestObjects.release();
-
-  setInitializationGraph(state, symbolics, model, res);
-
-  return true;
+  return {ktest};
 }
 
 void Executor::getCoveredLines(const ExecutionState &state,

@@ -11,12 +11,16 @@
 
 namespace klee {
 
+class ExecutionState;
+
 class KTestBuilder {
 public:
   KTestBuilder(const ExecutionState &state, const Assignment &model);
 
-  KTestBuilder &constructPointerGraph();
-  KTestBuilder &fillContent();
+  KTestBuilder &fillArgcArgv(unsigned argc, char **argv, unsigned symArgc,
+                             unsigned symArgv);
+  KTestBuilder &fillPointer();
+  KTestBuilder &fillInitialContent();
   KTestBuilder &fillFinalContent();
 
   KTest build();

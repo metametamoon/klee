@@ -10,7 +10,6 @@
 #define KLEE_INTERPRETER_H
 
 #include "TerminationTypes.h"
-#include "klee/Module/Annotation.h"
 
 #include "klee/Module/SarifReport.h"
 
@@ -237,7 +236,8 @@ public:
   virtual void getConstraintLog(const ExecutionState &state, std::string &res,
                                 LogType logFormat = STP) = 0;
 
-  virtual bool getSymbolicSolution(const ExecutionState &state, KTest &res) = 0;
+  virtual std::optional<KTest>
+  getSymbolicSolution(const ExecutionState &state) = 0;
 
   virtual void addSARIFReport(const ExecutionState &state) = 0;
 
