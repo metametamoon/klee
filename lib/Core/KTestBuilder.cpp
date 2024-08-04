@@ -22,19 +22,29 @@ llvm::cl::opt<bool> OnlyOutputMakeSymbolicArrays(
     llvm::cl::cat(TestGenCat));
 
 static std::unordered_map<const MemoryObject *, std::size_t>
-enumerateObjects(const ExecutionState &state,
+enumerateObjects(const std::vector<Symbolic> &symbolics,
                  const ConstantPointerGraph &pointerGraph) {
-  auto constantNumCounter = state.symbolics.size();
-
   std::unordered_map<const MemoryObject *, std::size_t> enumeration;
   enumeration.reserve(pointerGraph.size());
 
+  // Add all symbolics to enumeration and remember which memory objects
+  // are not counted as symbolics
+  std::unordered_set<const MemoryObject *> objectsOfSymbolics;
+  objectsOfSymbolics.reserve(symbolics.size());
+
+  std::size_t symbolicNumCounter = 0;
+  for (const auto &singleSymbolic : symbolics) {
+    auto singleObjectOfSymbolic = singleSymbolic.memoryObject.get();
+    objectsOfSymbolics.insert(singleObjectOfSymbolic);
+    enumeration.emplace(singleObjectOfSymbolic, symbolicNumCounter);
+    ++symbolicNumCounter;
+  }
+
+  // Iterate over all remaining objects
+  std::size_t constantNumCounter = symbolics.size();
   for (const auto &[objectPair, resolution] : pointerGraph) {
-    if (state.inSymbolics(*objectPair.first)) {
-      auto &wrappingSymbolic = state.symbolics.at(objectPair.first);
-      enumeration[objectPair.first] = wrappingSymbolic.num;
-    } else {
-      enumeration[objectPair.first] = constantNumCounter;
+    if (objectsOfSymbolics.count(objectPair.first) == 0) {
+      enumeration.emplace(objectPair.first, constantNumCounter);
       ++constantNumCounter;
     }
   }
@@ -45,29 +55,39 @@ enumerateObjects(const ExecutionState &state,
 ////////////////////////////////////////////////////////////////////////
 
 KTestBuilder::KTestBuilder(const ExecutionState &state, const Assignment &model)
-    : state_(state), model_(model),
-      constantAddressSpace_(state.addressSpace, model),
+    : model_(model), constantAddressSpace_(state.addressSpace, model),
       constantPointerGraph_(constantAddressSpace_.createPointerGraph()),
       ktest_({}) {
-  initialize();
+  initialize(state);
 }
 
-void KTestBuilder::initialize() {
-  for (auto &[object, symbolic] : state_.symbolics) {
+void KTestBuilder::initialize(const ExecutionState &state) {
+  for (auto &[object, symbolic] : state.symbolics) {
     if (OnlyOutputMakeSymbolicArrays ? symbolic.isMakeSymbolic()
                                      : symbolic.isReproducible()) {
+      assert(object == symbolic.memoryObject.get());
+      if (state.addressSpace.findObject(object).first != nullptr) {
+        assert(state.addressSpace.findObject(object).second ==
+               symbolic.objectState.get());
+      }
+
       constantPointerGraph_.addSource(
           ObjectPair{symbolic.memoryObject.get(), symbolic.objectState.get()});
+      symbolics.push_back(symbolic);
     }
   }
 
+  std::sort(symbolics.begin(), symbolics.end(),
+            [](const Symbolic &lhs, const Symbolic &rhs) {
+              return lhs.num < rhs.num;
+            });
+
   auto uninitObjectNum = std::count_if(
-      state_.symbolics.begin(), state_.symbolics.end(),
-      [](const auto &symbolicRecord) {
-        return isa<UninitializedSource>(symbolicRecord.second.array()->source);
+      symbolics.begin(), symbolics.end(), [](const auto &singleSymbolic) {
+        return isa<UninitializedSource>(singleSymbolic.array()->source);
       });
 
-  order_ = enumerateObjects(state_, constantPointerGraph_);
+  order_ = enumerateObjects(symbolics, constantPointerGraph_);
 
   ktest_.numObjects = order_.size();
   ktest_.objects = new KTestObject[ktest_.numObjects]();
@@ -110,8 +130,8 @@ KTestBuilder &KTestBuilder::fillPointer() {
 
       auto &pointerObject = ktestObject.content.pointers[currentPointerIdx];
       pointerObject.indexOfObject = referencesToObjectNum;
-      pointerObject.indexOffset = offset;
-      pointerObject.offset = writtenAddress - addressOfReferencedObject;
+      pointerObject.indexOffset = writtenAddress - addressOfReferencedObject;
+      pointerObject.offset = offset;
 
       ++currentPointerIdx;
     }
@@ -121,7 +141,8 @@ KTestBuilder &KTestBuilder::fillPointer() {
 
 KTestBuilder &KTestBuilder::fillInitialContent() {
   // Required only for symbolics
-  for (const auto &[object, symbolic] : state_.symbolics) {
+  for (const auto &symbolic : symbolics) {
+    auto object = symbolic.memoryObject.get();
     auto &ktestObject = ktest_.objects[order_.at(object)];
 
     auto array = symbolic.array();
@@ -154,12 +175,11 @@ KTestBuilder &KTestBuilder::fillFinalContent() {
     auto buffer = ktestObject.content.finalBytes;
     for (std::uint64_t offset = 0; offset < objectSize; ++offset) {
       auto byteExpr = state->read8(offset);
-      auto evaluatedByteExpr = model_.evaluate(byteExpr);
-
-      if (auto constantPointerExpr =
-              dyn_cast<ConstantPointerExpr>(evaluatedByteExpr)) {
-        evaluatedByteExpr = constantPointerExpr->getConstantValue();
+      if (auto pointerByteExpr = dyn_cast<PointerExpr>(byteExpr)) {
+        byteExpr = pointerByteExpr->getValue();
       }
+
+      auto evaluatedByteExpr = model_.evaluate(byteExpr, false);
 
       ref<ConstantExpr> constantByteExpr =
           dyn_cast<ConstantExpr>(evaluatedByteExpr);

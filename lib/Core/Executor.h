@@ -838,10 +838,6 @@ public:
 
   SarifReportJson getSARIFReport() const override;
 
-  void setInitializationGraph(const ExecutionState &state,
-                              const std::vector<klee::Symbolic> &symbolics,
-                              const Assignment &model, KTest &tc);
-
   void logState(const ExecutionState &state, int id,
                 std::unique_ptr<llvm::raw_fd_ostream> &f) override;
 

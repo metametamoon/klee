@@ -26,12 +26,12 @@ public:
   KTest build();
 
 private:
-  void initialize();
+  void initialize(const ExecutionState &state);
 
 private:
-  const ExecutionState &state_;
   const Assignment &model_;
 
+  std::vector<Symbolic> symbolics;
   ConstantAddressSpace constantAddressSpace_;
   ConstantPointerGraph constantPointerGraph_;
   std::unordered_map<const MemoryObject *, std::size_t> order_;

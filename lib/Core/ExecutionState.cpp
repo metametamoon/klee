@@ -240,10 +240,12 @@ void ExecutionState::popFrame() {
 
 void ExecutionState::addSymbolic(const MemoryObject &mo,
                                  const ObjectState &os) {
+  assert(symbolics.count(&mo) == 0);
   symbolics = symbolics.insert({&mo, Symbolic(&mo, &os, symbolics.size())});
 }
 
 void ExecutionState::replaceSymbolic(const MemoryObject &mo, ObjectState &os) {
+  assert(symbolics.count(&mo) != 0);
   auto &symbolic = *symbolics.find(&mo);
   symbolics = symbolics.replace({&mo, Symbolic(&mo, &os, symbolic.second.num)});
 }
@@ -262,6 +264,7 @@ ExecutionState::findMemoryObject(const Array *array) const {
 void ExecutionState::replaceMemoryObjectFromSymbolics(
     const MemoryObject &oldMemObj, const MemoryObject &newMemObj,
     ObjectState &newObjState) {
+  assert(&oldMemObj != &newMemObj);
   auto oldSymbolicNum = symbolics.find(&oldMemObj)->second.num;
   symbolics = symbolics.remove(&oldMemObj);
   symbolics = symbolics.insert(

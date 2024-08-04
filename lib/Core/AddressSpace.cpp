@@ -67,11 +67,6 @@ void AddressSpace::bindObject(const MemoryObject *mo, ObjectState *os) {
   objects = objects.replace(std::make_pair(mo, os));
 }
 
-void AddressSpace::bindObject(const MemoryObject *mo, const ObjectState *os) {
-  ref<ObjectState> newObjectState(new ObjectState(*os));
-  bindObject(mo, newObjectState.get());
-}
-
 void AddressSpace::unbindObject(const MemoryObject *mo) {
   objects = objects.remove(mo);
 }

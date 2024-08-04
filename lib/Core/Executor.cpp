@@ -469,7 +469,6 @@ extern llvm::cl::opt<bool> UseSymbolicSizeAllocation;
 extern llvm::cl::opt<TrackCoverageBy> TrackCoverage;
 
 extern llvm::cl::opt<bool> OnlyOutputMakeSymbolicArrays;
-extern llvm::cl::opt<unsigned> UninitMemoryTestMultiplier;
 
 // XXX hack
 extern "C" unsigned dumpStates, dumpPForest;
@@ -6048,8 +6047,14 @@ bool Executor::resolveMemoryObjects(
             false, checkOutOfBounds, UseSymbolicSizeLazyInit);
         RefObjectPair op = state.addressSpace.findOrLazyInitializeObject(
             idLazyInitialization.get());
-        state.addressSpace.bindObject(op.first, op.second.get());
-        state.addSymbolic(*op.first, *op.second);
+
+        auto wos = state.addressSpace.getWriteable(op.first, op.second.get());
+        if (op.first == idLazyInitialization.get()) {
+          state.addSymbolic(*op.first, *wos);
+        } else {
+          state.replaceSymbolic(*op.first, *wos);
+        }
+
         mayBeResolvedMemoryObjects.push_back(idLazyInitialization);
       }
     }
@@ -6774,8 +6779,12 @@ void Executor::lazyInitializeLocalObject(ExecutionState &state, StackFrame &sf,
     addConstraint(state, EqExpr::create(size, id->getSizeExpr()));
   }
   RefObjectPair op = state.addressSpace.findOrLazyInitializeObject(id.get());
-  state.addressSpace.bindObject(op.first, op.second.get());
-  state.addSymbolic(*op.first, *op.second);
+  auto wos = state.addressSpace.getWriteable(op.first, op.second.get());
+  if (op.first == id.get()) {
+    state.addSymbolic(*op.first, *wos);
+  } else {
+    state.replaceSymbolic(*op.first, *wos);
+  }
 }
 
 void Executor::lazyInitializeLocalObject(ExecutionState &state,
@@ -7297,169 +7306,6 @@ void Executor::logState(const ExecutionState &state, int id,
   }
 }
 
-bool resolveOnSymbolics(const std::vector<klee::Symbolic> &symbolics,
-                        const Assignment &assn,
-                        const ref<klee::ConstantPointerExpr> &addr,
-                        ref<const MemoryObject> &result) {
-  uint64_t base = addr->getConstantBase()->getZExtValue();
-  AssignmentEvaluator evaluator(assn, true);
-
-  for (const auto &res : symbolics) {
-    const auto &mo = res.memoryObject;
-    // Check if the provided address is between start and end of the object
-    // [mo->address, mo->address + mo->size) or the object is a 0-sized object.
-    ref<klee::ConstantExpr> moSize =
-        cast<klee::ConstantExpr>(evaluator.visit(mo->getSizeExpr()));
-    ref<klee::ConstantExpr> moAddress =
-        cast<klee::ConstantExpr>(evaluator.visit(mo->getBaseExpr()));
-    ref<klee::ConstantExpr> moCondition =
-        cast<klee::ConstantExpr>(evaluator.visit(mo->getConditionExpr()));
-    if (((base == moAddress->getZExtValue())) && moCondition->getZExtValue(1)) {
-      result = mo;
-      return true;
-    }
-  }
-
-  return false;
-}
-
-void resolvePointer(const ExecutionState &state,
-                    const std::vector<klee::Symbolic> &symbolics,
-                    const Assignment &model,
-                    ExprHashMap<std::pair<ref<const MemoryObject>, ref<Expr>>>
-                        &resolvedPointers,
-                    ref<PointerExpr> pointer) {
-  ref<Expr> pointerInModel = model.evaluate(pointer, false);
-  if (!isa<ConstantPointerExpr>(pointerInModel)) {
-    return;
-  }
-  ref<ConstantPointerExpr> constantPointer =
-      cast<ConstantPointerExpr>(pointerInModel);
-  ref<const MemoryObject> mo;
-
-  if (resolveOnSymbolics(symbolics, model, constantPointer, mo)) {
-    ref<Expr> moOffset = mo->getOffsetExpr(pointer);
-    if (SimplifySymIndices) {
-      if (!isa<klee::ConstantExpr>(moOffset)) {
-        moOffset = Simplificator::simplifyExpr(state.constraints.cs(), moOffset)
-                       .simplified;
-      }
-    }
-    resolvedPointers[pointer] = std::make_pair(mo, moOffset);
-  }
-}
-
-void Executor::setInitializationGraph(
-    const ExecutionState &state, const std::vector<klee::Symbolic> &symbolics,
-    const Assignment &model, KTest &ktest) {
-  std::map<size_t, std::vector<Pointer>> pointers;
-  std::map<size_t, std::map<uint64_t, std::pair<uint64_t, uint64_t>>> s;
-  ExprHashMap<std::pair<ref<const MemoryObject>, ref<Expr>>> resolvedPointers;
-
-  ExprHashSet symbolicPointers;
-  for (auto &constraint : state.constraints.cs().cs()) {
-    klee::findSymbolicPointers(constraint, true, symbolicPointers,
-                               Context::get().getPointerWidth());
-  }
-
-  for (auto &symbolicPointer : symbolicPointers) {
-    ref<ReadExpr> read = symbolicPointer->hasOrderedReads();
-    auto source = read->updates.root->source;
-    if (isa<MakeSymbolicSource>(source) ||
-        isa<LazyInitializationContentSource>(source)) {
-      resolvePointer(state, symbolics, model, resolvedPointers,
-                     PointerExpr::create(symbolicPointer));
-    }
-  }
-
-  for (const auto &pointer : resolvedPointers) {
-
-    if (!isa<PointerExpr>(pointer.first)) {
-      continue;
-    }
-    ref<PointerExpr> pointerExpr = cast<PointerExpr>(pointer.first);
-    ref<Expr> updateCheck;
-    if (auto e = dyn_cast<ConcatExpr>(pointerExpr->getBase())) {
-      updateCheck = e->getLeft();
-    } else {
-      updateCheck = e;
-    }
-
-    if (auto e = dyn_cast<ReadExpr>(updateCheck)) {
-      if (e->updates.getSize() != 0) {
-        continue;
-      }
-    }
-
-    std::pair<ref<const MemoryObject>, ref<Expr>> pointerResolution;
-    auto resolved = state.getBase(pointerExpr->getBase(), pointerResolution);
-
-    if (resolved) {
-      // The objects have to be symbolic
-      bool pointerFound = false, pointeeFound = false;
-      size_t pointerIndex = 0, pointeeIndex = 0;
-      size_t i = 0;
-      for (auto &symbolic : symbolics) {
-        if (symbolic.memoryObject == pointerResolution.first) {
-          pointerIndex = i;
-          pointerFound = true;
-        }
-        if (symbolic.memoryObject->id == pointer.second.first->id) {
-          pointeeIndex = i;
-          pointeeFound = true;
-        }
-        ++i;
-      }
-      if (pointerFound && pointeeFound) {
-        ref<ConstantExpr> offset =
-            model.evaluate(pointerResolution.second, false);
-        ref<ConstantExpr> indexOffset =
-            model.evaluate(pointer.second.second, false);
-        Pointer o;
-        o.offset = cast<ConstantExpr>(offset)->getZExtValue();
-        o.indexOfObject = pointeeIndex;
-        o.indexOffset = cast<ConstantExpr>(indexOffset)->getZExtValue();
-        if (s[pointerIndex].count(o.offset) &&
-            s[pointerIndex][o.offset] !=
-                std::make_pair(o.indexOfObject, o.indexOffset)) {
-          assert(0 && "unreachable");
-        }
-        if (!s[pointerIndex].count(o.offset)) {
-          pointers[pointerIndex].push_back(o);
-          s[pointerIndex][o.offset] =
-              std::make_pair(o.indexOfObject, o.indexOffset);
-        }
-      }
-    }
-  }
-  for (auto i : pointers) {
-    ktest.objects[i.first].content.numPointers = i.second.size();
-    ktest.objects[i.first].content.pointers = new Pointer[i.second.size()];
-    for (size_t j = 0; j < i.second.size(); j++) {
-      ktest.objects[i.first].content.pointers[j] = i.second[j];
-    }
-  }
-  return;
-}
-
-bool isReproducible(const klee::Symbolic &symb) {
-  auto arr = symb.array();
-  assert(arr != nullptr);
-  bool bad = IrreproducibleSource::classof(arr->source.get());
-  if (auto liSource = dyn_cast<LazyInitializationSource>(arr->source.get())) {
-    std::vector<const Array *> arrays;
-    findObjects(liSource->pointer, arrays);
-    for (auto innerArr : arrays) {
-      bad |= IrreproducibleSource::classof(innerArr->source.get());
-    }
-  }
-  if (bad)
-    klee_warning_once(arr->source.get(),
-                      "A irreproducible symbolic %s reaches a test",
-                      arr->getIdentifier().c_str());
-  return !bad;
-}
-
 std::optional<KTest>
 Executor::getSymbolicSolution(const ExecutionState &state) {
   solver->setTimeout(coreSolverTimeout);
@@ -7612,9 +7458,9 @@ Executor::getSymbolicSolution(const ExecutionState &state) {
 
       /* Receive address array linked with this size array to request address
        * concretization. */
-      ref<Expr> condcretized = concretizations.at(symcrete->symcretized);
+      ref<Expr> concretized = concretizations.at(symcrete->symcretized);
 
-      uint64_t newSize = cast<ConstantExpr>(condcretized)->getZExtValue();
+      uint64_t newSize = cast<ConstantExpr>(concretized)->getZExtValue();
 
       void *address = malloc(newSize);
       addresses.push_back(address);
