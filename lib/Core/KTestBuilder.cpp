@@ -94,6 +94,18 @@ void KTestBuilder::initialize(const ExecutionState &state) {
   ktest_.uninitCoeff = UninitMemoryTestMultiplier * uninitObjectNum;
 }
 
+std::size_t KTestBuilder::countObjectsFromOrder(
+    const ConstantResolutionList &resolution) const {
+  return std::count_if(
+      resolution.begin(), resolution.end(), [this](const auto &entry) {
+        const auto &singleResolution = entry.second;
+        const auto &resolvedObjectPair = singleResolution.objectPair;
+        return order_.count(resolvedObjectPair.first) != 0;
+      });
+}
+
+////////////////////////////////////////////////////////////////////////
+
 KTestBuilder &KTestBuilder::fillArgcArgv(unsigned argc, char **argv,
                                          unsigned symArgc, unsigned symArgv) {
   ktest_.numArgs = argc;
@@ -103,7 +115,7 @@ KTestBuilder &KTestBuilder::fillArgcArgv(unsigned argc, char **argv,
   return *this;
 }
 
-KTestBuilder &KTestBuilder::fillPointer() {
+KTestBuilder &KTestBuilder::fillFinalPointers() {
   for (const auto &[objectPair, resolution] : constantPointerGraph_) {
     // Select KTestObject for the object
     const auto objectNum = order_.at(objectPair.first);
@@ -116,13 +128,71 @@ KTestBuilder &KTestBuilder::fillPointer() {
     if (resolution.empty()) {
       continue;
     }
-    ktestObject.content.numPointers = resolution.size();
-    ktestObject.content.pointers = new Pointer[resolution.size()];
+    ktestObject.content.numFinalPointers = countObjectsFromOrder(resolution);
+    ktestObject.content.finalPointers =
+        new Pointer[ktestObject.content.numFinalPointers];
 
     std::size_t currentPointerIdx = 0;
     // Populate pointers
     for (const auto &[offset, singleResolution] : resolution) {
       auto [writtenAddress, resolvedObjectPair] = singleResolution;
+
+      if (order_.count(resolvedObjectPair.first) == 0) {
+        continue;
+      }
+
+      auto referencesToObjectNum = order_.at(resolvedObjectPair.first);
+      auto addressOfReferencedObject =
+          constantAddressSpace_.addressOf(*resolvedObjectPair.first);
+
+      auto &pointerObject =
+          ktestObject.content.finalPointers[currentPointerIdx];
+      pointerObject.indexOfObject = referencesToObjectNum;
+      pointerObject.indexOffset = writtenAddress - addressOfReferencedObject;
+      pointerObject.offset = offset;
+
+      ++currentPointerIdx;
+    }
+  }
+  return *this;
+}
+
+KTestBuilder &KTestBuilder::fillInitialPointers() {
+  // Required only for symbolics
+  for (const auto &symbolic : symbolics) {
+    auto object = symbolic.memoryObject.get();
+    auto &ktestObject = ktest_.objects[order_.at(object)];
+
+    // TODO: symbolic objects might have been freed and not contained in
+    // the address space anymore.
+
+#ifndef NDEBUG
+    auto array = symbolic.array();
+#endif
+
+    auto resolution = constantAddressSpace_.referencesInInitial(
+        {symbolic.memoryObject.get(), symbolic.objectState.get()});
+
+#ifndef NDEBUG
+    assert(symbolic.array() == array);
+#endif
+
+    if (resolution.empty()) {
+      continue;
+    }
+
+    ktestObject.content.numPointers = countObjectsFromOrder(resolution);
+    ktestObject.content.pointers = new Pointer[ktestObject.content.numPointers];
+
+    std::size_t currentPointerIdx = 0;
+    for (const auto &[offset, singleResolution] : resolution) {
+      auto [writtenAddress, resolvedObjectPair] = singleResolution;
+
+      if (order_.count(resolvedObjectPair.first) == 0) {
+        // This object is not in address space anymore.
+        // TODO: it could be a symbolic
+        continue;
+      }
 
       auto referencesToObjectNum = order_.at(resolvedObjectPair.first);
       auto addressOfReferencedObject =

@@ -75,7 +75,17 @@ class KTest:
                     index, = struct.unpack('>q', f.read(8))
                     indexOffset, = struct.unpack('>q', f.read(8))
                     pointers.append((offset, index, indexOffset))
-            objects.append((name, address, size, bytes, finalBytes, pointers))
+                    
+            finalPointers = []
+            if version >= 4:
+                numFinalPointers, = struct.unpack('>i', f.read(4))
+                for _ in range(numFinalPointers):
+                    offset, = struct.unpack('>q', f.read(8))
+                    index, = struct.unpack('>q', f.read(8))
+                    indexOffset, = struct.unpack('>q', f.read(8))
+                    finalPointers.append((offset, index, indexOffset))
+
+            objects.append((name, address, size, bytes, finalBytes, pointers, finalPointers))
 
 
         # Create an instance
@@ -116,9 +126,10 @@ class KTest:
         fmt['final text'] = "object {0:" + width + "d}: final text: {1}"
         
         fmt['pointers'] = "object {0:" + width + "d}: pointers: {1}"
+        fmt['final pointers'] = "object {0:" + width + "d}: final pointers: {1}"
 
         # print objects
-        for i, (name, address, size, data, finalData, pointers) in enumerate(self.objects):
+        for i, (name, address, size, data, finalData, pointers, finalPointers) in enumerate(self.objects):
             def p(key, arg): print(fmt[key].format(i, arg), file=sio)
 
             p('name', name)
@@ -138,6 +149,9 @@ class KTest:
                         break
                 p('text', initialTxt)
 
+            if pointers:
+                p('pointers', pointers)
+                
             if finalData is not None:
                 finalBlob = finalData.rstrip(b'\x00') if format_spec.endswith('trimzeros') else finalData
                 finalTxt = ''.join(c if c in self.valid_chars else '.' for c in finalBlob.decode('ascii', errors='replace').replace('�', '.'))
@@ -151,8 +165,8 @@ class KTest:
                         break
                 p('final text', finalTxt)
 
-            if pointers:
-                p('pointers', pointers)
+            if finalPointers:
+                p('final pointers', finalPointers)
 
         return sio.getvalue()
 

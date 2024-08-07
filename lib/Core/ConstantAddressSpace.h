@@ -116,7 +116,13 @@ public:
   /*
    * Returns a list of objects referenced in the the given object.
    */
-  ConstantResolutionList referencesIn(const ObjectPair &objectPair) const;
+  ConstantResolutionList
+  referencesInInitial(const ObjectPair &objectPair) const;
+
+  /*
+   * Returns a list of objects referenced in the the given object.
+   */
+  ConstantResolutionList referencesInFinal(const ObjectPair &objectPair) const;
 
   /*
    * Creates pointer graph owned by this address space. This

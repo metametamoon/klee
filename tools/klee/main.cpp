@@ -716,6 +716,7 @@ void KleeHandler::processTestCase(const ExecutionState &state,
         delete[] ktest->objects[i].content.bytes;
         delete[] ktest->objects[i].content.finalBytes;
         delete[] ktest->objects[i].content.pointers;
+        delete[] ktest->objects[i].content.finalPointers;
       }
       delete[] ktest->objects;
     } else {

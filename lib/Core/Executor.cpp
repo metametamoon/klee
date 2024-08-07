@@ -7503,8 +7503,9 @@ Executor::getSymbolicSolution(const ExecutionState &state) {
   }
 
   KTest ktest = KTestBuilder(state, model)
-                    .fillPointer()
+                    .fillInitialPointers()
                     .fillInitialContent()
+                    .fillFinalPointers()
                     .fillFinalContent()
                     .build();
 

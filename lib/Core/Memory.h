@@ -245,6 +245,10 @@ public:
 
   ref<Expr> readWidth(unsigned offset) const;
   ref<Expr> readWidth(ref<Expr> offset) const;
+
+  ref<Expr> readInitialWidth(unsigned offset) const;
+  ref<Expr> readInitialWidth(ref<Expr> offset) const;
+
   void writeWidth(unsigned offset, ref<Expr> value);
   void writeWidth(ref<Expr> offset, ref<Expr> value);
   void write(const ObjectStage &os);
@@ -327,6 +331,10 @@ public:
   ref<Expr> readValue8(unsigned offset) const;
   ref<Expr> readBase8(unsigned offset) const;
 
+  ref<Expr> readInitialValue(ref<Expr> offset, Expr::Width width) const;
+  ref<Expr> readInitialValue(unsigned offset, Expr::Width width) const;
+  ref<Expr> readInitialValue8(unsigned offset) const;
+
   void write(unsigned offset, ref<Expr> value);
   void write(ref<Expr> offset, ref<Expr> value);
   void write(ref<const ObjectState> os);
@@ -345,6 +353,8 @@ private:
   ref<Expr> read8(ref<Expr> offset) const;
   ref<Expr> readValue8(ref<Expr> offset) const;
   ref<Expr> readBase8(ref<Expr> offset) const;
+  ref<Expr> readInitialValue8(ref<Expr> offset) const;
+
   void write8(unsigned offset, ref<Expr> value);
   void write8(ref<Expr> offset, ref<Expr> value);
 };

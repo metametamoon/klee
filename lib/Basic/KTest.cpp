@@ -201,6 +201,22 @@ KTest *kTest_fromFile(const char *path) {
         if (!read_uint64(f, &p->indexOffset))
           goto error;
       }
+
+      if (!read_uint32(f, &o->content.numFinalPointers))
+        goto error;
+      o->content.finalPointers = (Pointer *)calloc(
+          o->content.numFinalPointers, sizeof(*o->content.finalPointers));
+      if (!o->content.finalPointers)
+        goto error;
+      for (j = 0; j < o->content.numFinalPointers; j++) {
+        Pointer *p = &o->content.finalPointers[j];
+        if (!read_uint64(f, &p->offset))
+          goto error;
+        if (!read_uint64(f, &p->indexOfObject))
+          goto error;
+        if (!read_uint64(f, &p->indexOffset))
+          goto error;
+      }
     }
   }
 
@@ -226,6 +242,8 @@ error:
           free(bo->content.finalBytes);
         if (bo->content.pointers)
           free(bo->content.pointers);
+        if (bo->content.finalPointers)
+          free(bo->content.finalPointers);
       }
       free(res->objects);
     }
@@ -306,6 +324,18 @@ int kTest_toFile(const KTest *bo, const char *path) {
       if (!write_uint64(f, p->indexOffset))
         goto error;
     }
+
+    if (!write_uint32(f, o->content.numFinalPointers))
+      goto error;
+    for (j = 0; j < o->content.numFinalPointers; j++) {
+      Pointer *p = &o->content.finalPointers[j];
+      if (!write_uint64(f, p->offset))
+        goto error;
+      if (!write_uint64(f, p->indexOfObject))
+        goto error;
+      if (!write_uint64(f, p->indexOffset))
+        goto error;
+    }
   }
 
   fclose(f);
@@ -337,6 +367,7 @@ void kTest_free(KTest *bo) {
       free(bo->objects[i].content.finalBytes);
     }
     free(bo->objects[i].content.pointers);
+    free(bo->objects[i].content.finalPointers);
   }
   free(bo->objects);
   free(bo);

@@ -254,7 +254,7 @@ struct Symbolic {
       : memoryObject(memObj), objectState(objState), num(num) {}
 
   const Array *array() const {
-    assert(!memoryObject.isNull());
+    assert(objectState->valueOS.updates.root != nullptr);
     return objectState->valueOS.updates.root;
   }
   const KType *type() const { return objectState->getDynamicType(); }

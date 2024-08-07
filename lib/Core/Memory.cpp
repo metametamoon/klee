@@ -436,6 +436,64 @@ void ObjectState::write(ref<Expr> offset, ref<Expr> value) {
   lastUpdate = new UpdateNode(nullptr, offset, value);
 }
 
+ref<Expr> ObjectState::readInitialValue(ref<Expr> offset,
+                                        Expr::Width width) const {
+  // FIXME: I hate copy-paste here.
+  // We need to move common for all reads in function that accepts
+  // object like "Reader".
+
+  // Truncate offset to 32-bits.
+  offset = ZExtExpr::create(offset, Expr::Int32);
+
+  // Check for reads at constant offsets.
+  if (ConstantExpr *CE = dyn_cast<ConstantExpr>(offset))
+    return readInitialValue(CE->getZExtValue(32), width);
+
+  // Treat bool specially, it is the only non-byte sized write we allow.
+  if (width == Expr::Bool)
+    return ExtractExpr::create(readInitialValue8(offset), 0, Expr::Bool);
+
+  // Otherwise, follow the slow general case.
+  unsigned NumBytes = width / 8;
+  assert(width == NumBytes * 8 && "Invalid read size!");
+  ref<Expr> Res(0);
+  for (unsigned i = 0; i != NumBytes; ++i) {
+    unsigned idx = Context::get().isLittleEndian() ? i : (NumBytes - i - 1);
+    ref<Expr> Byte = readInitialValue8(
+        AddExpr::create(offset, ConstantExpr::create(idx, Expr::Int32)));
+    Res = i ? ConcatExpr::create(Byte, Res) : Byte;
+  }
+
+  return Res;
+}
+
+ref<Expr> ObjectState::readInitialValue(unsigned offset,
+                                        Expr::Width width) const {
+  // Treat bool specially, it is the only non-byte sized write we allow.
+  if (width == Expr::Bool)
+    return ExtractExpr::create(readInitialValue8(offset), 0, Expr::Bool);
+
+  // Otherwise, follow the slow general case.
+  unsigned NumBytes = width / 8;
+  assert(width == NumBytes * 8 && "Invalid width for read size!");
+  ref<Expr> Res(0);
+  for (unsigned i = 0; i != NumBytes; ++i) {
+    unsigned idx = Context::get().isLittleEndian() ? i : (NumBytes - i - 1);
+    ref<Expr> Byte = readInitialValue8(offset + idx);
+    Res = i ? ConcatExpr::create(Byte, Res) : Byte;
+  }
+
+  return Res;
+}
+
+ref<Expr> ObjectState::readInitialValue8(unsigned offset) const {
+  return valueOS.readInitialWidth(offset);
+}
+
+ref<Expr> ObjectState::readInitialValue8(ref<Expr> offset) const {
+  return valueOS.readInitialWidth(offset);
+}
+
 void ObjectState::write(unsigned offset, ref<Expr> value) {
   // Check for writes of constant values.
   if (ConstantExpr *CE = dyn_cast<ConstantExpr>(value)) {
@@ -629,6 +687,25 @@ ref<Expr> ObjectStage::readWidth(ref<Expr> offset) const {
 
   return ReadExpr::create(getUpdates(), ZExtExpr::create(offset, Expr::Int32),
                           safeRead);
+}
+
+ref<Expr> ObjectStage::readInitialWidth(unsigned offset) const {
+  // TODO: might be more optimal if we won't call getUpdates().
+  // But for not it is single way to lazy initialize array if required
+  assert(knownSymbolics.get() != nullptr);
+  assert(updates.root != nullptr);
+  return ReadExpr::create(UpdateList(updates.root, nullptr),
+                          ConstantExpr::create(offset, Expr::Int32), safeRead);
+}
+
+ref<Expr> ObjectStage::readInitialWidth(ref<Expr> offset) const {
+  // TODO: same as above
+  assert(!isa<ConstantExpr>(offset) &&
+         "constant offset passed to symbolic read8");
+  assert(updates.root != nullptr);
+
+  return ReadExpr::create(UpdateList(updates.root, nullptr),
+                          ZExtExpr::create(offset, Expr::Int32), safeRead);
 }
 
 void ObjectStage::writeWidth(unsigned offset, uint64_t value) {

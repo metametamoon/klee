@@ -19,14 +19,17 @@ public:
 
   KTestBuilder &fillArgcArgv(unsigned argc, char **argv, unsigned symArgc,
                              unsigned symArgv);
-  KTestBuilder &fillPointer();
+  KTestBuilder &fillInitialPointers();
   KTestBuilder &fillInitialContent();
+  KTestBuilder &fillFinalPointers();
   KTestBuilder &fillFinalContent();
 
   KTest build();
 
 private:
   void initialize(const ExecutionState &state);
+  std::size_t
+  countObjectsFromOrder(const ConstantResolutionList &resolution) const;
 
 private:
   const Assignment &model_;

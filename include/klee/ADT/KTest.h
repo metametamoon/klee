@@ -31,6 +31,9 @@ struct KTestValue {
 
   unsigned numPointers;
   Pointer *pointers;
+
+  unsigned numFinalPointers;
+  Pointer *finalPointers;
 };
 
 typedef struct KTestObject KTestObject;

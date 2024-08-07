@@ -28,7 +28,7 @@ void ConstantPointerGraph::addReachableFrom(const ObjectPair &objectPair) {
     auto frontObjectPair = objectQueue.front();
     objectQueue.pop();
 
-    auto references = owningAddressSpace.referencesIn(frontObjectPair);
+    auto references = owningAddressSpace.referencesInFinal(frontObjectPair);
 
     for (auto &[offset, referencedResolution] : references) {
       if (objectGraph.count(referencedResolution.objectPair) == 0) {
@@ -96,9 +96,46 @@ ConstantAddressSpace::Iterator ConstantAddressSpace::end() const {
   return Iterator(objects.end());
 }
 
+/*
+ * Returns a list of objects referenced in the the given object.
+ */
 ConstantResolutionList
-ConstantAddressSpace::referencesIn(const ObjectPair &objectPair) const {
-  auto [object, objectState] = objectPair;
+ConstantAddressSpace::referencesInInitial(const ObjectPair &objectPair) const {
+  auto [object, state] = objectPair;
+
+  auto pointerWidth = Context::get().getPointerWidth();
+  auto objectSize = sizeOf(*object);
+
+  ConstantResolutionList references;
+
+  for (Expr::Width i = 0; i + pointerWidth / CHAR_BIT <= objectSize; ++i) {
+    auto contentPart = state->readInitialValue(i, pointerWidth);
+
+    auto pointer = PointerExpr::create(contentPart);
+    ref<ConstantPointerExpr> constantPointer =
+        dyn_cast<ConstantPointerExpr>(model.evaluate(pointer, false));
+
+    assert(!constantPointer.isNull());
+
+    if (auto resolution = resolve(constantPointer)) {
+      references.emplace(
+          i, ConstantResolution{
+                 constantPointer->getConstantValue()->getZExtValue(),
+                 std::move(*resolution)});
+    }
+    assert(!constantPointer.isNull());
+  }
+
+  return references;
+}
+
+// ----------------------------------------------------------------
+// FIXME: remove copy-paste in referencesIn* functions.
+// ----------------------------------------------------------------
+
+ConstantResolutionList
+ConstantAddressSpace::referencesInFinal(const ObjectPair &objectPair) const {
+  auto [object, state] = objectPair;
 
   auto pointerWidth = Context::get().getPointerWidth();
   auto objectSize = sizeOf(*object);
@@ -107,7 +144,8 @@ ConstantAddressSpace::referencesIn(const ObjectPair &objectPair) const {
 
   for (Expr::Width i = 0; i + pointerWidth / CHAR_BIT <= objectSize; ++i) {
     // TODO: Make exract 1 from end and Concat 1 to the beginning instead
-    auto contentPart = objectState->read(i, pointerWidth);
+    // TODO: replace with call to readValue()
+    auto contentPart = state->read(i, pointerWidth);
 
     auto pointer = PointerExpr::create(contentPart);
     ref<ConstantPointerExpr> constantPointer =
