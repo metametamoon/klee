@@ -529,16 +529,14 @@ bool ObjectState::isAccessableFrom(KType *accessingType) const {
 ObjectStage::ObjectStage(const Array *array, ref<Expr> defaultValue, bool safe,
                          Expr::Width width)
     : updates(array, nullptr), size(array->size), safeRead(safe), width(width) {
+
   knownSymbolics.reset(constructStorage<ref<Expr>, OptionalRefEq<Expr>>(
       array->getSize(), defaultValue, MaxFixedSizeStructureSize));
   unflushedMask.reset(
       constructStorage(array->getSize(), false, MaxFixedSizeStructureSize));
 
-  if (width == Expr::Int8) {
-    if (auto const_size = dyn_cast<ConstantExpr>(size)) {
-      concreteStore = std::vector<uint8_t>(const_size->getZExtValue());
-      concreteMask = std::vector<bool>(const_size->getZExtValue(), false);
-    }
+  if (auto const_size = dyn_cast<ConstantExpr>(size)) {
+    concreteStore.emplace(ConcreteStore(width, const_size->getZExtValue()));
   }
 }
 
@@ -549,46 +547,33 @@ ObjectStage::ObjectStage(ref<Expr> size, ref<Expr> defaultValue, bool safe,
       size, defaultValue, MaxFixedSizeStructureSize));
   unflushedMask.reset(constructStorage(size, false, MaxFixedSizeStructureSize));
 
-  if (width == Expr::Int8) {
-    if (auto const_size = dyn_cast<ConstantExpr>(size)) {
-      concreteStore = std::vector<uint8_t>(const_size->getZExtValue());
-      concreteMask = std::vector<bool>(const_size->getZExtValue(), false);
-    }
+  if (auto const_size = dyn_cast<ConstantExpr>(size)) {
+    concreteStore.emplace(ConcreteStore(width, const_size->getZExtValue()));
   }
 }
 
 ObjectStage::ObjectStage(const ObjectStage &os)
     : knownSymbolics(os.knownSymbolics->clone()),
-      concreteStore(os.concreteStore), concreteMask(os.concreteMask),
-      unflushedMask(os.unflushedMask->clone()), updates(os.updates),
-      size(os.size), safeRead(os.safeRead), width(os.width) {}
+      concreteStore(os.concreteStore), unflushedMask(os.unflushedMask->clone()),
+      updates(os.updates), size(os.size), safeRead(os.safeRead),
+      width(os.width) {}
 
 /***/
 
 const UpdateList &ObjectStage::getUpdates() const {
 
-  if (width == Expr::Int8) {
-    if (auto sizeExpr = dyn_cast<ConstantExpr>(size)) {
-      size_t count = 0;
+  if (auto sizeExpr = dyn_cast<ConstantExpr>(size)) {
+    if (concreteStore->set() == sizeExpr->getZExtValue()) {
+      std::unique_ptr<SparseStorage<ref<ConstantExpr>>> values(constructStorage(
+          sizeExpr, ConstantExpr::create(0, width), MaxFixedSizeStructureSize));
       for (size_t i = 0; i < sizeExpr->getZExtValue(); ++i) {
-        if (concreteMask[i]) {
-          ++count;
-        } else {
-          break;
-        }
+        values->store(i,
+                      ConstantExpr::create(concreteStore->readValue(i), width));
       }
-      if (count == sizeExpr->getZExtValue()) {
-        std::unique_ptr<SparseStorage<ref<ConstantExpr>>> values(
-            constructStorage(sizeExpr, ConstantExpr::create(0, width),
-                             MaxFixedSizeStructureSize));
-        for (size_t i = 0; i < sizeExpr->getZExtValue(); ++i) {
-          values->store(i, ConstantExpr::create(concreteStore[i], Expr::Int8));
-        }
-        auto array =
-            Array::create(sizeExpr, SourceBuilder::constant(values->clone()),
-                          Expr::Int32, width);
-        updates = UpdateList(array, nullptr);
-      }
+      auto array =
+          Array::create(sizeExpr, SourceBuilder::constant(values->clone()),
+                        Expr::Int32, width);
+      updates = UpdateList(array, nullptr);
     }
   }
 
@@ -631,17 +616,6 @@ const UpdateList &ObjectStage::getUpdates() const {
 }
 
 void ObjectStage::initializeToZero() {
-  if (width == Expr::Int8) {
-    if (auto const_size = dyn_cast<ConstantExpr>(size)) {
-      concreteStore = std::vector<uint8_t>(const_size->getZExtValue(), 0);
-      concreteMask = std::vector<bool>(const_size->getZExtValue(), true);
-      updates = UpdateList(nullptr, nullptr);
-      unflushedMask->reset();
-      knownSymbolics->reset();
-      return;
-    }
-  }
-
   auto array = Array::create(
       size,
       SourceBuilder::constant(constructStorage(
@@ -656,12 +630,12 @@ void ObjectStage::flushToConcreteStore(Assignment &assignment) {
   AssignmentEvaluator evaluator(assignment, false);
   if (auto const_size = dyn_cast<ConstantExpr>(size)) {
     for (size_t i = 0; i < const_size->getZExtValue(); ++i) {
-      if (concreteMask[i]) {
+      if (concreteStore->isConcrete(i)) {
         continue;
       }
       auto byte = evaluator.visit(readWidth(i));
-      concreteStore[i] = cast<ConstantExpr>(byte)->getZExtValue(Expr::Int8);
-      // concreteMask[i] = true;
+      // Write expr instead?
+      concreteStore->writeValue(i, cast<ConstantExpr>(byte)->getZExtValue());
     }
   }
 }
@@ -670,8 +644,8 @@ void ObjectStage::flushForRead() const {
   for (const auto &unflushed : unflushedMask->storage()) {
     auto offset = unflushed.first;
     ref<Expr> value;
-    if (offset < concreteMask.size() && concreteMask[offset]) {
-      value = ConstantExpr::create(concreteStore[offset], Expr::Int8);
+    if (concreteStore && concreteStore->isConcrete(offset)) {
+      value = ConstantExpr::create(concreteStore->readValue(offset), width);
     } else {
       value = knownSymbolics->load(offset);
     }
@@ -685,23 +659,20 @@ void ObjectStage::flushForWrite() {
   flushForRead();
   // The write is symbolic offset and might overwrite any byte
   knownSymbolics->reset(nullptr);
-  if (auto const_size = dyn_cast<ConstantExpr>(size)) {
-    concreteMask = std::vector<bool>(const_size->getZExtValue(), false);
+  if (concreteStore) {
+    for (size_t i = 0; i < concreteStore->size(); ++i) {
+      concreteStore->unsetConcrete(i);
+    }
   }
 }
 
 /***/
 
 ref<Expr> ObjectStage::readWidth(unsigned offset) const {
-  if (width == Expr::Int8) {
-    if (auto const_size = dyn_cast<ConstantExpr>(size)) {
-      if (offset < const_size->getZExtValue() && concreteMask[offset]) {
-        return ConstantExpr::create(concreteStore[offset], width);
-      }
-    }
-  }
-
-  if (auto byte = knownSymbolics->load(offset)) {
+  if (concreteStore && offset < concreteStore->size() &&
+      concreteStore->isConcrete(offset)) {
+    return ConstantExpr::create(concreteStore->readValue(offset), width);
+  } else if (auto byte = knownSymbolics->load(offset)) {
     return byte;
   } else {
     assert(!unflushedMask->load(offset) &&
@@ -721,21 +692,16 @@ ref<Expr> ObjectStage::readWidth(ref<Expr> offset) const {
 }
 
 void ObjectStage::writeWidth(unsigned offset, uint64_t value) {
-  if (width == Expr::Int8) {
-    assert(value <= UINT8_MAX);
-    if (auto const_size = dyn_cast<ConstantExpr>(size)) {
-      if (offset < const_size->getZExtValue()) {
-        if (concreteMask[offset] && concreteStore[offset] == value) {
-          return;
-        }
-        concreteStore[offset] = value;
-        concreteMask[offset] = true;
-        unflushedMask->store(offset, true);
-        return;
-      } else {
-        concreteMask[offset] = false;
-      }
+
+  if (concreteStore && offset < concreteStore->size()) {
+    if (concreteStore->isConcrete(offset) &&
+        concreteStore->readValue(offset) == value) {
+      return;
     }
+    concreteStore->writeValue(offset, value);
+    concreteStore->setConcrete(offset);
+    unflushedMask->store(offset, true);
+    return;
   }
 
   auto byte = knownSymbolics->load(offset);
@@ -754,13 +720,10 @@ void ObjectStage::writeWidth(unsigned offset, ref<Expr> value) {
   if (ConstantExpr *CE = dyn_cast<ConstantExpr>(value)) {
     writeWidth(offset, CE->getZExtValue(width));
   } else {
-    if (auto const_size = dyn_cast<ConstantExpr>(size)) {
-      if (width == Expr::Int8) {
-        if (offset < const_size->getZExtValue() && concreteMask[offset]) {
-          concreteMask[offset] = false;
-          unflushedMask->store(offset, true);
-        }
-      }
+    if (concreteStore && offset < concreteStore->size() &&
+        concreteStore->isConcrete(offset)) {
+      concreteStore->unsetConcrete(offset);
+      unflushedMask->store(offset, true);
     }
     auto byte = knownSymbolics->load(offset);
     if (byte && byte == value) {
@@ -777,7 +740,21 @@ void ObjectStage::writeWidth(ref<Expr> offset, ref<Expr> value) {
 
   if (knownSymbolics->defaultV() && knownSymbolics->defaultV() == value &&
       knownSymbolics->storage().size() == 0 && updates.getSize() == 0) {
-    if (!(isa<ConstantExpr>(size) && width == Expr::Int8)) {
+    if (concreteStore) {
+      if (auto ce = cast<ConstantExpr>(value)) {
+        auto ok = true;
+        for (size_t i = 0; i < concreteStore->size(); ++i) {
+          if (concreteStore->isConcrete(i) &&
+              concreteStore->readValue(i) != ce->getZExtValue()) {
+            ok = false;
+            break;
+          }
+        }
+        if (ok) {
+          return;
+        }
+      }
+    } else {
       return;
     }
   }
@@ -797,34 +774,26 @@ void ObjectStage::write(const ObjectStage &os) {
     if (osConstSize) {
       size_t bound =
           std::min(constSize->getZExtValue(), osConstSize->getZExtValue());
+      concreteStore.emplace(ConcreteStore(width, constSize->getZExtValue()));
       for (size_t i = 0; i < bound; ++i) {
+        concreteStore->writeValue(i, os.concreteStore->readValue(i));
+        concreteStore->setConcrete(i);
         knownSymbolics->store(i, os.knownSymbolics->load(i));
         unflushedMask->store(i, os.unflushedMask->load(i));
-      }
-      if (width == Expr::Int8) {
-        concreteStore = std::vector<uint8_t>(constSize->getZExtValue(), 0);
-        concreteMask = std::vector<bool>(constSize->getZExtValue(), false);
-        for (size_t i = 0; i < bound; ++i) {
-          concreteStore[i] = os.concreteStore[i];
-          concreteMask[i] = os.concreteMask[i];
-        }
       }
     } else {
       for (size_t i = 0; i < constSize->getZExtValue(); ++i) {
         knownSymbolics->store(i, os.knownSymbolics->load(i));
         unflushedMask->store(i, os.unflushedMask->load(i));
       }
-      if (width == Expr::Int8) {
-        concreteStore = std::vector<uint8_t>(constSize->getZExtValue(), 0);
-        concreteMask = std::vector<bool>(constSize->getZExtValue(), false);
-      }
+      concreteStore.emplace(ConcreteStore(width, constSize->getZExtValue()));
     }
   } else {
     if (osConstSize) {
       for (size_t i = 0; i < osConstSize->getZExtValue(); ++i) {
-        if (width == Expr::Int8 && os.concreteMask[i]) {
+        if (os.concreteStore->isConcrete(i)) {
           knownSymbolics->store(
-              i, ConstantExpr::create(os.concreteStore[i], Expr::Int8));
+              i, ConstantExpr::create(os.concreteStore->readValue(i), width));
         } else {
           knownSymbolics->store(i, os.knownSymbolics->load(i));
         }

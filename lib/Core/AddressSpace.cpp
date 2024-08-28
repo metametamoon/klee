@@ -422,7 +422,7 @@ void AddressSpace::copyOutConcrete(const MemoryObject *mo,
 
       // llvm::outs() << "copying out address: " << address << "\n";
 
-      std::memcpy(address, os->valueOS.concreteStore.data(), size);
+      std::memcpy(address, os->valueOS.concreteStore->data(), size);
     }
   }
 
@@ -470,10 +470,10 @@ bool AddressSpace::copyInConcrete(const MemoryObject *mo, const ObjectState *os,
 
   // llvm::outs() << "copying in address: " << address << "\n";
 
-  if (memcmp(address, os->valueOS.concreteStore.data(), moSize) != 0) {
+  if (memcmp(address, os->valueOS.concreteStore->data(), moSize) != 0) {
     if (os->readOnly) {
       for (size_t i = 0; i < moSize; ++i) {
-        if (address[i] != os->valueOS.concreteStore.data()[i]) {
+        if (address[i] != os->valueOS.concreteStore->data()[i]) {
           // llvm::errs() << "difference at " << i << " values: " << (unsigned
           // int)address[i] << " " << (unsigned
           // int)os->valueOS.concreteStore.data()[i] << "\n";
