@@ -231,6 +231,11 @@ void ObjectState::write8(unsigned offset, uint8_t value) {
                     ConstantExpr::create(0, Context::get().getPointerWidth()));
 }
 
+void ObjectState::write8(unsigned offset, uint8_t value, uint64_t base) {
+  valueOS.writeWidth(offset, value);
+  baseOS.writeWidth(offset, base);
+}
+
 void ObjectState::write8(unsigned offset, ref<Expr> value) {
   wasWritten = true;
   if (auto pointer = dyn_cast<PointerExpr>(value)) {

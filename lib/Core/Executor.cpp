@@ -817,11 +817,8 @@ ObjectPair Executor::addExternalObject(ExecutionState &state, const void *addr,
   auto mo = memory->allocateFixed(reinterpret_cast<std::uint64_t>(addr), size,
                                   nullptr, type);
   ObjectState *os = bindObjectInState(state, mo, type, false);
-  ref<ConstantExpr> seg =
-      Expr::createPointer(reinterpret_cast<std::uint64_t>(addr));
   for (unsigned i = 0; i < size; i++) {
-    ref<Expr> byte = ConstantExpr::create(((uint8_t *)addr)[i], Expr::Int8);
-    os->write(i, PointerExpr::create(seg, byte));
+    os->write8(i, ((uint8_t *)addr)[i], reinterpret_cast<std::uint64_t>(addr));
   }
   if (isReadOnly)
     os->setReadOnly(true);
@@ -2039,12 +2036,10 @@ MemoryObject *Executor::serializeLandingpad(ExecutionState &state,
   ObjectState *os =
       bindObjectInState(state, mo, typeSystemManager->getUnknownType(), false);
   for (unsigned i = 0; i < serialized.size(); i++) {
-    ref<ConstantExpr> sec = ConstantExpr::create(serialized[i], Expr::Int8);
     if (pointerMask.at(i)) {
-      ref<ConstantExpr> seg = Expr::createPointer(pointerMask.at(i));
-      os->write(i, PointerExpr::create(seg, sec));
+      os->write8(i, serialized[i], pointerMask.at(i));
     } else {
-      os->write(i, sec);
+      os->write8(i, serialized[i]);
     }
   }
 
