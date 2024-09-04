@@ -22,6 +22,7 @@
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <memory>
 #include <optional>
 #include <string>
@@ -238,28 +239,19 @@ public:
         set_(size) {
     assert(initialValue.size() == byteWidth);
     for (size_t i = 0; i < size; ++i) {
-      for (size_t j = 0; j < byteWidth; ++j) {
-        store[(i * byteWidth) + j] = initialValue[j];
-      }
+      std::copy(initialValue.begin(), initialValue.end(),
+                store.begin() + i * byteWidth);
     }
   }
 
-  bool writeBytes(size_t offset, bytes_ty value) {
+  void writeBytes(size_t offset, uint8_t *value) {
     assert(value.size() == byteWidth);
-    bool changed = false;
-    for (size_t i = 0; i < byteWidth; ++i) {
-      changed = changed || (store[(offset * byteWidth) + i] != value[i]);
-      store[(offset * byteWidth) + i] = value[i];
-    }
-    return changed;
+    std::copy(value, value + byteWidth, store.begin() + offset * byteWidth);
   }
 
-  bytes_ty readBytes(size_t offset) const {
-    bytes_ty value(byteWidth, 0);
-    for (size_t i = 0; i < byteWidth; ++i) {
-      value[i] = store[(offset * byteWidth) + i];
-    }
-    return value;
+  void readBytes(size_t offset, uint8_t *value) const {
+    std::copy(store.begin() + offset * byteWidth,
+              store.begin() + (offset + 1) * byteWidth, value);
   }
 
   // bool writeConstantExpr(size_t offset, ref<ConstantExpr> expr) {
@@ -278,24 +270,25 @@ public:
   //   // make it
   // }
 
-  bool writeValue(size_t offset, uint64_t value) {
+  void writeValue(size_t offset, uint64_t value) {
     assert(byteWidth <= 8);
-    bytes_ty bytes(byteWidth, 0);
+    // bytes_ty bytes(byteWidth, 0);
     uint8_t *rawData = (uint8_t *)&value;
-    for (size_t i = 0; i < byteWidth; ++i) {
-      bytes[i] = rawData[i];
-    }
-    return writeBytes(offset, bytes);
+    // for (size_t i = 0; i < byteWidth; ++i) {
+    //   bytes[i] = rawData[i];
+    // }
+    writeBytes(offset, rawData);
   }
 
   uint64_t readValue(size_t offset) const {
     assert(byteWidth <= 8);
     uint64_t value = 0;
     uint8_t *rawData = (uint8_t *)&value;
-    auto bytes = readBytes(offset);
-    for (size_t i = 0; i < byteWidth; ++i) {
-      rawData[i] = bytes[i];
-    }
+    readBytes(offset, rawData);
+    // auto bytes = readBytes(offset);
+    // for (size_t i = 0; i < byteWidth; ++i) {
+    //   rawData[i] = bytes[i];
+    // }
     return value;
   }
 
