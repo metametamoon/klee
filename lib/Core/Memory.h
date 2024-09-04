@@ -245,7 +245,7 @@ public:
   }
 
   void writeBytes(size_t offset, uint8_t *value) {
-    assert(value.size() == byteWidth);
+    // assert(value.size() == byteWidth);
     std::copy(value, value + byteWidth, store.begin() + offset * byteWidth);
   }
 
