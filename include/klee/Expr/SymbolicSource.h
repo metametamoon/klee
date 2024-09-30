@@ -7,8 +7,8 @@
 
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/IR/Argument.h"
-#include "llvm/IR/Instruction.h"
 #include "llvm/IR/GlobalVariable.h"
+#include "llvm/IR/Instruction.h"
 
 #include <memory>
 #include <set>

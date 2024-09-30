@@ -176,8 +176,6 @@ private:
   InitializerPredicate &predicate;
 };
 
-
-
 struct KBasicBlock : public KBlock {
 public:
   KBasicBlock(KFunction *, llvm::BasicBlock *, KModule *,

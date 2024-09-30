@@ -70,8 +70,7 @@ public:
   const FunctionDistanceMap &getBackwardDistance(KFunction *kf);
 
   void getNearestPredicateSatisfying(KBlock *from, KBlockPredicate predicate,
-                                     bool forward,
-                                     KBlockSet &result);
+                                     bool forward, KBlockSet &result);
 
   const KBlockMap<std::set<unsigned>> &getFunctionBranches(KFunction *kf);
 

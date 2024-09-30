@@ -11,9 +11,8 @@ using namespace klee;
 using namespace llvm;
 
 bool ComposeHelper::collectMemoryObjects(
-    ExecutionState &state, ref<PointerExpr> address,
-    KInstruction *target, ref<Expr> &guard,
-    std::vector<ref<Expr>> &resolveConditions,
+    ExecutionState &state, ref<PointerExpr> address, KInstruction *target,
+    ref<Expr> &guard, std::vector<ref<Expr>> &resolveConditions,
     std::vector<ref<Expr>> &unboundConditions,
     ObjectResolutionList &resolvedMemoryObjects) {
   bool mayBeOutOfBound = true;
@@ -28,10 +27,10 @@ bool ComposeHelper::collectMemoryObjects(
   }
 
   ref<Expr> checkOutOfBounds;
-  if (!checkResolvedMemoryObjects(
-          state, address, 0, mayBeResolvedMemoryObjects,
-          hasLazyInitialized, resolvedMemoryObjects, resolveConditions,
-          unboundConditions, checkOutOfBounds, mayBeOutOfBound)) {
+  if (!checkResolvedMemoryObjects(state, address, 0, mayBeResolvedMemoryObjects,
+                                  hasLazyInitialized, resolvedMemoryObjects,
+                                  resolveConditions, unboundConditions,
+                                  checkOutOfBounds, mayBeOutOfBound)) {
     return false;
   }
 
@@ -42,7 +41,8 @@ bool ComposeHelper::collectMemoryObjects(
   return true;
 }
 
-bool ComposeHelper::tryResolveAddress(ExecutionState &state, ref<PointerExpr> address,
+bool ComposeHelper::tryResolveAddress(ExecutionState &state,
+                                      ref<PointerExpr> address,
                                       std::pair<ref<Expr>, ref<Expr>> &result) {
   ref<Expr> guard;
   std::vector<ref<Expr>> resolveConditions;
@@ -50,9 +50,8 @@ bool ComposeHelper::tryResolveAddress(ExecutionState &state, ref<PointerExpr> ad
   ObjectResolutionList resolvedMemoryObjects;
   KInstruction *target = nullptr;
 
-  if (!collectMemoryObjects(state, address, target, guard,
-                            resolveConditions, unboundConditions,
-                            resolvedMemoryObjects)) {
+  if (!collectMemoryObjects(state, address, target, guard, resolveConditions,
+                            unboundConditions, resolvedMemoryObjects)) {
     return false;
   }
 
@@ -60,7 +59,7 @@ bool ComposeHelper::tryResolveAddress(ExecutionState &state, ref<PointerExpr> ad
   if (resolvedMemoryObjects.size() > 0) {
     state.assumptions.insert(guard);
     ref<Expr> resultAddress =
-      resolvedMemoryObjects.at(resolveConditions.size() - 1)->getBaseExpr();
+        resolvedMemoryObjects.at(resolveConditions.size() - 1)->getBaseExpr();
 
     for (unsigned int i = 0; i < resolveConditions.size(); ++i) {
       unsigned int index = resolveConditions.size() - 1 - i;
@@ -75,7 +74,8 @@ bool ComposeHelper::tryResolveAddress(ExecutionState &state, ref<PointerExpr> ad
   return true;
 }
 
-bool ComposeHelper::tryResolveSize(ExecutionState &state, ref<PointerExpr> address,
+bool ComposeHelper::tryResolveSize(ExecutionState &state,
+                                   ref<PointerExpr> address,
                                    std::pair<ref<Expr>, ref<Expr>> &result) {
   ref<Expr> guard;
   std::vector<ref<Expr>> resolveConditions;
@@ -83,9 +83,8 @@ bool ComposeHelper::tryResolveSize(ExecutionState &state, ref<PointerExpr> addre
   ObjectResolutionList resolvedMemoryObjects;
   KInstruction *target = nullptr;
 
-  if (!collectMemoryObjects(state, address, target, guard,
-                            resolveConditions, unboundConditions,
-                            resolvedMemoryObjects)) {
+  if (!collectMemoryObjects(state, address, target, guard, resolveConditions,
+                            unboundConditions, resolvedMemoryObjects)) {
     return false;
   }
 
@@ -96,7 +95,7 @@ bool ComposeHelper::tryResolveSize(ExecutionState &state, ref<PointerExpr> addre
         resolvedMemoryObjects.at(resolveConditions.size() - 1)->getSizeExpr();
     for (unsigned int i = 0; i < resolveConditions.size(); ++i) {
       unsigned int index = resolveConditions.size() - 1 - i;
-      ref<const MemoryObject> mo =resolvedMemoryObjects.at(index);
+      ref<const MemoryObject> mo = resolvedMemoryObjects.at(index);
       resultSize = SelectExpr::create(resolveConditions[index],
                                       mo->getSizeExpr(), resultSize);
     }
@@ -119,9 +118,8 @@ bool ComposeHelper::tryResolveContent(
   ObjectResolutionList mayBeResolvedMemoryObjects;
   KInstruction *target = nullptr;
 
-  if (!resolveMemoryObjects(state, base, target, 0,
-                            mayBeResolvedMemoryObjects, mayBeOutOfBound,
-                            hasLazyInitialized, incomplete)) {
+  if (!resolveMemoryObjects(state, base, target, 0, mayBeResolvedMemoryObjects,
+                            mayBeOutOfBound, hasLazyInitialized, incomplete)) {
     return false;
   }
 
@@ -302,8 +300,9 @@ ref<Expr> ComposeVisitor::processRead(const Array *root,
     }
     case SymbolicSource::Kind::LazyInitializationAddress: {
       auto pointer =
-        visit(cast<LazyInitializationSource>(root->source)->pointer);
-      ref<PointerExpr> address = cast<PointerExpr>(PointerExpr::create(pointer));
+          visit(cast<LazyInitializationSource>(root->source)->pointer);
+      ref<PointerExpr> address =
+          cast<PointerExpr>(PointerExpr::create(pointer));
       auto guardedAddress =
           helper.fillLazyInitializationAddress(state, address);
       safetyConstraints.insert(guardedAddress.first);
@@ -312,8 +311,9 @@ ref<Expr> ComposeVisitor::processRead(const Array *root,
     }
     case SymbolicSource::Kind::LazyInitializationSize: {
       auto pointer =
-        visit(cast<LazyInitializationSource>(root->source)->pointer);
-      ref<PointerExpr> address = cast<PointerExpr>(PointerExpr::create(pointer));
+          visit(cast<LazyInitializationSource>(root->source)->pointer);
+      ref<PointerExpr> address =
+          cast<PointerExpr>(PointerExpr::create(pointer));
       auto guardedSize = helper.fillLazyInitializationSize(state, address);
       safetyConstraints.insert(guardedSize.first);
       composedArray = guardedSize.second;
@@ -321,8 +321,9 @@ ref<Expr> ComposeVisitor::processRead(const Array *root,
     }
     case SymbolicSource::Kind::LazyInitializationContent: {
       auto pointer =
-        visit(cast<LazyInitializationSource>(root->source)->pointer);
-      ref<PointerExpr> address = cast<PointerExpr>(PointerExpr::create(pointer));
+          visit(cast<LazyInitializationSource>(root->source)->pointer);
+      ref<PointerExpr> address =
+          cast<PointerExpr>(PointerExpr::create(pointer));
       // index is not used because there are conditions composed before
       // that act as the index check
       auto guardedContent =

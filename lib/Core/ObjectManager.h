@@ -148,7 +148,7 @@ public:
   std::map<ProofObligation *, unsigned> propagationCount;
 
   std::unordered_set<uint32_t> reachedOriginal; // TODO remove
-  std::unordered_set<uint32_t> removeSet; // TODO remove
+  std::unordered_set<uint32_t> removeSet;       // TODO remove
 
   // These are used to buffer execution results and pass the updates to
   // subscribers

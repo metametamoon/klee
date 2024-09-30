@@ -1,6 +1,5 @@
-#include <queue>
 #include "ProofObligation.h"
-
+#include <queue>
 
 namespace klee {
 bool ProofObligationIDCompare::operator()(const ProofObligation *a,

@@ -39,9 +39,9 @@ template <typename T> class ImmutableList {
       }
     }
 
-    ImmutableListNode(std::shared_ptr<ImmutableListNode> prev, size_t prev_len, std::vector<T> values)
-    : prev(prev), prev_len(prev_len), values(std::move(values)) {
-    }
+    ImmutableListNode(std::shared_ptr<ImmutableListNode> prev, size_t prev_len,
+                      std::vector<T> values)
+        : prev(prev), prev_len(prev_len), values(std::move(values)) {}
   };
 
   std::shared_ptr<ImmutableListNode> node;
@@ -108,7 +108,8 @@ public:
     if (!node) {
       return;
     }
-    node = std::make_shared<ImmutableListNode>(node->prev, node->prev_len, node->values);
+    node = std::make_shared<ImmutableListNode>(node->prev, node->prev_len,
+                                               node->values);
     node->values.pop_back();
   }
 
@@ -129,11 +130,10 @@ public:
     return *it;
   }
 
-  const T& front() const {
-    return at(0);
-  }
+  const T &front() const { return at(0); }
 
-  friend bool operator==(const ImmutableList<T> &lhs, const ImmutableList<T> &rhs) {
+  friend bool operator==(const ImmutableList<T> &lhs,
+                         const ImmutableList<T> &rhs) {
     if (lhs.size() != rhs.size()) {
       return false;
     }
@@ -151,11 +151,13 @@ public:
     return true;
   }
 
-  friend bool operator!=(const ImmutableList<T> &lhs, const ImmutableList<T> &rhs) {
+  friend bool operator!=(const ImmutableList<T> &lhs,
+                         const ImmutableList<T> &rhs) {
     return !(lhs == rhs);
   }
 
-  friend bool operator<(const ImmutableList<T> &lhs, const ImmutableList<T> &rhs) {
+  friend bool operator<(const ImmutableList<T> &lhs,
+                        const ImmutableList<T> &rhs) {
     if (lhs.size() < rhs.size()) {
       return true;
     } else if (lhs.size() > rhs.size()) {

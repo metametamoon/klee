@@ -136,7 +136,6 @@ public:
   }
 };
 
-
 struct CallStackFrame {
   KInstruction *caller;
   KFunction *kf;
@@ -172,7 +171,6 @@ struct CallStackFrame {
     }
   }
 };
-
 
 struct KGEPInstruction : KInstruction {
   /// indices - The list of variable sized adjustments to add to the pointer

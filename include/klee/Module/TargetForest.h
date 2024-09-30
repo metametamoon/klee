@@ -237,7 +237,7 @@ private:
     Layer(const InternalLayer &forest, const TargetsToVector &targetsToVector,
           confidence::ty confidence)
         : forest(forest), targetsToVector(targetsToVector),
-        confidence(confidence) {
+          confidence(confidence) {
       for (auto &targetVect : targetsToVector) {
         targets.insert(targetVect.first);
       }

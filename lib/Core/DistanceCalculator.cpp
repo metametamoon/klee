@@ -102,8 +102,7 @@ DistanceResult DistanceCalculator::computeDistance(KBlock *kb, TargetKind kind,
     break;
 
   case PreTarget:
-    res = tryGetPreTargetWeight(kb, weight, distanceToTargetFunction,
-                                reversed);
+    res = tryGetPreTargetWeight(kb, weight, distanceToTargetFunction, reversed);
     isInsideFunction = false;
     break;
 
@@ -227,7 +226,8 @@ DistanceCalculator::tryGetLocalWeight(KBlock *kb, weight_type &weight,
 WeightResult DistanceCalculator::tryGetPreTargetWeight(
     KBlock *kb, weight_type &weight,
     const std::unordered_map<KFunction *, unsigned int>
-        &distanceToTargetFunction, bool reversed) const {
+        &distanceToTargetFunction,
+    bool reversed) const {
   KFunction *currentKF = kb->parent;
   std::vector<KBlock *> localTargets;
   for (auto kCallBlock : currentKF->kCallBlocks) {
@@ -265,7 +265,6 @@ WeightResult DistanceCalculator::tryGetTargetWeight(KBlock *kb,
                                                     KBlock *target,
                                                     bool reversed) const {
   std::vector<KBlock *> localTargets = {target};
-  WeightResult res =
-      tryGetLocalWeight(kb, weight, localTargets, reversed);
+  WeightResult res = tryGetLocalWeight(kb, weight, localTargets, reversed);
   return res;
 }

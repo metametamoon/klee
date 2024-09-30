@@ -72,8 +72,8 @@ void ObjectManager::removeState(ExecutionState *state) {
   assert(itr == removedStates.end());
 
   if (state->isolated) {
-    llvm::errs() << "Removing isolated: " <<
-    state->constraints.path().toString() << "\n";
+    llvm::errs() << "Removing isolated: "
+                 << state->constraints.path().toString() << "\n";
   }
 
   if (!statesUpdated) {

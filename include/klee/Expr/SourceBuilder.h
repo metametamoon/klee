@@ -29,9 +29,9 @@ public:
   symbolicSizeConstantAddress(unsigned version,
                               const KGlobalVariable *allocSite, ref<Expr> size);
 
-  static ref<SymbolicSource> symbolicSizeConstantAddress(unsigned version,
-                                                  const KValue *allocSite,
-                                                  ref<Expr> size);
+  static ref<SymbolicSource>
+  symbolicSizeConstantAddress(unsigned version, const KValue *allocSite,
+                              ref<Expr> size);
 
   static ref<SymbolicSource> makeSymbolic(const std::string &name,
                                           unsigned version);

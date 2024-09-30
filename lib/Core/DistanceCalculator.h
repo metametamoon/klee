@@ -125,7 +125,8 @@ private:
   WeightResult
   tryGetPreTargetWeight(KBlock *kb, weight_type &weight,
                         const std::unordered_map<KFunction *, unsigned int>
-                            &distanceToTargetFunction,bool reversed) const;
+                            &distanceToTargetFunction,
+                        bool reversed) const;
 
   WeightResult tryGetTargetWeight(KBlock *kb, weight_type &weight,
                                   KBlock *target, bool reversed) const;

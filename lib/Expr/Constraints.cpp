@@ -401,7 +401,6 @@ PathConstraints::withAssumtions(const ExprHashSet &assumptions) const {
   return tmpConstraints;
 }
 
-
 const PathConstraints::ordered_constraints_ty &
 PathConstraints::orderedCS() const {
   return orderedConstraints;

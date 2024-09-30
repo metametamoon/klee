@@ -86,7 +86,6 @@ enum class MockMutableGlobalsPolicy {
   All,  // Mock globals on module build stage and generate bc module for it
 };
 
-
 enum class ExecutionKind { Forward, Bidirectional };
 
 class Interpreter {

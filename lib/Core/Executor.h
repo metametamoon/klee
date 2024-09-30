@@ -112,7 +112,7 @@ template <class T> class ref;
 /// during an instruction step. Should contain addedStates,
 /// removedStates, and haltExecution, among others.
 
-  typedef std::vector<ref<const MemoryObject>> ObjectResolutionList;
+typedef std::vector<ref<const MemoryObject>> ObjectResolutionList;
 
 class Executor : public Interpreter {
   friend struct ComposeHelper;
@@ -261,7 +261,6 @@ private:
   std::unordered_set<llvm::BasicBlock *> verifingTransitionsTo;
   std::unordered_set<llvm::BasicBlock *> successTransitionsTo;
   std::unordered_map<llvm::BasicBlock *, unsigned> failedTransitionsTo;
-
 
   /// Typeids used during exception handling
   std::vector<ref<Expr>> eh_typeids;
@@ -486,8 +485,8 @@ private:
   // Used for testing.
   ref<Expr> replaceReadWithSymbolic(ExecutionState &state, ref<Expr> e);
 
-  ref<Expr> makeMockValue(ExecutionState &state,
-                          const std::string &name, Expr::Width width);
+  ref<Expr> makeMockValue(ExecutionState &state, const std::string &name,
+                          Expr::Width width);
 
   const Cell &eval(const KInstruction *ki, unsigned index,
                    ExecutionState &state, StackFrame &sf,
@@ -792,7 +791,6 @@ private:
   void initializeIsolated(ref<InitializeAction> action);
 
   void closeProofObligation(ProofObligation *pob);
-
 
   // void executeAction(ref<SearcherAction> action);
   // void goForward(ref<ForwardAction> action);

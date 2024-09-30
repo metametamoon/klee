@@ -21,8 +21,7 @@ public:
   ComposeHelper(Executor *_executor) : executor(_executor) {}
 
   bool getResponse(const ExecutionState &state, ref<Expr> expr,
-                   ref<SolverResponse> &queryResult,
-                   SolverQueryMetaData &) {
+                   ref<SolverResponse> &queryResult, SolverQueryMetaData &) {
     executor->solver->setTimeout(executor->coreSolverTimeout);
     bool success = executor->solver->getResponse(
         state.constraints.withAssumtions(state.assumptions), expr, queryResult,
@@ -43,8 +42,7 @@ public:
 
   bool evaluate(const ExecutionState &state, ref<Expr> expr,
                 ref<SolverResponse> &queryResult,
-                ref<SolverResponse> &negateQueryResult,
-                SolverQueryMetaData &) {
+                ref<SolverResponse> &negateQueryResult, SolverQueryMetaData &) {
     executor->solver->setTimeout(executor->coreSolverTimeout);
     bool success = executor->solver->evaluate(
         state.constraints.withAssumtions(state.assumptions), expr, queryResult,
@@ -54,8 +52,7 @@ public:
   }
 
   bool resolveMemoryObjects(ExecutionState &state, ref<PointerExpr> address,
-                            KInstruction *target,
-                            unsigned bytes,
+                            KInstruction *target, unsigned bytes,
                             ObjectResolutionList &mayBeResolvedMemoryObjects,
                             bool &mayBeOutOfBound, bool &mayLazyInitialize,
                             bool &incomplete) {
@@ -65,16 +62,16 @@ public:
   }
 
   bool checkResolvedMemoryObjects(
-      ExecutionState &state, ref<PointerExpr> address,
-      unsigned bytes, const ObjectResolutionList &mayBeResolvedMemoryObjects,
+      ExecutionState &state, ref<PointerExpr> address, unsigned bytes,
+      const ObjectResolutionList &mayBeResolvedMemoryObjects,
       bool hasLazyInitialized, ObjectResolutionList &resolvedMemoryObjects,
       std::vector<ref<Expr>> &resolveConditions,
       std::vector<ref<Expr>> &unboundConditions, ref<Expr> &checkOutOfBounds,
       bool &mayBeOutOfBound) {
     return executor->checkResolvedMemoryObjects(
-        state, address, bytes, mayBeResolvedMemoryObjects,
-        hasLazyInitialized, resolvedMemoryObjects, resolveConditions,
-        unboundConditions, checkOutOfBounds, mayBeOutOfBound);
+        state, address, bytes, mayBeResolvedMemoryObjects, hasLazyInitialized,
+        resolvedMemoryObjects, resolveConditions, unboundConditions,
+        checkOutOfBounds, mayBeOutOfBound);
   }
 
   bool makeGuard(ExecutionState &state,
@@ -160,7 +157,8 @@ public:
   }
 
   std::pair<ref<Expr>, ref<Expr>>
-  fillLazyInitializationAddress(ExecutionState &state, ref<PointerExpr> pointer);
+  fillLazyInitializationAddress(ExecutionState &state,
+                                ref<PointerExpr> pointer);
 
   std::pair<ref<Expr>, ref<Expr>>
   fillLazyInitializationSize(ExecutionState &state, ref<PointerExpr> pointer);

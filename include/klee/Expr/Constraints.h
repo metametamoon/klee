@@ -112,7 +112,6 @@ public:
       std::vector<ref<const IndependentConstraintSet>> &result) const;
 };
 
-
 class PathConstraints {
 public:
   using ordered_constraints_ty =

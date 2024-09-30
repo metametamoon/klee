@@ -21,7 +21,6 @@ llvm::cl::opt<unsigned> BackwardTicks("backward-ticks", llvm::cl::desc(""),
                                       llvm::cl::init(25),
                                       llvm::cl::cat(ExecCat));
 
-
 BidirectionalSearcher::StepKind BidirectionalSearcher::selectStep() {
   size_t initial_choice = ticker.getCurrent();
   size_t choice = initial_choice;
@@ -140,7 +139,6 @@ BidirectionalSearcher::~BidirectionalSearcher() {
   delete backward;
   delete initializer;
 }
-
 
 ref<SearcherAction> ForwardOnlySearcher::selectAction() {
   return new ForwardAction(&searcher->selectState());

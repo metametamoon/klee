@@ -87,8 +87,8 @@ void Summary::readFromFile(KModule *km) {
   }
   std::unique_ptr<MemoryBuffer> &MB = *MBResult;
   std::unique_ptr<ExprBuilder> Builder(createDefaultExprBuilder());
-  expr::Parser *P = expr::Parser::Create("LemmaParser", MB.get(), Builder.get(),
-                                         km, true);
+  expr::Parser *P =
+      expr::Parser::Create("LemmaParser", MB.get(), Builder.get(), km, true);
   while (auto parsed = P->ParseTopLevelDecl()) {
     if (auto lemmaDecl = dyn_cast<expr::LemmaCommand>(parsed)) {
       ref<Lemma> l(new Lemma(lemmaDecl->path, lemmaDecl->constraints));

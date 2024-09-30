@@ -521,9 +521,9 @@ Executor::Executor(LLVMContext &ctx, const InterpreterOptions &opts,
     : Interpreter(opts), interpreterHandler(ih), searcher(nullptr),
       externalDispatcher(new ExternalDispatcher(ctx)),
       summary(interpreterHandler), statsTracker(0), pathWriter(0),
-      symPathWriter(0), specialFunctionHandler(0),
-      timers{time::Span(TimerInterval)}, guidanceKind(opts.Guidance),
-      codeGraphInfo(new CodeGraphInfo()),
+      symPathWriter(0),
+      specialFunctionHandler(0), timers{time::Span(TimerInterval)},
+      guidanceKind(opts.Guidance), codeGraphInfo(new CodeGraphInfo()),
       distanceCalculator(new DistanceCalculator(*codeGraphInfo)),
       targetCalculator(new TargetCalculator(*codeGraphInfo)),
       targetManager(new TargetManager(guidanceKind, *distanceCalculator,
@@ -2594,7 +2594,7 @@ void Executor::executeCall(ExecutionState &state, KInstruction *ki, Function *f,
 
       // offsets of variadic arguments
       std::vector<uint64_t> offsets(callingArgs, 0);
-      uint64_t argWidth;             // width of current variadic argument
+      uint64_t argWidth; // width of current variadic argument
 
       const CallBase &cb = cast<CallBase>(*i);
       for (unsigned k = funcArgs; k < callingArgs; k++) {
@@ -4856,7 +4856,7 @@ ref<Expr> Executor::fillSymbolicSizeConstantAddress(
     ref<Expr> arraySize, ref<Expr> size) {
   unsigned stateNameVersion = state.arrayNames.count("const_arr")
                                   ? state.arrayNames.at("const_arr")
-                              : 0;
+                                  : 0;
   unsigned newVersion =
       symbolicSizeConstantAddressSource->version + stateNameVersion;
   const Array *newArray = makeArray(
@@ -4929,8 +4929,7 @@ Executor::compose(const ExecutionState &state, const PathConstraints &pob,
         return result;
       }
 
-      auto added =
-          composer.state.constraints.addConstraint(condition, index);
+      auto added = composer.state.constraints.addConstraint(condition, index);
       for (auto expr : added) {
         rebuildMap.insert({expr, constraint});
       }
@@ -6076,7 +6075,7 @@ void Executor::callExternalFunction(ExecutionState &state, KInstruction *target,
         e->getWidth() == Context::get().getPointerWidth() &&
         resultType->isPointerTy()) {
       ref<Expr> symExternCallsCanReturnNullExpr =
-        makeMockValue(state, "symExternCallsCanReturnNull", Expr::Bool);
+          makeMockValue(state, "symExternCallsCanReturnNull", Expr::Bool);
       e = SelectExpr::create(
           symExternCallsCanReturnNullExpr,
           PointerExpr::create(Expr::createPointer(0), Expr::createPointer(0)),
@@ -6209,7 +6208,7 @@ void Executor::executeAlloc(ExecutionState &state, ref<Expr> size, bool isLocal,
 
       if (checkOutOfMemory && !isLocal) {
         ref<Expr> symCheckOutOfMemoryExpr =
-          makeMockValue(state, "symCheckOutOfMemory", Expr::Bool);
+            makeMockValue(state, "symCheckOutOfMemory", Expr::Bool);
         address = SelectExpr::create(symCheckOutOfMemoryExpr,
                                      Expr::createPointer(0), address);
       }
@@ -6628,7 +6627,8 @@ bool Executor::resolveMemoryObjects(
     size = kmodule->targetData->getTypeStoreSize(state.gepExprBases[base]);
   }
 
-  // base = Simplificator::simplifyExpr(state.constraints.cs(), base).simplified;
+  // base = Simplificator::simplifyExpr(state.constraints.cs(),
+  // base).simplified;
   ref<PointerExpr> basePointer = PointerExpr::create(base, base);
 
   auto mso = MemorySubobject(address, bytes);
@@ -6960,7 +6960,8 @@ void Executor::executeMemoryOperation(
   if (SimplifySymIndices) {
     // if (!isa<ConstantExpr>(base)) {
     //   base =
-    //       Simplificator::simplifyExpr(estate.constraints.cs(), base).simplified;
+    //       Simplificator::simplifyExpr(estate.constraints.cs(),
+    //       base).simplified;
     // }
     if (isWrite && !isa<ConstantExpr>(value))
       value = Simplificator::simplifyExpr(estate.constraints.cs(), value)
@@ -7407,7 +7408,8 @@ void Executor::lazyInitializeLocalObject(ExecutionState &state, StackFrame &sf,
   }
   ref<Expr> conditionExpr = Expr::createTrue();
   ref<PointerExpr> pointer = PointerExpr::create(address);
-  ref<PointerExpr> basePointer = PointerExpr::create(pointer->getBase(), pointer->getBase());
+  ref<PointerExpr> basePointer =
+      PointerExpr::create(pointer->getBase(), pointer->getBase());
   ref<const MemoryObject> id =
       lazyInitializeObject(state, pointer, target, elementSize, size, true,
                            conditionExpr, UseSymbolicSizeLazyInit);
@@ -7668,8 +7670,7 @@ void Executor::runFunctionAsMain(Function *f, int argc, char **argv,
       continue;
     }
     auto mo = globalObjects[&v];
-    auto array =
-        makeArray(mo->sizeExpr, SourceBuilder::global(v));
+    auto array = makeArray(mo->sizeExpr, SourceBuilder::global(v));
     bindObjectInState(*emptyState, mo, false, array);
   }
   objectManager->setEmptyState(emptyState);
@@ -7696,8 +7697,8 @@ void Executor::runFunctionAsMain(Function *f, int argc, char **argv,
         trace.push_back({kEntryFunction->entryKBlock});
         auto kCallBlock = kfIt->second->entryKBlock;
         trace.push_back({kCallBlock});
-        data = targetedExecutionManager->prepareTargets(kEntryFunction,
-                                                        {trace});
+        data =
+            targetedExecutionManager->prepareTargets(kEntryFunction, {trace});
       }
     }
 

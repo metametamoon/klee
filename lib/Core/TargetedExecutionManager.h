@@ -117,7 +117,6 @@ private:
   StatesSet localStates;
 
 public:
-
   struct Data {
     ref<TargetForest> forwardWhitelist;
     std::map<std::string, ref<TargetForest>> backwardWhitelists;
