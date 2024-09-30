@@ -6,7 +6,7 @@ function git_clone_or_update() {
   local branch="$3"
 
   if [[ ! -e "${destination}/.git" ]]; then
-    git clone $([ "${branch}x" != "x" ] && echo "--depth 1 -b ${branch}" || echo "") "$url" "$destination"
+    git clone --recurse-submodules $([ "${branch}x" != "x" ] && echo "--depth 1 -b ${branch}" || echo "") "$url" "$destination"
   else
     pushd "$destination"
     git pull
