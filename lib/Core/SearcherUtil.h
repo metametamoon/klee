@@ -45,7 +45,7 @@ protected:
   class ReferenceCounter _refCount;
 
 public:
-  enum class Kind { Initialize, Forward, Backward, BegNodeLemmaUpdate};
+  enum class Kind { Initialize, Forward, Backward, PdrUpdate};
 
   SearcherAction() = default;
   virtual ~SearcherAction() = default;
@@ -99,9 +99,9 @@ struct InitializeAction : public SearcherAction {
   static bool classof(const InitializeAction *) { return true; }
 };
 
-struct LemmaUpdateAction : public SearcherAction {
-  friend class ref<LemmaUpdateAction>;
-  struct BegNodeUpdate {
+struct PdrAction : public SearcherAction {
+  friend class ref<PdrAction>;
+  struct PobLemmaUpdate {
     ProofObligation *pob;
     int queueDepth;
   };
@@ -109,16 +109,16 @@ struct LemmaUpdateAction : public SearcherAction {
     int queueDepth;
   };
   struct Noop {};
-  using action_t = std::variant<BegNodeUpdate, CheckInductive, Noop>;
+  using action_t = std::variant<PobLemmaUpdate, CheckInductive, Noop>;
   action_t action;
   // nullptr for no-op
-  explicit LemmaUpdateAction(action_t action) : action(action) {}
+  explicit PdrAction(action_t action) : action(action) {}
 
-  Kind getKind() const { return Kind::BegNodeLemmaUpdate; }
+  Kind getKind() const { return Kind::PdrUpdate; }
   static bool classof(const SearcherAction *A) {
-    return A->getKind() == Kind::BegNodeLemmaUpdate;
+    return A->getKind() == Kind::PdrUpdate;
   }
-  static bool classof(const LemmaUpdateAction *) { return true; }
+  static bool classof(const PdrAction *) { return true; }
 };
 
 } // namespace klee

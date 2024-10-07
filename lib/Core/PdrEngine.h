@@ -7,12 +7,11 @@
 #include <queue>
 #include <variant>
 
-class ProofObligation;
 
 namespace klee {
-class LemmaUpdater: public Subscriber {
+class PdrEngine: public Subscriber {
 public:
-  LemmaUpdater(ProofObligation *rootPob, TargetManager *targetManager,
+  PdrEngine(ProofObligation *rootPob, TargetManager *targetManager,
                ConflictCoreInitializer *initializer,
                Executor* executor,
                ObjectManager *objectManager);
@@ -28,7 +27,7 @@ public:
   };
   using state_t = std::variant<AwaitingDepth, MaxNodeUpdate>;
   state_t currentState;
-  LemmaUpdateAction getLemmaUpdateAction();
+  PdrAction getPdrAction();
   void update(ref<ObjectManager::Event> e) override;
 
 private:

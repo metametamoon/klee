@@ -1,4 +1,4 @@
-#include "PdrLemmasSummary.h"
+#include "PdrSummary.h"
 
 #include "ProofObligation.h"
 #include "klee/Expr/ExprHashMap.h"
@@ -12,7 +12,7 @@
 
 namespace klee {
 
-ref<Expr> disjunctionSetToExpr(const disjunction &dj) {
+ref<Expr> disjunctionToExpr(const disjunction &dj) {
   ref<Expr> expr = Expr::createFalse();
   for (auto &literal : dj.elements) {
     expr = OrExpr::create(expr, literal); // why not OrExpr(left, right);
@@ -20,7 +20,7 @@ ref<Expr> disjunctionSetToExpr(const disjunction &dj) {
   return expr;
 }
 
-std::string disjunctionSetToString(const disjunction &dj) {
+std::string disjunctionToString(const disjunction &dj) {
   if (dj.elements.empty()) {
     return "false";
   }
@@ -37,10 +37,10 @@ std::string disjunctionSetToString(const disjunction &dj) {
   return result;
 }
 
-ref<Expr> cnfVectorToExpr(const cnf &formula) {
+ref<Expr> cnfToExpr(const cnf &formula) {
   ref<Expr> expr = Expr::createTrue();
   for (auto &disjunct : formula) {
-    expr = AndExpr::create(expr, disjunctionSetToExpr(
+    expr = AndExpr::create(expr, disjunctionToExpr(
                                      disjunct)); // why not OrExpr(left, right);
   }
   return expr;
@@ -54,7 +54,7 @@ std::string levelToString(int level) {
   }
 }
 
-void PdrLemmasSummary::addInfinityLemmaOnSomeEdgeToPob(
+void PdrSummary::addInfinityLemmaOnSomeEdgeToPob(
     ProofObligation *pob, const disjunction &lemma) {
   if (debugConstraints.isSet(DebugPrint::Lemma)) {
     llvm::errs() << logPrefixWithSpace
@@ -63,14 +63,14 @@ void PdrLemmasSummary::addInfinityLemmaOnSomeEdgeToPob(
                                 pob->constraints.path().toString());
     llvm::errs() << fmt::format("{}Loc={} Lemma={}\n", logPrefixWithSpace,
                                 pob->location->toString(),
-                                disjunctionSetToString(lemma));
+                                disjunctionToString(lemma));
   }
   infinityLemmas[pob->id].elements.insert(
     lemma.elements.begin(), lemma.elements.end());
   // assert(infinityLemmas.size() > 1); - maybe 'false'
 }
 
-void PdrLemmasSummary::addLemmaOnKInstruction(KInstruction *ki, int level,
+void PdrSummary::addLemmaOnKInstruction(KInstruction *ki, int level,
                                               const disjunction &lemma) {
   if (debugConstraints.isSet(DebugPrint::Lemma)) {
     llvm::errs() << logPrefixWithSpace
@@ -78,26 +78,26 @@ void PdrLemmasSummary::addLemmaOnKInstruction(KInstruction *ki, int level,
                                 ki->toString(),
                                 levelToString(level));
     llvm::errs() << fmt::format("{}Lemma={}\n", logPrefixWithSpace,
-                                disjunctionSetToString(lemma));
+                                disjunctionToString(lemma));
 
   }
   kinstructionLemmas[ki][level].insert(lemma);
 }
 
 std::map<int, cnf>
-PdrLemmasSummary::getLemmasFromKInstruction(KInstruction *ki) {
+PdrSummary::getLemmasFromKInstruction(KInstruction *ki) {
   return kinstructionLemmas[ki];
 }
 
 disjunction
-PdrLemmasSummary::getInfinityLemmasFromEdgesToPob(ProofObligation *pob) {
+PdrSummary::getInfinityLemmasFromEdgesToPob(ProofObligation *pob) {
   return infinityLemmas[pob->id];
 }
 
-void PdrLemmasSummary::pobDied(ProofObligation *) {}
+void PdrSummary::pobDied(ProofObligation *) {}
 
 
-void PdrLemmasSummary::
+void PdrSummary::
 dumpInfinityLevelLemmas(const std::string &outputPath) {
   nlohmann::json invariants = nlohmann::json::array();
   llvm::errs() << "Infinity level lemmas:\n";
@@ -113,10 +113,10 @@ dumpInfinityLevelLemmas(const std::string &outputPath) {
             {"function", ki->parent->parent->getName()},
             {"c_expression", disjunctionToCExpr(lemma)},
             {"c_expression_with_errors", disjunctionToCExpr(lemma, false)},
-            {"pure_expression", disjunctionSetToString(lemma)}
+            {"pure_expression", disjunctionToString(lemma)}
           };
           invariants.push_back(invariant);
-          llvm::errs() << fmt::format("[\n{}\n],\n", disjunctionSetToString(lemma));
+          llvm::errs() << fmt::format("[\n{}\n],\n", disjunctionToString(lemma));
           llvm::errs() << fmt::format("as C: {}\n", disjunctionToCExpr(lemma));
         }
         llvm::errs() << "\n";

@@ -41,9 +41,8 @@ add_library(kleeCore
   TargetManager.cpp
   TimingSolver.cpp
   UserSearcher.cpp
-  LemmaUpdater.cpp
-        PdrLemmasSummary.cpp
-        PdrLemmasSummary.cpp
+  PdrEngine.cpp
+  PdrSummary.cpp
 )
 
 target_link_libraries(kleeCore PRIVATE
