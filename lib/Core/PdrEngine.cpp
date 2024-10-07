@@ -1,4 +1,4 @@
-#include "LemmaUpdater.h"
+#include "PdrEngine.h"
 #include <fmt/format.h>
 
 #include "Executor.h"
@@ -7,9 +7,9 @@
 #include <klee/Support/DebugFlags.h>
 
 namespace klee {
-LemmaUpdateAction LemmaUpdater::getLemmaUpdateAction() {
+PdrAction PdrEngine::getPdrAction() {
   if (rootPob == nullptr) {
-    return LemmaUpdateAction{LemmaUpdateAction::Noop{}};
+    return PdrAction{PdrAction::Noop{}};
   }
   if (auto awaitingDepth = std::get_if<AwaitingDepth>(&currentState)) {
     auto depth = awaitingDepth->n;
@@ -34,12 +34,12 @@ LemmaUpdateAction LemmaUpdater::getLemmaUpdateAction() {
       }
       currentState = MaxNodeUpdate{updateQueue, awaitingDepth->n};
     }
-    return LemmaUpdateAction{LemmaUpdateAction::Noop{}};
+    return PdrAction{PdrAction::Noop{}};
   } else if (auto maxNodeUpdate = std::get_if<MaxNodeUpdate>(&currentState)) {
     if (!maxNodeUpdate->updateQueue.empty()) {
       auto nextPob = maxNodeUpdate->updateQueue.front();
       maxNodeUpdate->updateQueue.pop_front();
-      return LemmaUpdateAction{LemmaUpdateAction::BegNodeUpdate{
+      return PdrAction{PdrAction::PobLemmaUpdate{
           nextPob, maxNodeUpdate->queueMaximalDepth}};
     } else {
       currentState = AwaitingDepth{maxNodeUpdate->queueMaximalDepth + 1};
@@ -48,14 +48,14 @@ LemmaUpdateAction LemmaUpdater::getLemmaUpdateAction() {
             << "[lemma updater] the queue has ended! Now expecting depth= "
             << maxNodeUpdate->queueMaximalDepth + 1 << "\n";
       }
-      return LemmaUpdateAction{
-          LemmaUpdateAction::CheckInductive{maxNodeUpdate->queueMaximalDepth}};
+      return PdrAction{
+          PdrAction::CheckInductive{maxNodeUpdate->queueMaximalDepth}};
     }
   } else {
-    return LemmaUpdateAction{LemmaUpdateAction::Noop{}};
+    return PdrAction{PdrAction::Noop{}};
   }
 }
-void LemmaUpdater::update(ref<ObjectManager::Event> e) {
+void PdrEngine::update(ref<ObjectManager::Event> e) {
   switch (e->getKind()) {
   case ObjectManager::Event::Kind::ProofObligations: {
     auto pobsEvent = cast<ObjectManager::ProofObligations>(e);
@@ -82,7 +82,7 @@ void LemmaUpdater::update(ref<ObjectManager::Event> e) {
  * assumed to have a depth 1)
  */
 std::optional<std::vector<ProofObligation *>>
-LemmaUpdater::tryExtractingSubtree(ProofObligation *root, int depth) {
+PdrEngine::tryExtractingSubtree(ProofObligation *root, int depth) {
   if (!checkPobWouldNotBePropagatedInTheFuture(root)) {
     return std::nullopt;
   }
@@ -102,14 +102,14 @@ LemmaUpdater::tryExtractingSubtree(ProofObligation *root, int depth) {
   return result;
 }
 
-bool LemmaUpdater::checkPobWouldNotBePropagatedInTheFuture(
+bool PdrEngine::checkPobWouldNotBePropagatedInTheFuture(
     ProofObligation *pob) {
   return !targetManager->hasTargetedStates(pob->location) &&
          !initializer->initsLeftForTarget(pob->location) &&
          objectManager->propagationCount[pob] == 0;
 }
 
-LemmaUpdater::LemmaUpdater(ProofObligation *rootPob,
+PdrEngine::PdrEngine(ProofObligation *rootPob,
                            TargetManager *targetManager,
                            ConflictCoreInitializer *initializer,
                            Executor *executor, ObjectManager *objectManager)

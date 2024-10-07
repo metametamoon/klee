@@ -100,7 +100,7 @@ ref<SearcherAction> BidirectionalSearcher::selectAction() {
     }
     case StepKind::LemmaUpdate:
       action =
-          new LemmaUpdateAction(lemmaUpdater->getLemmaUpdateAction());
+          new PdrAction(pdrEngine->getPdrAction());
       break;
     }
   }
@@ -139,11 +139,11 @@ bool BidirectionalSearcher::empty() {
 BidirectionalSearcher::BidirectionalSearcher(Searcher *_forward,
                                              Searcher *_branch,
                                              BackwardSearcher *_backward,
-    Initializer *_initializer, std::unique_ptr<LemmaUpdater> &&_lemmaUpdater)
+    Initializer *_initializer, std::unique_ptr<PdrEngine> &&_lemmaUpdater)
     : ticker({ForwardTicks, BranchTicks, BackwardTicks, InitTicks,
               LemmaUpdateTicks}),
       forward(_forward), branch(_branch), backward(_backward),
-      initializer(_initializer), lemmaUpdater(std::move(_lemmaUpdater)) {}
+      initializer(_initializer), pdrEngine(std::move(_lemmaUpdater)) {}
 
 BidirectionalSearcher::~BidirectionalSearcher() {
   delete forward;

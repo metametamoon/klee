@@ -3,7 +3,7 @@
 
 #include "BackwardSearcher.h"
 #include "Initializer.h"
-#include "LemmaUpdater.h"
+#include "PdrEngine.h"
 #include "ObjectManager.h"
 #include "Searcher.h"
 #include "SearcherUtil.h"
@@ -30,7 +30,7 @@ public:
   explicit BidirectionalSearcher(Searcher *_forward, Searcher *_branch,
                                  BackwardSearcher *_backward,
                                  Initializer *_initializer,
-                                 std::unique_ptr<LemmaUpdater> &&lemmaUpdater);
+                                 std::unique_ptr<PdrEngine> &&pdrEngine);
 
   ~BidirectionalSearcher() override;
 
@@ -41,7 +41,7 @@ private:
   Searcher *branch;
   BackwardSearcher *backward;
   Initializer *initializer;
-  std::unique_ptr<LemmaUpdater> lemmaUpdater;
+  std::unique_ptr<PdrEngine> pdrEngine;
 
 private:
   StepKind selectStep();

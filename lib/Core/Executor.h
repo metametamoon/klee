@@ -18,7 +18,8 @@
 #include "BidirectionalSearcher.h"
 #include "ExecutionState.h"
 #include "ObjectManager.h"
-#include "PdrLemmasSummary.h"
+#include "PdrEngine.h"
+#include "PdrSummary.h"
 #include "ProofObligation.h"
 #include "SeedMap.h"
 #include "TargetedExecutionManager.h"
@@ -45,6 +46,7 @@
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/Support/raw_ostream.h"
 
+#include <klee/Expr/Disjunction.h>
 #include <klee/Expr/Lemma.h>
 #include <map>
 #include <memory>
@@ -284,7 +286,7 @@ private:
       okExternalsList,
       okExternalsList + (sizeof(okExternalsList) / sizeof(okExternalsList[0])));
 
-  std::unique_ptr<PdrLemmasSummary> pdrLemmasSummary;
+  std::unique_ptr<PdrSummary> pdrSummary;
   std::map<ProofObligation*, ExecutionState*> pobToParentState;
 
 

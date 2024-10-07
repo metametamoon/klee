@@ -96,7 +96,7 @@
 #if LLVM_VERSION_CODE >= LLVM_VERSION(15, 0)
 #include "llvm/IR/GetElementPtrTypeIterator.h"
 #endif
-#include "LemmaUpdater.h"
+#include "PdrEngine.h"
 #include "fmt/color.h"
 
 #include "llvm/Support/CommandLine.h"
@@ -4884,9 +4884,9 @@ Executor::compose(const ExecutionState &state, const PathConstraints &pob,
 
   // append the infinity lemmas; we need to have it before everything to have
   // validity core
-  auto lemmaVectored = pdrLemmasSummary->getLemmasFromKInstruction(
+  auto lemmaVectored = pdrSummary->getLemmasFromKInstruction(
       state.initPC.operator KInstruction *())[INF_LEVEL];
-  auto lemma = cnfVectorToExpr(lemmaVectored);
+  auto lemma = cnfToExpr(lemmaVectored);
   bool mayBeTrue = false;
   solver->mayBeTrue(composer.state.constraints.cs(), lemma, mayBeTrue,
                     composer.state.queryMetaData);
@@ -4973,11 +4973,11 @@ Executor::compose(const ExecutionState &state, const PathConstraints &pob,
   }
 
   if (maxComposeLevel != nullptr) {
-    auto lemmas = pdrLemmasSummary->getLemmasFromKInstruction(state.initPC);
+    auto lemmas = pdrSummary->getLemmasFromKInstruction(state.initPC);
     for (auto it = lemmas.rbegin(); it != lemmas.rend(); ++it) {
       int current_level = it->first;
       auto current_level_vectored_lemma = it->second;
-      auto condition = cnfVectorToExpr(current_level_vectored_lemma);
+      auto condition = cnfToExpr(current_level_vectored_lemma);
 
       ValidityCore core;
       bool isValid;
@@ -5092,15 +5092,15 @@ void Executor::executeAction(ref<SearcherAction> action) {
     initializeIsolated(cast<InitializeAction>(action));
     break;
   }
-  case SearcherAction::Kind::BegNodeLemmaUpdate: {
-    ref<LemmaUpdateAction> act = cast<LemmaUpdateAction>(action);
+  case SearcherAction::Kind::PdrUpdate: {
+    ref<PdrAction> act = cast<PdrAction>(action);
     auto action = act->action;
     if (auto begUpdateAction =
-            std::get_if<LemmaUpdateAction::BegNodeUpdate>(&action)) {
+            std::get_if<PdrAction::PobLemmaUpdate>(&action)) {
       executeBegNodeLemmaUpdateAction(begUpdateAction->pob,
                                       begUpdateAction->queueDepth);
     } else if (auto checkInductivenessAction =
-                   std::get_if<LemmaUpdateAction::CheckInductive>(
+                   std::get_if<PdrAction::CheckInductive>(
                        &action)) {
       executeCheckInductiveAction(checkInductivenessAction->queueDepth);
     }
@@ -5289,7 +5289,7 @@ void Executor::goBackward(ref<BackwardAction> action) {
       llvm::errs() << "[backward] Composition failed.\n";
     }
     if (state->isolated && composeResult.conflict.core.size()) {
-      pdrLemmasSummary->addInfinityLemmaOnSomeEdgeToPob(
+      pdrSummary->addInfinityLemmaOnSomeEdgeToPob(
           pob, disjunction{composeResult.conflict.core});
       summary.addLemma(
           new Lemma(state->constraints.path(), composeResult.conflict.core));
@@ -5499,7 +5499,7 @@ void Executor::run(ExecutionState *initialState,
     forCheck = (ConflictCoreInitializer *)initializer;
     ProofObligation *rootPob = *(objectManager->rootPobs.begin());
     auto lemmaUpdater =
-        std::make_unique<LemmaUpdater>(rootPob, targetManager.get(),
+        std::make_unique<PdrEngine>(rootPob, targetManager.get(),
                                        forCheck, this, objectManager.get());
     searcher = std::make_unique<BidirectionalSearcher>(forward, branch,
                                                        backward, initializer, std::move(lemmaUpdater));
@@ -5537,7 +5537,7 @@ void Executor::run(ExecutionState *initialState,
   objectManager->addSubscriber(searcher.get());
 
   objectManager->initialUpdate();
-  pdrLemmasSummary = std::make_unique<PdrLemmasSummary>();
+  pdrSummary = std::make_unique<PdrSummary>();
 
   // main interpreter loop
   while (!haltExecution && !searcher->empty()) {
@@ -5563,25 +5563,25 @@ void Executor::run(ExecutionState *initialState,
               llvm::errs() << "[FALSE POSITIVE] "
                            << "FOUND FALSE POSITIVE AT: "
                            << pob->location->toString() << "\n";
-              pdrLemmasSummary->dumpInfinityLevelLemmas(interpreterHandler->getOutputFilename("invs.json"));
+              pdrSummary->dumpInfinityLevelLemmas(interpreterHandler->getOutputFilename("invs.json"));
             }
             if (debugPrints.isSet(DebugPrint::Backward)) {
               llvm::errs() << fmt::format(
                   "[main loop] removed pob id={} at path {}\n",
                   pob->id, pob->constraints.path().toString());
             }
-            disjunction kInstLemma = pdrLemmasSummary->getInfinityLemmasFromEdgesToPob(pob);
+            disjunction kInstLemma = pdrSummary->getInfinityLemmasFromEdgesToPob(pob);
             pdrLog() << fmt::format("[main loop] total lemma size: {}\n",
                                         kInstLemma.elements.size());
             if (kInstLemma.elements.size() == 0) {
-              llvm::errs() << fmt::format("What???\n entries (size={}):\n", pdrLemmasSummary->infinityLemmas.size());
-              for (auto [id, lemmas]: pdrLemmasSummary->infinityLemmas) {
-              llvm::errs() << fmt::format("\tpob id={} lemmas={}\n\n", id, disjunctionSetToString(lemmas));
+              llvm::errs() << fmt::format("What???\n entries (size={}):\n", pdrSummary->infinityLemmas.size());
+              for (auto [id, lemmas]: pdrSummary->infinityLemmas) {
+              llvm::errs() << fmt::format("\tpob id={} lemmas={}\n\n", id, disjunctionToString(lemmas));
               }
             }
             if (debugConstraints.isSet(DebugPrint::Lemma)) {
               llvm::errs() << fmt::format("[main loop] lemma={}\n",
-                                        disjunctionSetToString(kInstLemma));
+                                        disjunctionToString(kInstLemma));
             }
             // assert(!kInstLemma.empty()); -- it might be empty in case
             // the interpolant was "false"
@@ -5590,7 +5590,7 @@ void Executor::run(ExecutionState *initialState,
             if (pob->parent != nullptr) {
               nextStateInitPC = pobToParentState[pob]->initPC;
             }
-            pdrLemmasSummary->addLemmaOnKInstruction(nextStateInitPC, INF_LEVEL,
+            pdrSummary->addLemmaOnKInstruction(nextStateInitPC, INF_LEVEL,
                                                      kInstLemma);
             auto parent = pob->parent;
             if (parent != nullptr) {
@@ -5611,7 +5611,7 @@ void Executor::run(ExecutionState *initialState,
 
               auto composeResult = maxCompose(parent, state);
               assert(composeResult.level == INF_LEVEL);
-              pdrLemmasSummary->addInfinityLemmaOnSomeEdgeToPob(
+              pdrSummary->addInfinityLemmaOnSomeEdgeToPob(
                   parent, composeResult.interpolant);
             }
 
@@ -8755,7 +8755,7 @@ void Executor::executeBegNodeLemmaUpdateAction(ProofObligation *pob,
           logPrefixWithSpace, composeResult.level);
       auto lemma = composeResult.interpolant;
       pdrLog() << fmt::format("{}lemma = {}\n", logPrefixWithSpace,
-                              disjunctionSetToString(lemma));
+                              disjunctionToString(lemma));
       edgeLemmas.elements.insert(lemma.elements.begin(), lemma.elements.end());
     } else {
       llvm::errs() << fmt::format(
@@ -8764,7 +8764,7 @@ void Executor::executeBegNodeLemmaUpdateAction(ProofObligation *pob,
     }
   }
   for (auto const &lemma :
-       pdrLemmasSummary->getInfinityLemmasFromEdgesToPob(pob)) {
+       pdrSummary->getInfinityLemmasFromEdgesToPob(pob)) {
     // do not update level, as min(x, infinity) = x;
     edgeLemmas.elements.insert(lemma);
     pdrLog() << fmt::format(
@@ -8776,7 +8776,7 @@ void Executor::executeBegNodeLemmaUpdateAction(ProofObligation *pob,
   if (pob->parent != nullptr) {
     nextStateInitPC = pobToParentState[pob]->initPC;
   }
-  pdrLemmasSummary->addLemmaOnKInstruction(
+  pdrSummary->addLemmaOnKInstruction(
       nextStateInitPC, std::min(saturatingInc(minLevel), queueDepth - 1),
       edgeLemmas);
 }
@@ -8863,7 +8863,7 @@ ref<CodeLocation> Executor::locationOf(const ExecutionState &state) const {
     llvm::errs() << fmt::format("\tlevel: {}\n", currentComposeLevel);
     llvm::errs() << fmt::format(
         "\tinterpolant:\n\t{}\n",
-        disjunctionSetToString(disjunction{result.conflict.core}));
+        disjunctionToString(disjunction{result.conflict.core}));
   }
   return MaxComposeResult{.level = currentComposeLevel,
                           .interpolant = disjunction{result.conflict.core}};
@@ -8890,8 +8890,8 @@ klee::ProofObligation Executor::lemmaAndKInstructionToPobAndStates(
   auto pobTarget = kInstructionToTarget(ki);
   auto pob = ProofObligation{pobTarget};
   pdrLog() << fmt::format("[executeCheckInductive] level={} ki={} lemma {}\n",
-                          level, ki->toString(), disjunctionSetToString(lemma));
-  auto notLemmaExpr = Expr::createIsZero(disjunctionSetToExpr(lemma));
+                          level, ki->toString(), disjunctionToString(lemma));
+  auto notLemmaExpr = Expr::createIsZero(disjunctionToExpr(lemma));
   pob.constraints.addConstraint(notLemmaExpr, {}); // i hope this is ok
   states = objectManager->reachedStates[pobTarget];
   return pob;
@@ -8907,7 +8907,7 @@ void Executor::executeCheckInductiveAction(int queueDepth) {
   for (int level = 0; level < queueDepth; ++level) {
     pdrLog() << fmt::format(
         "[executeCheckInductive] considering level={}\n", level);
-    for (auto &[ki, subarray] : pdrLemmasSummary->kinstructionLemmas) {
+    for (auto &[ki, subarray] : pdrSummary->kinstructionLemmas) {
       for (auto &lemma : subarray[level]) {
         std::set<ExecutionState *, ExecutionStateIDCompare> states;
         auto pob = lemmaAndKInstructionToPobAndStates(level, lemma, ki, states);
@@ -8917,7 +8917,7 @@ void Executor::executeCheckInductiveAction(int queueDepth) {
         if (minEdgeLevel + 1 > level) {
           pdrLog() << fmt::format(
               "[executeCheckInductive] lemma has upped its level!\n");
-          pdrLemmasSummary->kinstructionLemmas[ki][minEdgeLevel + 1].insert(
+          pdrSummary->kinstructionLemmas[ki][minEdgeLevel + 1].insert(
               lemma);
           // is this safe?
         } else {
@@ -8935,14 +8935,14 @@ void Executor::executeCheckInductiveAction(int queueDepth) {
   if (lastLevelInductive) {
     pdrLog() << fmt::format(
         "[executeCheckInductive] last level lemmas:\n");
-    for (auto &[ki, subarray] : pdrLemmasSummary->kinstructionLemmas) {
+    for (auto &[ki, subarray] : pdrSummary->kinstructionLemmas) {
       for (auto &lemma : subarray[queueDepth]) {
-        auto lemmaExpr = disjunctionSetToExpr(lemma);
+        auto lemmaExpr = disjunctionToExpr(lemma);
         auto loc = ki->inst()->getDebugLoc();
         pdrLog() << fmt::format("\tki={} level={} lemma={}\n",
                                     ki->toString(), queueDepth,
                                     lemmaExpr->toString());
-        pdrLemmasSummary->addLemmaOnKInstruction(
+        pdrSummary->addLemmaOnKInstruction(
             ki, std::numeric_limits<int>::max(), lemma);
       }
     }
