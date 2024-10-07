@@ -38,6 +38,8 @@ public:
   // clears maps of dead pobs
   void pobDied(ProofObligation *);
 
+  void dumpInfinityLevelLemmas(std::string const&);
+
   std::map<KInstruction *, std::map<int, cnf>, KInstructionCompare>
       kinstructionLemmas;
 
