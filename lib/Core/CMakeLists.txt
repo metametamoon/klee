@@ -41,6 +41,7 @@ add_library(kleeCore
   TargetManager.cpp
   TimingSolver.cpp
   UserSearcher.cpp
+  LemmaUpdater.cpp
 )
 
 target_link_libraries(kleeCore PRIVATE
@@ -53,6 +54,16 @@ target_link_libraries(kleeCore PRIVATE
 
 llvm_config(kleeCore "${USE_LLVM_SHARED}" core executionengine mcjit native support)
 target_link_libraries(kleeCore PRIVATE ${SQLite3_LIBRARIES})
+
+# fmt library
+include(FetchContent)
+FetchContent_Declare(
+        fmt
+        GIT_REPOSITORY https://github.com/fmtlib/fmt
+        GIT_TAG        e69e5f977d458f2650bb346dadf2ad30c5320281) # 10.2.1
+FetchContent_MakeAvailable(fmt)
+
+target_link_libraries(kleeCore PUBLIC fmt::fmt)
 
 target_include_directories(kleeCore SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS} ${SQLite3_INCLUDE_DIRS})
 target_include_directories(kleeCore PRIVATE ${KLEE_INCLUDE_DIRS})

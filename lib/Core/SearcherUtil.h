@@ -6,6 +6,7 @@
 #include "ProofObligation.h"
 #include "klee/Expr/Path.h"
 #include "klee/Module/KInstruction.h"
+#include <variant>
 
 namespace klee {
 
@@ -44,7 +45,7 @@ protected:
   class ReferenceCounter _refCount;
 
 public:
-  enum class Kind { Initialize, Forward, Backward };
+  enum class Kind { Initialize, Forward, Backward, BegNodeLemmaUpdate};
 
   SearcherAction() = default;
   virtual ~SearcherAction() = default;
@@ -96,6 +97,28 @@ struct InitializeAction : public SearcherAction {
     return A->getKind() == Kind::Initialize;
   }
   static bool classof(const InitializeAction *) { return true; }
+};
+
+struct LemmaUpdateAction : public SearcherAction {
+  friend class ref<LemmaUpdateAction>;
+  struct BegNodeUpdate {
+    ProofObligation *pob;
+    int queueDepth;
+  };
+  struct CheckInductive {
+    int queueDepth;
+  };
+  struct Noop {};
+  using action_t = std::variant<BegNodeUpdate, CheckInductive, Noop>;
+  action_t action;
+  // nullptr for no-op
+  explicit LemmaUpdateAction(action_t action) : action(action) {}
+
+  Kind getKind() const { return Kind::BegNodeLemmaUpdate; }
+  static bool classof(const SearcherAction *A) {
+    return A->getKind() == Kind::BegNodeLemmaUpdate;
+  }
+  static bool classof(const LemmaUpdateAction *) { return true; }
 };
 
 } // namespace klee

@@ -799,6 +799,10 @@ private:
   const KBlock *getKBlock(const llvm::BasicBlock *bb) const;
   const KFunction *getKFunction(const llvm::Function *f) const;
 
+  void executeBegNodeLemmaUpdateAction(ProofObligation *pob, int queueDepth);
+
+  void executeCheckInductiveAction(int queueDepth);
+
 public:
   Executor(llvm::LLVMContext &ctx, const InterpreterOptions &opts,
            InterpreterHandler *ie);
