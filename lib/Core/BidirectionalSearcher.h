@@ -3,6 +3,7 @@
 
 #include "BackwardSearcher.h"
 #include "Initializer.h"
+#include "LemmaUpdater.h"
 #include "ObjectManager.h"
 #include "Searcher.h"
 #include "SearcherUtil.h"
@@ -18,7 +19,7 @@ public:
 };
 
 class BidirectionalSearcher : public IBidirectionalSearcher {
-  enum class StepKind { Forward, Branch, Backward, Initialize };
+  enum class StepKind { Forward, Branch, Backward, Initialize, LemmaUpdate };
 
 public:
   ref<SearcherAction> selectAction() override;
@@ -28,7 +29,8 @@ public:
   // Assumes ownership
   explicit BidirectionalSearcher(Searcher *_forward, Searcher *_branch,
                                  BackwardSearcher *_backward,
-                                 Initializer *_initializer);
+                                 Initializer *_initializer,
+                                 std::unique_ptr<LemmaUpdater> &&lemmaUpdater);
 
   ~BidirectionalSearcher() override;
 
@@ -39,6 +41,7 @@ private:
   Searcher *branch;
   BackwardSearcher *backward;
   Initializer *initializer;
+  std::unique_ptr<LemmaUpdater> lemmaUpdater;
 
 private:
   StepKind selectStep();

@@ -13,7 +13,9 @@ cl::bits<DebugPrint> debugPrints(
                clEnumValN(DebugPrint::RootPob, "rootpob", "Root pobs"),
                clEnumValN(DebugPrint::ClosePob, "closepob", "Close pob"),
                clEnumValN(DebugPrint::Conflict, "conflict", "Conflicts"),
-               clEnumValN(DebugPrint::PathForest, "pathforest", "Path forest")),
+               clEnumValN(DebugPrint::PathForest, "pathforest", "Path forest"),
+               clEnumValN(DebugPrint::Pdr, "pdr", "Pdr")
+               ),
     cl::CommaSeparated);
 
 cl::bits<DebugPrint> debugConstraints(

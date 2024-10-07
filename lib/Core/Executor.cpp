@@ -96,6 +96,9 @@
 #if LLVM_VERSION_CODE >= LLVM_VERSION(15, 0)
 #include "llvm/IR/GetElementPtrTypeIterator.h"
 #endif
+#include "LemmaUpdater.h"
+#include "fmt/color.h"
+
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/Path.h"
@@ -5014,6 +5017,19 @@ void Executor::executeAction(ref<SearcherAction> action) {
     initializeIsolated(cast<InitializeAction>(action));
     break;
   }
+  case SearcherAction::Kind::BegNodeLemmaUpdate: {
+    ref<LemmaUpdateAction> act = cast<LemmaUpdateAction>(action);
+    auto action = act->action;
+    if (auto begUpdateAction =
+            std::get_if<LemmaUpdateAction::BegNodeUpdate>(&action)) {
+      executeBegNodeLemmaUpdateAction(begUpdateAction->pob,
+                                      begUpdateAction->queueDepth);
+    } else if (auto checkInductivenessAction =
+                   std::get_if<LemmaUpdateAction::CheckInductive>(
+                       &action)) {
+      executeCheckInductiveAction(checkInductivenessAction->queueDepth);
+    }
+  }
   }
   timers.invoke();
 }
@@ -5394,8 +5410,12 @@ void Executor::run(ExecutionState *initialState,
     Initializer *initializer = new ConflictCoreInitializer(
         codeGraphInfo.get(), *predicate, errorAndBackward);
     forCheck = (ConflictCoreInitializer *)initializer;
+    ProofObligation *rootPob = *(objectManager->rootPobs.begin());
+    auto lemmaUpdater =
+        std::make_unique<LemmaUpdater>(rootPob, targetManager.get(),
+                                       forCheck, this, objectManager.get());
     searcher = std::make_unique<BidirectionalSearcher>(forward, branch,
-                                                       backward, initializer);
+                                                       backward, initializer, std::move(lemmaUpdater));
   }
 
   if (errorAndBackward) {
@@ -8550,7 +8570,17 @@ void Executor::dumpStates() {
   ::dumpStates = 0;
 }
 
-///
+
+/**
+ *
+ * @param queueDepth is needed to preserve invariant that after updating levels
+ * on pob at depth \leq queueDepth all the lemmas have level \leq (queueDepth -
+ * 1)
+ */
+void Executor::executeBegNodeLemmaUpdateAction(ProofObligation *pob,
+                                               int queueDepth) {
+  llvm::errs() << fmt::format("Executing begNode action! pob id ={} queuepath={}\n", pob->id, queueDepth);
+}
 
 /// @brief Determines current code location for given state.
 /// @param state given state.
@@ -8587,6 +8617,11 @@ ref<CodeLocation> Executor::locationOf(const ExecutionState &state) const {
   Path::PathIndex callPathIndex = state.constraints.path().getCurrentIndex();
   return CodeLocation::create(callPathIndex, kinst, kinst->getSourceFilepath(),
                               kinst->getLine(), kinst->getColumn());
+}
+
+
+void Executor::executeCheckInductiveAction(int queueDepth) {
+  llvm::errs() << fmt::format("Executing checkInductive action! queueDepth = {}\n", queueDepth);
 }
 
 Interpreter *Interpreter::create(LLVMContext &ctx,

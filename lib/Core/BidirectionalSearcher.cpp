@@ -21,6 +21,10 @@ llvm::cl::opt<unsigned> BackwardTicks("backward-ticks", llvm::cl::desc(""),
                                       llvm::cl::init(25),
                                       llvm::cl::cat(ExecCat));
 
+llvm::cl::opt<unsigned> LemmaUpdateTicks("lemma-update-ticks",
+                                         llvm::cl::desc(""), llvm::cl::init(25),
+                                         llvm::cl::cat(ExecCat));
+
 BidirectionalSearcher::StepKind BidirectionalSearcher::selectStep() {
   size_t initial_choice = ticker.getCurrent();
   size_t choice = initial_choice;
@@ -50,6 +54,9 @@ BidirectionalSearcher::StepKind BidirectionalSearcher::selectStep() {
         return StepKind::Initialize;
       }
       break;
+    }
+    case 4: {
+      return StepKind::LemmaUpdate;
     }
     }
     ticker.moveToNext();
@@ -91,6 +98,10 @@ ref<SearcherAction> BidirectionalSearcher::selectAction() {
           new InitializeAction(initAndTargets.first, initAndTargets.second);
       break;
     }
+    case StepKind::LemmaUpdate:
+      action =
+          new LemmaUpdateAction(lemmaUpdater->getLemmaUpdateAction());
+      break;
     }
   }
   return action;
@@ -128,10 +139,11 @@ bool BidirectionalSearcher::empty() {
 BidirectionalSearcher::BidirectionalSearcher(Searcher *_forward,
                                              Searcher *_branch,
                                              BackwardSearcher *_backward,
-                                             Initializer *_initializer)
-    : ticker({ForwardTicks, BranchTicks, BackwardTicks, InitTicks}),
+    Initializer *_initializer, std::unique_ptr<LemmaUpdater> &&_lemmaUpdater)
+    : ticker({ForwardTicks, BranchTicks, BackwardTicks, InitTicks,
+              LemmaUpdateTicks}),
       forward(_forward), branch(_branch), backward(_backward),
-      initializer(_initializer) {}
+      initializer(_initializer), lemmaUpdater(std::move(_lemmaUpdater)) {}
 
 BidirectionalSearcher::~BidirectionalSearcher() {
   delete forward;
