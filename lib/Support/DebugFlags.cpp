@@ -14,7 +14,8 @@ cl::bits<DebugPrint> debugPrints(
                clEnumValN(DebugPrint::ClosePob, "closepob", "Close pob"),
                clEnumValN(DebugPrint::Conflict, "conflict", "Conflicts"),
                clEnumValN(DebugPrint::PathForest, "pathforest", "Path forest"),
-               clEnumValN(DebugPrint::Pdr, "pdr", "Pdr")
+               clEnumValN(DebugPrint::Pdr, "pdr", "Pdr"),
+               clEnumValN(DebugPrint::MaxCompose, "maxcompose", "Max compose")
                ),
     cl::CommaSeparated);
 

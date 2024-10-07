@@ -4872,7 +4872,8 @@ ref<Expr> Executor::fillSymbolicSizeConstantAddress(
 Executor::ComposeResult
 Executor::compose(const ExecutionState &state, const PathConstraints &pob,
                   ref<Expr> nullPointerExpr,
-                  ImmutableList<Symbolic> &pobSymbolics) {
+                                          ImmutableList<Symbolic> &pobSymbolics,
+                                          int *maxComposeLevel) {
   ComposeResult result;
   ComposeHelper helper(this);
   ComposeVisitor composer(state, helper);
@@ -4880,6 +4881,26 @@ Executor::compose(const ExecutionState &state, const PathConstraints &pob,
   unsigned offset = state.constraints.path().getBlocks().size();
 
   composer.state.constraints.advancePath(pob.path());
+
+  // append the infinity lemmas; we need to have it before everything to have
+  // validity core
+  auto lemmaVectored = pdrLemmasSummary->getLemmasFromKInstruction(
+      state.initPC.operator KInstruction *())[INF_LEVEL];
+  auto lemma = cnfVectorToExpr(lemmaVectored);
+  bool mayBeTrue = false;
+  solver->mayBeTrue(composer.state.constraints.cs(), lemma, mayBeTrue,
+                    composer.state.queryMetaData);
+  if (!mayBeTrue) {
+    result.success = false;
+    if (maxComposeLevel != nullptr) {
+      *maxComposeLevel = INF_LEVEL;
+    }
+    return result;
+  }
+
+  auto added =
+      composer.state.constraints.addConstraint(lemma, Path::PathIndex{0, 0});
+
   for (auto &indexConstraints : pob.orderedCS()) {
     Path::PathIndex index = indexConstraints.first;
     index.block += offset;
@@ -4917,10 +4938,12 @@ Executor::compose(const ExecutionState &state, const PathConstraints &pob,
         }
         constraints_ty rebuiltCore;
         for (auto e : core.constraints) {
-          for (auto original :
-               composer.state.constraints.simplificationMap().at(e)) {
-            if (rebuildMap.count(original)) {
-              conflict.core.insert(Expr::createIsZero(rebuildMap.at(original)));
+          auto &simplMap = composer.state.constraints.simplificationMap();
+          if (simplMap.count(e) > 0) { // we added some infinity lemmas, which do not have an image in the core
+            for (auto original : simplMap.at(e)) {
+              if (rebuildMap.count(original)) {
+                conflict.core.insert(Expr::createIsZero(rebuildMap.at(original)));
+              }
             }
           }
         }
@@ -4929,6 +4952,9 @@ Executor::compose(const ExecutionState &state, const PathConstraints &pob,
 
         result.success = false;
         result.conflict = conflict;
+        if (maxComposeLevel != nullptr) {
+          *maxComposeLevel = INF_LEVEL;
+        }
         return result;
       }
 
@@ -4944,6 +4970,55 @@ Executor::compose(const ExecutionState &state, const PathConstraints &pob,
     auto composedNPE = composer.compose(nullPointerExpr);
     assert(!composedNPE.first->isFalse());
     result.nullPointerExpr = composedNPE.second;
+  }
+
+  if (maxComposeLevel != nullptr) {
+    auto lemmas = pdrLemmasSummary->getLemmasFromKInstruction(state.initPC);
+    for (auto it = lemmas.rbegin(); it != lemmas.rend(); ++it) {
+      int current_level = it->first;
+      auto current_level_vectored_lemma = it->second;
+      auto condition = cnfVectorToExpr(current_level_vectored_lemma);
+
+      ValidityCore core;
+      bool isValid;
+      solver->setTimeout(coreSolverTimeout);
+      bool success = solver->getValidityCore(
+          composer.state.constraints.cs(), Expr::createIsZero(condition), core,
+          isValid, composer.state.queryMetaData);
+      solver->setTimeout(time::Span());
+      if (!success || haltExecution) {
+        result.success = false;
+        return result;
+      }
+      if (isValid) {
+        auto conflict = Conflict();
+        conflict.path = Path::concat(state.constraints.path(), pob.path());
+        constraints_ty rebuiltCore;
+        for (auto e : core.constraints) {
+          auto &simplMap = composer.state.constraints.simplificationMap();
+          if (simplMap.count(e) > 0) { // we added some infinity lemmas, which do not have an image in the core
+            for (auto original : simplMap.at(e)) {
+              if (rebuildMap.count(original)) {
+                conflict.core.insert(Expr::createIsZero(rebuildMap.at(original)));
+              }
+            }
+          }
+        }
+
+        result.success = false;
+        result.conflict = conflict;
+        *maxComposeLevel = current_level;
+        return result;
+      }
+      Path::PathIndex index;
+      index.block = 0ul;
+      index.instruction = 0ul;
+      auto added =
+          composer.state.constraints.addConstraint(condition, index);
+    }
+    result.success = false;
+    *maxComposeLevel = -1;
+    return result;
   }
 
   result.success = true;
@@ -5197,6 +5272,7 @@ void Executor::goBackward(ref<BackwardAction> action) {
             ProofObligation::propagateToReturn(
                 callPob, kCallBlock->kcallInstruction, returnBlock);
             callPob->symbolics = composeResult.symbolics;
+            pobToParentState[callPob] = state->copy(); // do i need a copy here?
             objectManager->addPob(callPob);
           }
         }
@@ -5204,6 +5280,7 @@ void Executor::goBackward(ref<BackwardAction> action) {
         auto newPob = ProofObligation::create(
             pob, state, composeResult.composed, composeResult.nullPointerExpr);
         newPob->symbolics = composeResult.symbolics;
+        pobToParentState[newPob] = state->copy(); // do i need a copy here?
         objectManager->addPob(newPob);
       }
     }
@@ -5212,6 +5289,8 @@ void Executor::goBackward(ref<BackwardAction> action) {
       llvm::errs() << "[backward] Composition failed.\n";
     }
     if (state->isolated && composeResult.conflict.core.size()) {
+      pdrLemmasSummary->addInfinityLemmaOnSomeEdgeToPob(
+          pob, disjunction{composeResult.conflict.core});
       summary.addLemma(
           new Lemma(state->constraints.path(), composeResult.conflict.core));
       if (state->constraints.path().getBlocks().size() > 0 &&
@@ -5378,6 +5457,14 @@ void Executor::reportProgressTowardsTargets() const {
   reportProgressTowardsTargets("", objectManager->getStates());
 }
 
+llvm::raw_ostream& pdrLog() {
+  if (debugPrints.isSet(DebugPrint::Pdr)) {
+    return llvm::errs();
+  } else {
+    return llvm::nulls();
+  }
+}
+
 void Executor::run(ExecutionState *initialState,
                    TargetedExecutionManager::Data &data) {
   // Delay init till now so that ticks don't accrue during optimization and
@@ -5450,6 +5537,7 @@ void Executor::run(ExecutionState *initialState,
   objectManager->addSubscriber(searcher.get());
 
   objectManager->initialUpdate();
+  pdrLemmasSummary = std::make_unique<PdrLemmasSummary>();
 
   // main interpreter loop
   while (!haltExecution && !searcher->empty()) {
@@ -5476,6 +5564,56 @@ void Executor::run(ExecutionState *initialState,
                            << "FOUND FALSE POSITIVE AT: "
                            << pob->location->toString() << "\n";
             }
+            if (debugPrints.isSet(DebugPrint::Backward)) {
+              llvm::errs() << fmt::format(
+                  "[main loop] removed pob id={} at path {}\n",
+                  pob->id, pob->constraints.path().toString());
+            }
+            disjunction kInstLemma = pdrLemmasSummary->getInfinityLemmasFromEdgesToPob(pob);
+            pdrLog() << fmt::format("[main loop] total lemma size: {}\n",
+                                        kInstLemma.elements.size());
+            if (kInstLemma.elements.size() == 0) {
+              llvm::errs() << fmt::format("What???\n entries (size={}):\n", pdrLemmasSummary->infinityLemmas.size());
+              for (auto [id, lemmas]: pdrLemmasSummary->infinityLemmas) {
+              llvm::errs() << fmt::format("\tpob id={} lemmas={}\n\n", id, disjunctionSetToString(lemmas));
+              }
+            }
+            if (debugConstraints.isSet(DebugPrint::Lemma)) {
+              llvm::errs() << fmt::format("[main loop] lemma={}\n",
+                                        disjunctionSetToString(kInstLemma));
+            }
+            // assert(!kInstLemma.empty()); -- it might be empty in case
+            // the interpolant was "false"
+            auto nextStateInitPC =
+                pob->location->getBlock()->getFirstInstruction();
+            if (pob->parent != nullptr) {
+              nextStateInitPC = pobToParentState[pob]->initPC;
+            }
+            pdrLemmasSummary->addLemmaOnKInstruction(nextStateInitPC, INF_LEVEL,
+                                                     kInstLemma);
+            auto parent = pob->parent;
+            if (parent != nullptr) {
+              pdrLog() << fmt::format(
+                  "[main loop] compose after pob removal\n");
+              pdrLog() << fmt::format("\tpob loc={}\n",
+                                          pob->location->toString());
+              pdrLog() << fmt::format("\tpob path={}\n",
+                                          pob->constraints.path().toString());
+              pdrLog() << fmt::format("\tparent pob loc={}\n",
+                                          parent->location->toString());
+              pdrLog() << fmt::format(
+                  "\tparent pob path={}\n",
+                  parent->constraints.path().toString());
+              auto state = pobToParentState[pob];
+              pdrLog() << fmt::format("\tstate path={}\n",
+                                          state->constraints.path().toString());
+
+              auto composeResult = maxCompose(parent, state);
+              assert(composeResult.level == INF_LEVEL);
+              pdrLemmasSummary->addInfinityLemmaOnSomeEdgeToPob(
+                  parent, composeResult.interpolant);
+            }
+
             objectManager->removePob(pob);
             changed = true;
           }
@@ -8570,6 +8708,13 @@ void Executor::dumpStates() {
   ::dumpStates = 0;
 }
 
+int saturatingInc(int value) {
+  if (value < std::numeric_limits<int>::max()) {
+    return value + 1;
+  } else {
+    return value;
+  };
+}
 
 /**
  *
@@ -8579,8 +8724,75 @@ void Executor::dumpStates() {
  */
 void Executor::executeBegNodeLemmaUpdateAction(ProofObligation *pob,
                                                int queueDepth) {
-  llvm::errs() << fmt::format("Executing begNode action! pob id ={} queuepath={}\n", pob->id, queueDepth);
+  if (pob == nullptr) {
+    return;
+  }
+  pdrLog() << fmt::format("[executor:lemmaUpdateAction] pob's location={}\n",
+                          pob->location->toString());
+  pdrLog() << fmt::format("[executor:lemmaUpdateAction] pob's path={}\n",
+                          pob->constraints.path().toString());
+  int infinity = INF_LEVEL;
+  int minLevel = infinity;
+  disjunction edgeLemmas;
+  std::string logPrefixWithSpace = "[executor:executeLemmaUpdateAction] ";
+  pdrLog() << fmt::format("{}the pob has the following children:\n",
+                          logPrefixWithSpace);
+  for (auto child : pob->children) {
+    pdrLog() << fmt::format("\tloc={}:\n", child->location->toString());
+  }
+  for (auto child : pob->children) {
+    auto generatedStateIter = pobToParentState.find(child);
+    if (generatedStateIter != pobToParentState.end()) {
+      auto generatedState = generatedStateIter->second;
+      pdrLog() << fmt::format("{}updating lemma on edge {}\n",
+                              logPrefixWithSpace,
+                              generatedState->constraints.path().toString());
+      auto composeResult = maxCompose(pob, generatedState);
+      minLevel = std::min(minLevel, composeResult.level);
+      pdrLog() << fmt::format(
+          "{}the lemma on edge was updated (before cap) to level {}\n",
+          logPrefixWithSpace, composeResult.level);
+      auto lemma = composeResult.interpolant;
+      pdrLog() << fmt::format("{}lemma = {}\n", logPrefixWithSpace,
+                              disjunctionSetToString(lemma));
+      edgeLemmas.elements.insert(lemma.elements.begin(), lemma.elements.end());
+    } else {
+      llvm::errs() << fmt::format(
+          "{} CRITICAL pob without registered parent state!!!\n",
+          logPrefixWithSpace);
+    }
+  }
+  for (auto const &lemma :
+       pdrLemmasSummary->getInfinityLemmasFromEdgesToPob(pob)) {
+    // do not update level, as min(x, infinity) = x;
+    edgeLemmas.elements.insert(lemma);
+    pdrLog() << fmt::format(
+        "{}also considering infinity lemma on edge to the pob\n",
+        logPrefixWithSpace);
+    pdrLog() << fmt::format("\tlemma={}", lemma->toString());
+  }
+  auto nextStateInitPC = pob->location->getBlock()->getFirstInstruction();
+  if (pob->parent != nullptr) {
+    nextStateInitPC = pobToParentState[pob]->initPC;
+  }
+  pdrLemmasSummary->addLemmaOnKInstruction(
+      nextStateInitPC, std::min(saturatingInc(minLevel), queueDepth - 1),
+      edgeLemmas);
 }
+
+ref<Target> Executor::kInstructionToTarget(KInstruction *kiCopy) {
+  if (kiCopy->getIndex() == 0) {
+    return ReachBlockTarget::create(kiCopy->getKBlock());
+  } else {
+    auto callInst = kiCopy->getKBlock()->getFirstInstruction();
+    KCallBlock *callBlock = dyn_cast<KCallBlock>(callInst->getKBlock());
+    auto calledFunction = *(callBlock->calledFunctions.begin());
+    // dirty hack starts next line and lasts until the end of lambda
+    auto lastBlock = *(calledFunction->returnKBlocks.begin());
+    return ReachBlockTarget::create(lastBlock, true);
+  }
+}
+
 
 /// @brief Determines current code location for given state.
 /// @param state given state.
@@ -8619,9 +8831,121 @@ ref<CodeLocation> Executor::locationOf(const ExecutionState &state) const {
                               kinst->getLine(), kinst->getColumn());
 }
 
+  Executor::MaxComposeResult Executor::maxCompose(klee::ProofObligation *pob,
+                                                const ExecutionState *state) {
+  // if (debugPrints.isSet(DebugPrint::MaxCompose)) {
+  //   llvm::errs() << fmt::format("[maxcompose] pob info:\n");
+  //   llvm::errs() << fmt::format("\tpob unordered cs:\n");
+  //   pob->constraints.cs().dump();
+  //   llvm::errs() << fmt::format("\tpob ordered cs:\n");
+  //   for (auto [pathOffset, exprs]: pob->constraints.orderedCS()) {
+  //     for (auto expr: exprs) {
+  //       llvm::errs() << fmt::format("{}\n", expr->toString());
+  //     }
+  //   }
+  //   llvm::errs() << "\n";
+  // }
+  int currentComposeLevel = -2;
+  currentComposeLevel = -2;
+  auto result = compose(*state, pob->constraints, pob->nullPointerExpr,
+                        pob->symbolics, &currentComposeLevel);
+  if (currentComposeLevel == -2) {
+    klee_error("[maxcompose] CRITICAL: maxCompose returned level -2!\n");
+  }
+  assert(currentComposeLevel >= -1);
+  if (debugPrints.isSet(DebugPrint::MaxCompose)) {
+    llvm::errs() << fmt::format("[maxcompose] maxCompose info:\n");
+    llvm::errs() << fmt::format("\tstate: {}\n",
+                                state->constraints.path().toString());
+    llvm::errs() << fmt::format("\tpob: {}\n",
+                                pob->constraints.path().toString());
+    llvm::errs() << fmt::format("\tlevel: {}\n", currentComposeLevel);
+    llvm::errs() << fmt::format(
+        "\tinterpolant:\n\t{}\n",
+        disjunctionSetToString(disjunction{result.conflict.core}));
+  }
+  return MaxComposeResult{.level = currentComposeLevel,
+                          .interpolant = disjunction{result.conflict.core}};
+}
+
+int Executor::calculateMinEdgeLevel(
+    int level, klee::ProofObligation *pob,
+    std::set<ExecutionState *, ExecutionStateIDCompare> &states) {
+  int minEdgeLevel = INF_LEVEL;
+  for (auto state : states) {
+    auto result = maxCompose(pob, state);
+    if (result.level < level - 1) {
+      llvm::errs() << "[executeCheckInductive] CRITICAL lemma was not "
+                      "verified by a maxCompose!\n";
+    }
+    minEdgeLevel = std::min(minEdgeLevel, result.level);
+  }
+  return minEdgeLevel;
+}
+
+klee::ProofObligation Executor::lemmaAndKInstructionToPobAndStates(
+    int level, const disjunction &lemma, KInstruction *ki,
+    std::set<ExecutionState *, ExecutionStateIDCompare> &states) {
+  auto pobTarget = kInstructionToTarget(ki);
+  auto pob = ProofObligation{pobTarget};
+  pdrLog() << fmt::format("[executeCheckInductive] level={} ki={} lemma {}\n",
+                          level, ki->toString(), disjunctionSetToString(lemma));
+  auto notLemmaExpr = Expr::createIsZero(disjunctionSetToExpr(lemma));
+  pob.constraints.addConstraint(notLemmaExpr, {}); // i hope this is ok
+  states = objectManager->reachedStates[pobTarget];
+  return pob;
+}
 
 void Executor::executeCheckInductiveAction(int queueDepth) {
-  llvm::errs() << fmt::format("Executing checkInductive action! queueDepth = {}\n", queueDepth);
+  if (queueDepth < 3) {
+    return; // play it safe
+  }
+  pdrLog() << "[executeCheckInductive] called CheckInductive!\n";
+
+  bool lastLevelInductive = true;
+  for (int level = 0; level < queueDepth; ++level) {
+    pdrLog() << fmt::format(
+        "[executeCheckInductive] considering level={}\n", level);
+    for (auto &[ki, subarray] : pdrLemmasSummary->kinstructionLemmas) {
+      for (auto &lemma : subarray[level]) {
+        std::set<ExecutionState *, ExecutionStateIDCompare> states;
+        auto pob = lemmaAndKInstructionToPobAndStates(level, lemma, ki, states);
+        pdrLog() << fmt::format(
+            "[executeCheckInductive] {} states found\n", states.size());
+        auto minEdgeLevel = calculateMinEdgeLevel(level, &pob, states);
+        if (minEdgeLevel + 1 > level) {
+          pdrLog() << fmt::format(
+              "[executeCheckInductive] lemma has upped its level!\n");
+          pdrLemmasSummary->kinstructionLemmas[ki][minEdgeLevel + 1].insert(
+              lemma);
+          // is this safe?
+        } else {
+          int lastLemmaLevel = queueDepth - 1;
+          if (level == lastLemmaLevel) {
+            lastLevelInductive = false;
+          }
+        }
+      }
+    }
+  }
+  pdrLog() << fmt::format(
+      "[executeCheckInductive] lastLevelInductive: {}\n",
+      lastLevelInductive);
+  if (lastLevelInductive) {
+    pdrLog() << fmt::format(
+        "[executeCheckInductive] last level lemmas:\n");
+    for (auto &[ki, subarray] : pdrLemmasSummary->kinstructionLemmas) {
+      for (auto &lemma : subarray[queueDepth]) {
+        auto lemmaExpr = disjunctionSetToExpr(lemma);
+        auto loc = ki->inst()->getDebugLoc();
+        pdrLog() << fmt::format("\tki={} level={} lemma={}\n",
+                                    ki->toString(), queueDepth,
+                                    lemmaExpr->toString());
+        pdrLemmasSummary->addLemmaOnKInstruction(
+            ki, std::numeric_limits<int>::max(), lemma);
+      }
+    }
+  }
 }
 
 Interpreter *Interpreter::create(LLVMContext &ctx,
