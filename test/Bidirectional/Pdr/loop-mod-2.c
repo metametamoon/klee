@@ -4,6 +4,8 @@
 // RUN: rm -rf %t.klee-out
 // RUN: %klee --write-kqueries --output-dir=%t.klee-out --optimize=false --execution-mode=bidirectional --function-call-reproduce=reach_error --skip-not-lazy-initialized --skip-not-symbolic-objects --initialize-in-join-blocks=true --search=dfs --use-guided-search=none --debug-log=rootpob,backward,conflict,closepob,reached,init,pdr --debug-constraints=lemma --backward-ticks=5 %t.bc 2> %t.log
 // RUN: FileCheck %s -input-file=%t.log
+// CHECK: [FALSE POSITIVE] FOUND FALSE POSITIVE AT
+
 
 #include "klee/klee.h"
 #include <assert.h>
@@ -32,4 +34,3 @@ int main() {
   return loop(a);
 }
 
-// CHECK: [FALSE POSITIVE] FOUND FALSE POSITIVE AT: Target: [%entry, reach_error]

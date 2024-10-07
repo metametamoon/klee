@@ -18,6 +18,7 @@
 #include "BidirectionalSearcher.h"
 #include "ExecutionState.h"
 #include "ObjectManager.h"
+#include "PdrLemmasSummary.h"
 #include "ProofObligation.h"
 #include "SeedMap.h"
 #include "TargetedExecutionManager.h"
@@ -129,6 +130,12 @@ class Executor : public Interpreter {
     Conflict conflict;
     ref<Expr> nullPointerExpr;
     ImmutableList<Symbolic> symbolics;
+  };
+
+
+  struct MaxComposeResult {
+    int level;
+    disjunction interpolant;
   };
 
 public:
@@ -276,6 +283,10 @@ private:
   std::set<std::string> okExternals = std::set<std::string>(
       okExternalsList,
       okExternalsList + (sizeof(okExternalsList) / sizeof(okExternalsList[0])));
+
+  std::unique_ptr<PdrLemmasSummary> pdrLemmasSummary;
+  std::map<ProofObligation*, ExecutionState*> pobToParentState;
+
 
   /// Return the typeid corresponding to a certain `type_info`
   ref<ConstantExpr> getEhTypeidFor(ref<Expr> type_info);
@@ -782,7 +793,8 @@ private:
 
   ComposeResult compose(const ExecutionState &state, const PathConstraints &pob,
                         ref<Expr> nullPointerExpr,
-                        ImmutableList<Symbolic> &pobSymbolics);
+                        ImmutableList<Symbolic> &pobSymbolics,
+                        int *maxComposeLevel = nullptr);
 
   void executeAction(ref<SearcherAction> action);
 
@@ -800,6 +812,27 @@ private:
   const KFunction *getKFunction(const llvm::Function *f) const;
 
   void executeBegNodeLemmaUpdateAction(ProofObligation *pob, int queueDepth);
+  ref<Target> kInstructionToTarget(KInstruction *kiCopy);
+
+  /**
+   * Let state have path A --> B, with condition equation c
+   * and transformation T,
+   * pob be located at B with path condition phi,
+   * lemmas at A be L
+   * then maxCompose(state, pob) returns the interpolant of
+   * $ L_i(x') /\ c(x') /\ x = T(x) -> \neg phi(x) $ for the maximum possible
+   * level i. Currently it returns the negation of unsat core $ L_i(x') /\ c(x')
+   * /\ phi(T(x')) $ intersected with conjuncts from phi(T(x'))
+   */
+  MaxComposeResult maxCompose(ProofObligation *pob,
+                              const ExecutionState *state);
+  int calculateMinEdgeLevel(
+      int level, ProofObligation *pob,
+      std::set<ExecutionState *, ExecutionStateIDCompare> &states);
+
+  ProofObligation lemmaAndKInstructionToPobAndStates(
+      int level, const disjunction &lemma, KInstruction *ki,
+      std::set<ExecutionState *, ExecutionStateIDCompare> &states);
 
   void executeCheckInductiveAction(int queueDepth);
 

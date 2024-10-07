@@ -17,7 +17,8 @@ enum class DebugPrint {
   ClosePob,
   Conflict,
   PathForest,
-  Pdr
+  Pdr,
+  MaxCompose
 };
 
 extern cl::bits<DebugPrint> debugPrints;
