@@ -32,6 +32,7 @@ add_library(kleaverExpr
   Lexer.cpp
   Parser.cpp
   Updates.cpp
+  CExprWriter.cpp
 )
 
 target_link_libraries(kleaverExpr PRIVATE

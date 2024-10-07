@@ -5563,6 +5563,7 @@ void Executor::run(ExecutionState *initialState,
               llvm::errs() << "[FALSE POSITIVE] "
                            << "FOUND FALSE POSITIVE AT: "
                            << pob->location->toString() << "\n";
+              pdrLemmasSummary->dumpInfinityLevelLemmas(interpreterHandler->getOutputFilename("invs.json"));
             }
             if (debugPrints.isSet(DebugPrint::Backward)) {
               llvm::errs() << fmt::format(

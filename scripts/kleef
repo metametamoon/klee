@@ -1,13 +1,20 @@
 #!/usr/bin/env python3
 import argparse
+import datetime
+import json
 import os
+import re
 import subprocess
 import shutil
 import tempfile
 import hashlib
 from functools import partial
 from pathlib import Path
+from typing import List
 
+import yaml
+
+GDBSERVER_UNUSED_PORT = -1
 
 def klee_options(
     max_memory,
@@ -20,21 +27,22 @@ def klee_options(
     f_err,
     f_cov,
     write_ktests,
+    bd,
 ):
     if max_time and int(max_time) > 30:
         MAX_SOLVER_TIME = 15
     else:
         MAX_SOLVER_TIME = 10
     cmd = [
-        "--strip-unwanted-calls",  # removes llvm.dbg.* instructions, exponentially reduces time on some benchmarks
+        # "--strip-unwanted-calls",  # removes llvm.dbg.* instructions, exponentially reduces time on some benchmarks
         "--delete-dead-loops=false",  # without this optimizer removes some code, which decreases coverage
         "--emit-all-errors",  # without this we generate only one test for assertion failures, which decreases coverage
         "--mock-policy=all",  # this helps for some linux benchmarks, which have unused extern globals. without this flag we will not even start on them.
         "--external-calls=all",
         "--use-forked-solver=false",
         # "--solver-backend=stp",
-        # "--solver-backend=z3-tree",
-        "--solver-backend=bitwuzla-tree",
+        "--solver-backend=z3-tree",
+        # "--solver-backend=bitwuzla-tree",
         "--max-solvers-approx-tree-inc=16",
         f"--max-memory={int(max_memory * 0.9)}",  # Just use half of the memory in case we have to fork
         "--libc=klee",
@@ -76,8 +84,11 @@ def klee_options(
 
     if f_err:
         cmd += [
-            "--optimize=true",
+            # "--optimize=true", -- obstructs the solving
             "--use-alpha-equivalence=true",
+            "--initialize-in-join-blocks",
+            "--debug-log=rootpob,backward,conflict,closepob,reached,init,pdr,maxcompose",
+            "--debug-constraints=lemma,backward",
             "--function-call-reproduce=reach_error",
             # "--max-cycles=0",
             # "--tc-type=bug",
@@ -130,6 +141,13 @@ def klee_options(
                 f"--max-time={last_time}",
             ]
 
+    if bd:
+        cmd += [
+            "--execution-mode=bidirectional",
+            "--forward-ticks=13",
+            "--backward-ticks=7"
+        ]
+
     cmd += [compiled_file]  # Finally add the file to be tested
     return cmd
 
@@ -179,16 +197,19 @@ class KLEEF(object):
     """
 
     def __init__(
-        self,
-        source=None,
-        is32=False,
-        f_cov=False,
-        f_err=False,
-        max_memory=0,
-        max_time=0,
-        use_perf=False,
-        use_valgrind=False,
-        write_ktests=False,
+            self,
+            source=None,
+            is32=False,
+            f_cov=False,
+            f_err=False,
+            max_memory=0,
+            max_time=0,
+            use_perf=False,
+            use_valgrind=False,
+            write_ktests=False,
+            bd=False,
+            gdbserver_port=GDBSERVER_UNUSED_PORT,
+            output_dir = "test-suite",
     ):
         self.source = Path(source) if source else None
         self.is32 = is32
@@ -196,6 +217,7 @@ class KLEEF(object):
         self.compiled_file = None
         self.f_cov = f_cov
         self.f_err = f_err
+        self.bd = bd
         self.max_memory = max_memory / 1024 / 1024  # Convert to MB
         self.max_time = max_time
         self.use_perf = use_perf
@@ -204,6 +226,7 @@ class KLEEF(object):
             self.write_ktests = "true"
         else:
             self.write_ktests = "false"
+        self.gdbserver_port = gdbserver_port
 
         # This file is inside the bin directory - use the root as base
         self.bin_directory = Path(__file__).parent
@@ -213,7 +236,7 @@ class KLEEF(object):
         self.linker_path = tryFind(self.bin_directory, "llvm-link")
         self.library_path = self.base_directory / "libraries"
         self.runtime_library_path = self.base_directory / "runtime/lib"
-        self.test_results_path = Path.cwd() / "test-suite"
+        self.test_results_path = Path.cwd() / output_dir
         self.test_results_path.mkdir(exist_ok=True)
 
         self.callEnv = os.environ.copy()
@@ -235,6 +258,7 @@ class KLEEF(object):
             "-c",
             "-g",
             "-emit-llvm",
+            "-fno-discard-value-names",
         ]
         if self.is32:
             compiler_options += ["-m32"]
@@ -308,7 +332,11 @@ class KLEEF(object):
             self.f_err,
             self.f_cov,
             self.write_ktests,
+            self.bd,
         )
+        if self.gdbserver_port != GDBSERVER_UNUSED_PORT:
+            cmd = ["gdbserver", f"localhost:{self.gdbserver_port}"] + cmd
+            # exit(23)
         if self.isModifyingUlimitPermitted():
             cmd = ["ulimit -s unlimited", "&&"] + cmd
         cmd = normalize_command(cmd)
@@ -329,6 +357,7 @@ class KLEEF(object):
             cmd = "perf script | c++filt | gprof2dot -f perf -s | dot -Tpdf -o output.pdf"
             check_call(cmd, shell=True)
 
+        generate_correctness_witness(self.source, h.hexdigest(), self.test_results_path)
         return test_output_dir
 
     def version(self):
@@ -359,7 +388,7 @@ def run(args):
             for line in f:
                 if "@DECISIONEDGE" in line:
                     args.coverage_only = True
-                if "@CALL(reach_error)" in line:
+                if "reach_error" in line:
                     args.error_only = True
     # Generate wrapper
     time = 0
@@ -407,9 +436,71 @@ def run(args):
         use_perf=args.perf,
         use_valgrind=args.valgrind,
         write_ktests=args.write_ktests,
+        bd=args.bidirectional,
+        gdbserver_port=args.gdbserver_port,
+        output_dir=args.output_dir,
     )
     wrapper.compile()
     return wrapper.run()
+
+def generate_uuid():
+    # FIXME i don't know how to create uuid
+    return '550e8400-e29b-41d4-a716-446655440000'
+
+def invs_json_to_witness_yaml(invs: json, source: Path):
+    result = []
+    for inv in invs:
+        not_false = inv["c_expression"] != "0" # idk why this does not work
+        not_zero_column = inv["column"] != 0 # that might be not true, but i've yet to find out why the debugger returns 0 as column
+        if not_zero_column and not_false:
+            result.append({
+                "invariant": {
+                    "type": "location_invariant",
+                    "location": {
+                        "file_name": str(source),
+                        "line": inv["line"],
+                        "column": inv["column"],
+                        "function": inv["function"]
+                    },
+                    "value": inv["c_expression"],
+                    "format": "c_expression"
+                }
+            })
+    return result
+
+def generate_correctness_witness(source: Path, hexdigest: str, output_path: Path):
+    invs_path = output_path / "invs.json"
+    f = open(invs_path, 'r')
+    invs_json = json.load(f)
+    f.close()
+
+    data = [
+        {
+            "entry_type": "invariant_set",
+            "metadata": {
+                "format_version": "2.0",
+                "uuid": generate_uuid(),
+                "creation_time": str(datetime.datetime.now().strftime('%Y-%m-%dT%H:%M:%SZ')),
+                "producer": {
+                    "name": "KLEEF",
+                    "version": "bidirectional-alpha",
+                    "configuration": "hilariously specific"
+                },
+                "task": {
+                    "input_files": [str(source)],
+                    "input_file_hashes": {
+                        str(source): hexdigest
+                    },
+                    "specification": "",
+                    "data_model": "ILP32",
+                    "language": "C"
+                }
+            },
+            "content": invs_json_to_witness_yaml(invs_json, source)
+        }
+    ]
+    with open(output_path / 'witness-2.0.yml', 'w') as f:
+        yaml.dump(data, f, sort_keys=False)
 
 
 def main():
@@ -457,6 +548,19 @@ def main():
     )
     parser.add_argument(
         "--write-ktests", help="Write tests in KTest format", action="store_true"
+    )
+    parser.add_argument(
+        "--bidirectional", help="Use bidirectional mode", action="store_true"
+    )
+    parser.add_argument(
+        "--gdbserver-port", help="Initialize gdbserver at localhost", type=int,
+        default=GDBSERVER_UNUSED_PORT
+    )
+    parser.add_argument(
+        "--output-dir",
+        help="Output directory relative to cwd",
+        type=str,
+        default="test-suite",
     )
     args = parser.parse_args()
     run(args)

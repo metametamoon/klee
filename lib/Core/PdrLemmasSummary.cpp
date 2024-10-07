@@ -5,6 +5,7 @@
 
 #include <fmt/format.h>
 #include <fstream>
+#include <klee/Expr/CExprWriter.h>
 #include <klee/Module/KInstruction.h>
 #include <klee/Support/DebugFlags.h>
 #include <optional>
@@ -96,5 +97,35 @@ PdrLemmasSummary::getInfinityLemmasFromEdgesToPob(ProofObligation *pob) {
 void PdrLemmasSummary::pobDied(ProofObligation *) {}
 
 
-
+void PdrLemmasSummary::
+dumpInfinityLevelLemmas(const std::string &outputPath) {
+  nlohmann::json invariants = nlohmann::json::array();
+  llvm::errs() << "Infinity level lemmas:\n";
+  for (const auto& [ki, leveledLemmas]: kinstructionLemmas) {
+    for (const auto& [level, lemmas]: leveledLemmas) {
+      if (level == INF_LEVEL) {
+        llvm::errs() << fmt::format("ki={} ki_loc={} lemmas=\n", ki->toString(), ki->getSourceLocationString());
+        for (const auto& lemma: lemmas) {
+          nlohmann::json invariant {
+            {"ki", ki->toString()},
+            {"line", ki->getLine()},
+            {"column", ki->getColumn()},
+            {"function", ki->parent->parent->getName()},
+            {"c_expression", disjunctionToCExpr(lemma)},
+            {"c_expression_with_errors", disjunctionToCExpr(lemma, false)},
+            {"pure_expression", disjunctionSetToString(lemma)}
+          };
+          invariants.push_back(invariant);
+          llvm::errs() << fmt::format("[\n{}\n],\n", disjunctionSetToString(lemma));
+          llvm::errs() << fmt::format("as C: {}\n", disjunctionToCExpr(lemma));
+        }
+        llvm::errs() << "\n";
+      }
+    }
+  }
+  create_directories(std::filesystem::path{outputPath}.parent_path());
+  auto inv_string = invariants.dump(2);
+  std::fstream file{outputPath, std::ios::out};
+  file << inv_string;
+}
 } // namespace klee
