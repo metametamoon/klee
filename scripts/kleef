@@ -470,10 +470,13 @@ def invs_json_to_witness_yaml(invs: json, source: Path):
 
 def generate_correctness_witness(source: Path, hexdigest: str, output_path: Path):
     invs_path = output_path / "invs.json"
-    f = open(invs_path, 'r')
-    invs_json = json.load(f)
-    f.close()
-
+    try:
+        f = open(invs_path, 'r')
+        invs_json = json.load(f)
+        f.close()
+        invariants_yaml = invs_json_to_witness_yaml(invs_json, source)
+    except Exception:
+        invariants_yaml = []
     data = [
         {
             "entry_type": "invariant_set",
@@ -496,7 +499,7 @@ def generate_correctness_witness(source: Path, hexdigest: str, output_path: Path
                     "language": "C"
                 }
             },
-            "content": invs_json_to_witness_yaml(invs_json, source)
+            "content": invariants_yaml
         }
     ]
     with open(output_path / 'witness-2.0.yml', 'w') as f:
