@@ -19,7 +19,9 @@ std::string printConstAsC(const ref<ConstantExpr> &e) {
 std::optional<std::string> retrieveName(const llvm::AllocaInst *ai) {
   llvm::Function const *caller = ai->getParent()->getParent();
   // Search for llvm.dbg.declare
-  for (llvm::BasicBlock const &BB : caller->getBasicBlockList()) {
+  for (auto i = caller->begin(); i != caller->end(); ++i) {
+    llvm::BasicBlock const &BB = *i;
+
     for (llvm::Instruction const &I : BB) {
       if (auto const *dbg = dyn_cast<llvm::DbgDeclareInst>(&I)) {
         // found. is it for an AllocaInst?
