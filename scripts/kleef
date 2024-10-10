@@ -79,7 +79,7 @@ def klee_options(
             "--allocate-determ",
             f"--allocate-determ-size={min(int(max_memory * 0.6), 3 * 1024)}",
             "--allocate-determ-start-address=0x00030000000",
-            "--x86FP-as-x87FP80",
+            # "--x86FP-as-x87FP80",
         ]
 
     if f_err:
@@ -88,6 +88,9 @@ def klee_options(
             "--use-alpha-equivalence=true",
             "--initialize-in-join-blocks",
             "--function-call-reproduce=reach_error",
+            # "--debug-log=rootpob,backward,conflict,closepob,reached,init,pdr,maxcompose",
+            # "--debug-constraints=lemma,backward",
+            "--use-concretizing-solver=false",
             # "--max-cycles=0",
             # "--tc-type=bug",
             "--dump-states-on-halt=none",  # Explicitly do not dump states
@@ -290,6 +293,7 @@ class KLEEF(object):
             self.compiled_file,
         ]
         check_call(cmd)
+        shutil.copy(self.compiled_file, self.test_results_path.parent / (self.source.name + ".bc"))
 
     def isModifyingUlimitPermitted(self):
         out = subprocess.run(
