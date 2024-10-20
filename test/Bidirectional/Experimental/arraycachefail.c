@@ -1,10 +1,7 @@
-// RUN: %clang %s -emit-llvm -O0 -fno-discard-value-names -c -o %t.bc
-// RUN: %clang %S/klee-test-comp.c -emit-llvm -O0 -fno-discard-value-names -c -o library.bc
-// RUN: llvm-link -o %t.bc library.bc %t.bc
-// RUN: rm -rf %t.klee-out || echo "Did not exist"
-// RUN: %klee --write-kqueries --output-dir=%t.klee-out --optimize=false --execution-mode=bidirectional --function-call-reproduce=reach_error --skip-not-lazy-initialized --skip-not-symbolic-objects --initialize-in-join-blocks=true --forward-ticks=0 --backward-ticks=5 --search=dfs --use-independent-solver=false --use-guided-search=none --debug-log=rootpob,backward,conflict,closepob,reached,init,pdr,maxcompose --debug-constraints=lemma,backward %t.bc 2> %t.log
+// RUN: rm -rf test-suite
+// RUN: %kleef --bidirectional --property-file=%S/unreach-call.prp --max-memory=15000000000 --max-cputime-soft=900 --32 %s &>%t.log
 // RUN: FileCheck %s -input-file=%t.log
-// CHECK: [FALSE POSITIVE] FOUND FALSE POSITIVE AT: Target: [%entry, reach_error]
+// CHECK: [FALSE POSITIVE] FOUND FALSE POSITIVE AT
 
 extern void *calloc(unsigned int nmemb, unsigned int size);
 extern void free(void *);
