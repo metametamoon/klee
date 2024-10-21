@@ -5097,7 +5097,7 @@ void Executor::executeAction(ref<SearcherAction> action) {
     auto action = act->action;
     if (auto begUpdateAction =
             std::get_if<PdrAction::PobLemmaUpdate>(&action)) {
-      executeBegNodeLemmaUpdateAction(begUpdateAction->pob,
+      executeNodeLemmaUpdateAction(begUpdateAction->pob,
                                       begUpdateAction->queueDepth);
     } else if (auto checkInductivenessAction =
                    std::get_if<PdrAction::CheckInductive>(
@@ -8723,7 +8723,7 @@ int saturatingInc(int value) {
  * on pob at depth \leq queueDepth all the lemmas have level \leq (queueDepth -
  * 1)
  */
-void Executor::executeBegNodeLemmaUpdateAction(ProofObligation *pob,
+void Executor::executeNodeLemmaUpdateAction(ProofObligation *pob,
                                                int queueDepth) {
   if (pob == nullptr) {
     return;

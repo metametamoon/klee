@@ -813,7 +813,7 @@ private:
   const KBlock *getKBlock(const llvm::BasicBlock *bb) const;
   const KFunction *getKFunction(const llvm::Function *f) const;
 
-  void executeBegNodeLemmaUpdateAction(ProofObligation *pob, int queueDepth);
+  void executeNodeLemmaUpdateAction(ProofObligation *pob, int queueDepth);
   ref<Target> kInstructionToTarget(KInstruction *kiCopy);
 
   /**
