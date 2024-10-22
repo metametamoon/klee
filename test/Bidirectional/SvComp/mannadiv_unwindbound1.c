@@ -34,24 +34,30 @@ int main() {
     assume_abort_if_not(x1 >= 0);
     assume_abort_if_not(x2 != 0);
 
+    // %16
     y1 = 0;
     y2 = 0;
     y3 = x1;
-
+    // while.cond
     while (counter++<1) {
-        __VERIFIER_assert(y1*x2 + y2 + y3 == x1);
-
+        // %while.body
+        __VERIFIER_assert(y1*x2 + y2 + y3 == x1); // %24
+        // %25
         if (!(y3 != 0)) break;
 
+        // %if.end
         if (y2 + 1 == x2) {
+            // %if.then14
             y1 = y1 + 1;
             y2 = 0;
             y3 = y3 - 1;
         } else {
+            // if.else
             y2 = y2 + 1;
             y3 = y3 - 1;
         }
     }
-    __VERIFIER_assert(y1*x2 + y2 == x1);
+    // while.end
+    __VERIFIER_assert(y1*x2 + y2 == x1); // %37
     return 0;
 }

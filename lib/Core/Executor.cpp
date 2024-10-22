@@ -115,6 +115,7 @@
 #include <cxxabi.h>
 #include <iosfwd>
 #include <iostream>
+#include <klee/Expr/CExprWriter.h>
 #include <sys/mman.h>
 #include <sys/resource.h>
 #include <type_traits>
@@ -4886,7 +4887,11 @@ Executor::compose(const ExecutionState &state, const PathConstraints &pob,
   // validity core
   auto lemmaVectored = pdrSummary->getLemmasFromKInstruction(
       state.initPC.operator KInstruction *())[INF_LEVEL];
+  for (auto disjunct: lemmaVectored) {
+    llvm::errs() << fmt::format("Pretty inf level lemma: {}\n", disjunctionToCExpr(disjunct, false));
+  }
   auto lemma = cnfToExpr(lemmaVectored);
+  llvm::errs() << fmt::format("Inf level lemma: \n{}\n\n", lemma->toString());
   bool mayBeTrue = false;
   solver->mayBeTrue(composer.state.constraints.cs(), lemma, mayBeTrue,
                     composer.state.queryMetaData);
@@ -4900,29 +4905,67 @@ Executor::compose(const ExecutionState &state, const PathConstraints &pob,
 
   auto added =
       composer.state.constraints.addConstraint(lemma, Path::PathIndex{0, 0});
-
+  auto rewriteDependencies = ExprHashMap<ExprHashSet>();
   for (auto &indexConstraints : pob.orderedCS()) {
     Path::PathIndex index = indexConstraints.first;
     index.block += offset;
     for (ref<Expr> constraint : indexConstraints.second) {
+      // llvm::errs() << "Current rewrite dependencies state:\n";
+       // for (auto [key, value]: rewriteDependencies) {
+      //   llvm::errs() << key->toString() << "\n[\n";
+      //   for (auto expr: value) {
+      //     llvm::errs() << expr->toString() << "\n\n";
+      //   }
+      //   llvm::errs() << "]\n";
+      // }
       std::pair<ref<Expr>, ref<Expr>> composeResult =
           composer.compose(constraint);
-      if (composeResult.first->isFalse()) {
+      auto safetyCondition = composeResult.first;
+      auto composedConstraint = composeResult.second;
+      llvm::errs() << fmt::format(
+      "constraint={}\n", translateToCExpr(constraint).value_or("unknown"));
+      llvm::errs() << fmt::format(
+      "composed constraint={}\n", translateToCExpr(composedConstraint).value_or("unknown"));
+      llvm::errs() << fmt::format(
+      "pure composed constraint=\n{}\n\n", (composedConstraint)->toString());
+      if (safetyCondition->isFalse()) {
         result.success = false;
         return result;
       }
-      ref<Expr> condition =
-          AndExpr::create(composeResult.first, composeResult.second);
+      auto simplificationInfo = Simplificator::simplifyExpr(
+          composer.state.constraints.cs(),
+          AndExpr::create(safetyCondition, composedConstraint));
+      ref<Expr> simplifiedComposedConstraint = simplificationInfo.simplified;
 
-      condition = Simplificator::simplifyExpr(composer.state.constraints.cs(),
-                                              condition)
-                      .simplified;
+      rewriteDependencies[simplifiedComposedConstraint].insert(simplifiedComposedConstraint);
+      llvm::errs() << fmt::format(
+      "simplifed composed constraint={}\n",
+      translateToCExpr(simplifiedComposedConstraint).value_or("unknown"));
+      llvm::errs() << "pure simplieifed composed constraint: ";
+      llvm::errs() << simplifiedComposedConstraint->toString() << '\n';
+      // llvm::errs() << "Rewriten with:\n";
+      for (const auto &dep : simplificationInfo.dependency) {
+        if (rewriteDependencies.find(dep) == rewriteDependencies.end()) {
+          rewriteDependencies[simplifiedComposedConstraint].insert(dep);
+        } else {
+          rewriteDependencies[simplifiedComposedConstraint].insert(
+              rewriteDependencies[dep].begin(), rewriteDependencies[dep].end());
+        }
+        // llvm::errs() << fmt::format("\t{}\n",
+                                    // translateToCExpr(dep).value_or("unknown"));
+        // llvm::errs() << dep->toString() << "\n\n";
+      }
+      // llvm::errs() << "Clean deps:\n";
+      // for (auto &dep: rewriteDependencies[simplifiedComposedConstraint]) {
+        // llvm::errs() << fmt::format("\t{}\n",
+                                    // translateToCExpr(dep).value_or("unknown"));
+      // }
 
       ValidityCore core;
       bool isValid;
       solver->setTimeout(coreSolverTimeout);
       bool success = solver->getValidityCore(
-          composer.state.constraints.cs(), Expr::createIsZero(condition), core,
+          composer.state.constraints.cs(), Expr::createIsZero(simplifiedComposedConstraint), core,
           isValid, composer.state.queryMetaData);
       solver->setTimeout(time::Span());
       if (!success || haltExecution) {
@@ -4947,6 +4990,37 @@ Executor::compose(const ExecutionState &state, const PathConstraints &pob,
             }
           }
         }
+        for (auto e : rewriteDependencies[simplifiedComposedConstraint]) {
+          if (e == simplifiedComposedConstraint)
+            continue;
+          auto &simplMap = composer.state.constraints.simplificationMap();
+          if (simplMap.count(e) > 0) { // we added some infinity lemmas, which do not have an image in the core
+            for (auto original : simplMap.at(e)) {
+              if (rebuildMap.count(original)) {
+                auto expr = rebuildMap.at(original);
+                llvm::errs() << fmt::format("\t{}\n", translateToCExpr(expr).value_or("unknown"));
+                conflict.core.insert(Expr::createIsZero(expr));
+              }
+            }
+          }
+        }
+
+        for (auto coreElement: core.constraints) {
+          for (auto e : rewriteDependencies[coreElement]) {
+            if (e == simplifiedComposedConstraint)
+              continue;
+            auto &simplMap = composer.state.constraints.simplificationMap();
+            if (simplMap.count(e) > 0) { // we added some infinity lemmas, which do not have an image in the core
+              for (auto original : simplMap.at(e)) {
+                if (rebuildMap.count(original)) {
+                  auto expr = rebuildMap.at(original);
+                  llvm::errs() << fmt::format("\t{}\n", translateToCExpr(expr).value_or("unknown"));
+                  conflict.core.insert(Expr::createIsZero(expr));
+                }
+              }
+            }
+          }
+        }
 
         conflict.core.insert(Expr::createIsZero(constraint));
 
@@ -4958,7 +5032,7 @@ Executor::compose(const ExecutionState &state, const PathConstraints &pob,
         return result;
       }
 
-      auto added = composer.state.constraints.addConstraint(condition, index);
+      auto added = composer.state.constraints.addConstraint(simplifiedComposedConstraint, index);
       for (auto expr : added) {
         rebuildMap.insert({expr, constraint});
       }
@@ -5062,6 +5136,8 @@ void Executor::executeAction(ref<SearcherAction> action) {
   case SearcherAction::Kind::Backward: {
     if (debugPrints.isSet(DebugPrint::Backward)) {
       auto prop = cast<BackwardAction>(action)->prop;
+      llvm::errs() << fmt::format("[backward] state id={}; pob id={}\n",
+                                  prop.state->id, prop.pob->id);
       llvm::errs() << "[backward] State: "
                    << prop.state->constraints.path().toString() << "\n";
       llvm::errs() << "[backward] Pob: "
@@ -5075,17 +5151,27 @@ void Executor::executeAction(ref<SearcherAction> action) {
         llvm::errs() << "[backward] State: ";
         prop.state->constraints.cs().dump();
         llvm::errs() << "\n";
-        llvm::errs() << "[backward] Pob: ";
+        llvm::errs() << "[backward] Pob: \n";
         prop.pob->constraints.cs().dump();
+        // for (auto [pathIndex, exprs]: prop.pob->constraints.orderedCS()) {
+        //   auto pathBlocks = prop.pob->constraints.path().getBlocks();
+        //   assert(pathBlocks.size() > pathIndex.block);
+        //   auto block = pathBlocks[pathIndex.block];
+        //   auto instruction = block.block->instructions[pathIndex.instruction];
+        //   llvm::errs() << fmt::format("{}: [\n", instruction->toString());
+        //   for (const auto& expr: exprs) {
+        //     auto pretty = translateToCExpr(expr);
+        //     if (pretty.has_value()) {
+        //       llvm::errs() << fmt::format(" {}\n", pretty.value());
+        //     }
+        //   }
+        //   llvm::errs() << "]\n";
+        //
+        // }
         llvm::errs() << "\n";
       }
     }
-    // auto t1 = std::chrono::high_resolution_clock::now();
     goBackward(cast<BackwardAction>(action));
-    // auto t2 = std::chrono::high_resolution_clock::now();
-    // auto ms_int =
-    //     std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1);
-    // llvm::errs() << "[backward] It took: " << ms_int.count() << " ms\n";
     break;
   }
   case SearcherAction::Kind::Initialize: {
@@ -5198,6 +5284,9 @@ void Executor::goBackward(ref<BackwardAction> action) {
   if (canReachSomeTargetThroughState(*pob, *state)) {
     auto nullPointerExpr =
         state->nullPointerExpr ? state->nullPointerExpr : pob->nullPointerExpr;
+    if (pob->id == 48 && state->id == 38) {
+      llvm::errs() << "Huray!\n";
+    }
     composeResult =
         compose(*state, pob->constraints, nullPointerExpr, pob->symbolics);
   } else {
@@ -5230,6 +5319,7 @@ void Executor::goBackward(ref<BackwardAction> action) {
             }
             llvm::errs() << "[TRUE POSITIVE] FOUND TRUE POSITIVE AT: "
                          << pob->root->location->toString() << "\n";
+            pdrSummary->dumpInfinityLevelLemmas(interpreterHandler->getOutputFilename("invs.json"));
             closeProofObligation(pob);
           }
         } else {
@@ -5239,6 +5329,7 @@ void Executor::goBackward(ref<BackwardAction> action) {
           }
           llvm::errs() << "[TRUE POSITIVE] FOUND TRUE POSITIVE AT: "
                        << pob->root->location->toString() << "\n";
+          pdrSummary->dumpInfinityLevelLemmas(interpreterHandler->getOutputFilename("invs.json"));
           closeProofObligation(pob);
         }
       } else {
@@ -5248,6 +5339,7 @@ void Executor::goBackward(ref<BackwardAction> action) {
         }
         llvm::errs() << "[TRUE POSITIVE] FOUND TRUE POSITIVE AT: "
                      << pob->root->location->toString() << "\n";
+        pdrSummary->dumpInfinityLevelLemmas(interpreterHandler->getOutputFilename("invs.json"));
         closeProofObligation(pob);
       }
 
@@ -5595,7 +5687,10 @@ void Executor::run(ExecutionState *initialState,
             auto parent = pob->parent;
             if (parent != nullptr) {
               pdrLog() << fmt::format(
-                  "[main loop] compose after pob removal\n");
+                  "[main loop] compose after removal of pob with id={}\n", pob->id);
+              if (pob->id == 24) {
+                llvm::nulls() << "Here!";
+              }
               pdrLog() << fmt::format("\tpob loc={}\n",
                                           pob->location->toString());
               pdrLog() << fmt::format("\tpob path={}\n",
@@ -8864,6 +8959,9 @@ ref<CodeLocation> Executor::locationOf(const ExecutionState &state) const {
     llvm::errs() << fmt::format(
         "\tinterpolant:\n\t{}\n",
         disjunctionToString(disjunction{result.conflict.core}));
+    llvm::errs() << fmt::format(
+        "\tpretty interpolant:\n\t{}\n",
+        disjunctionToCExpr(disjunction{result.conflict.core}, false));
   }
   return MaxComposeResult{.level = currentComposeLevel,
                           .interpolant = disjunction{result.conflict.core}};

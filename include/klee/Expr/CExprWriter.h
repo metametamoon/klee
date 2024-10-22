@@ -10,7 +10,7 @@ namespace klee {
 class Expr;
 std::optional<std::string> translateToCExpr(ref<Expr> expr);
 std::string disjunctionToCExpr(disjunction const &disj,
-                               bool unknownsExprsAsFalse = true);
+                               bool unknownsExprsAsTrue);
 
 } // namespace klee
 

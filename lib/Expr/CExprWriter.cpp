@@ -40,7 +40,8 @@ std::optional<std::string> retrieveName(const llvm::AllocaInst *ai) {
 }
 
 // extracts source from reading from zero
-std::optional<ref<SymbolicSource>> tryRetrieveSourceFromFullArrayRead(ref<Expr> e) {
+std::optional<ref<SymbolicSource>>
+tryRetrieveSourceFromFullArrayRead(ref<Expr> e) {
   ref<ReadExpr> base = e->hasOrderedReads(false);
   const bool isLSB = (!base.isNull());
   if (!isLSB)
@@ -55,8 +56,9 @@ std::optional<ref<SymbolicSource>> tryRetrieveSourceFromFullArrayRead(ref<Expr> 
   }
 }
 
-std::optional<std::string> instSourceToString(ref<InstructionSource> instSource) {
-  auto& instruction = instSource->allocSite;
+std::optional<std::string>
+instSourceToString(ref<InstructionSource> instSource) {
+  auto &instruction = instSource->allocSite;
   auto kf = instSource->km->functionMap.at(instruction.getFunction());
   auto ki = kf->instructionMap.at(&instruction);
   if (ki->inst()->getOpcode() == llvm::Instruction::Alloca) {
@@ -66,13 +68,13 @@ std::optional<std::string> instSourceToString(ref<InstructionSource> instSource)
       if (name.has_value()) {
         return name.value();
       }
-        }
+    }
     auto name = ki->inst()->getName().str();
     if (!name.empty()) {
       return "LlvmReg(" + name + ")";
     }
   }
-  return std::nullopt;
+  return std::string{"<var>"};
 }
 
 // sample translation -- from
@@ -80,7 +82,6 @@ std::optional<std::string> instSourceToString(ref<InstructionSource> instSource)
 // (array (w64 8) (lazyInitializationAddress N1:(ReadLSB w64 0 (array (w64 8)
 // (instruction 2 %entry loop 0)))))))))
 std::optional<std::string> printConcatAsC(const ref<Expr> &e) {
-  llvm::errs() << e->toString() << "\n";
   auto content = tryRetrieveSourceFromFullArrayRead(e);
   if (!content.has_value())
     return std::nullopt;
@@ -104,8 +105,7 @@ std::optional<std::string> printConcatAsC(const ref<Expr> &e) {
       }
     }
   }
-
-  return std::string{"<var>"};
+  return std::nullopt;
 }
 
 std::string braced(const std::string &s) { return std::string{'('} + s + ")"; }
@@ -117,7 +117,6 @@ std::string biexprKindToString(Expr::Kind kind) {
   Expr::printKind(ss, kind);
   ss << '`';
   return ss.str();
-
 }
 
 std::optional<std::string> printBinopAsC(BinaryExpr *BE) {
@@ -129,18 +128,10 @@ std::optional<std::string> printBinopAsC(BinaryExpr *BE) {
   if (!right.has_value()) {
     return std::nullopt;
   }
-  std::map<Expr::Kind, std::string> ops {
-    {Expr::Add, "+"},
-    {Expr::Sub, "-"},
-    {Expr::Mul, "*"},
-    {Expr::URem, "%"},
-    {Expr::And, "&"},
-    {Expr::Slt, "<"},
-    {Expr::Sle, "<="},
-    {Expr::Sgt, ">"},
-    {Expr::Sge, ">="},
-    {Expr::Eq, "=="}
-  };
+  std::map<Expr::Kind, std::string> ops{
+      {Expr::Add, "+"},  {Expr::Sub, "-"}, {Expr::Mul, "*"},  {Expr::URem, "%"},
+      {Expr::And, "&"},  {Expr::Slt, "<"}, {Expr::Sle, "<="}, {Expr::Sgt, ">"},
+      {Expr::Sge, ">="}, {Expr::Eq, "=="}};
   auto const opString = [&]() {
     if (auto it = ops.find(BE->getKind()); it != ops.end()) {
       return it->second;
@@ -150,7 +141,6 @@ std::optional<std::string> printBinopAsC(BinaryExpr *BE) {
   }();
   return braced(left.value() + " " + opString + " " + right.value());
 }
-
 
 std::optional<std::string> translateToCExpr(ref<Expr> expr) {
   if (!expr) {
@@ -173,16 +163,12 @@ std::optional<std::string> translateToCExpr(ref<Expr> expr) {
       else
         return "~(" + subExpr.value() + ")";
     }
-
   }
-  // if (auto *UE = dyn_cast<BinaryExpr>(expr)) {
-  //   return printBinopAsC(BE);
-  // }
   return std::nullopt;
 }
 
-
-std::string disjunctionToCExpr(disjunction const & disj, bool unknownsExprsAsFalse) {
+std::string disjunctionToCExpr(disjunction const &disj,
+                               bool unknownsExprsAsTrue) {
   if (disj.elements.empty()) {
     return "0";
   } else {
@@ -196,8 +182,8 @@ std::string disjunctionToCExpr(disjunction const & disj, bool unknownsExprsAsFal
       if (maybeCExpr.has_value()) {
         result += maybeCExpr.value();
       } else {
-        if (unknownsExprsAsFalse) {
-          result += "0";
+        if (unknownsExprsAsTrue) {
+          result += "1";
         } else {
           result += "unknown";
         }

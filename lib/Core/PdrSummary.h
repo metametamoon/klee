@@ -15,7 +15,6 @@ class ProofObligation;
 
 ;
 
-
 ref<Expr> disjunctionToExpr(const disjunction &dj);
 std::string disjunctionToString(const disjunction &dj);
 ref<Expr> cnfToExpr(const cnf &formula);
@@ -27,8 +26,7 @@ public:
   PdrSummary() = default;
   void addInfinityLemmaOnSomeEdgeToPob(ProofObligation *pob,
                                        const disjunction &lemma);
-  disjunction
-  getInfinityLemmasFromEdgesToPob(ProofObligation *pob);
+  disjunction getInfinityLemmasFromEdgesToPob(ProofObligation *pob);
 
   void addLemmaOnKInstruction(KInstruction *, int level,
                               const disjunction &lemma);
@@ -38,7 +36,7 @@ public:
   // clears maps of dead pobs
   void pobDied(ProofObligation *);
 
-  void dumpInfinityLevelLemmas(std::string const&);
+  void dumpInfinityLevelLemmas(std::string const &);
 
   std::map<KInstruction *, std::map<int, cnf>, KInstructionCompare>
       kinstructionLemmas;
@@ -51,7 +49,7 @@ public:
   // collected in the loop over edges, described in `executeLemmaUpdateAction`
   std::map<std::uint32_t, disjunction> infinityLemmas;
 
-  std::string logPrefixWithSpace = "[pdrLemmasSummary] ";
+  std::string logPrefixWithSpace = "[pdrSummary] ";
 };
 
 } // namespace klee

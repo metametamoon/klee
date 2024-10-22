@@ -1,6 +1,6 @@
 // REQUIRES: geq-llvm-12.0
-// XFAIL: geq-llvm-12.0
-// RUN: rm -rf test-suite
+
+// RUN: rm -rf %t.klee-out
 // RUN: %kleef --bidirectional --output-dir=%t.klee-out --property-file=%S/unreach-call.prp --max-memory=15000000000 --max-cputime-soft=900 --32 %s &>%t.log
 // RUN: FileCheck %s -input-file=%t.log
 // CHECK: [FALSE POSITIVE] FOUND FALSE POSITIVE AT
