@@ -21,7 +21,7 @@ llvm::cl::opt<unsigned> BackwardTicks("backward-ticks", llvm::cl::desc(""),
                                       llvm::cl::init(25),
                                       llvm::cl::cat(ExecCat));
 
-llvm::cl::opt<unsigned> LemmaUpdateTicks("lemma-update-ticks",
+llvm::cl::opt<unsigned> LemmaUpdateTicks("linear-pdr-ticks",
                                          llvm::cl::desc(""), llvm::cl::init(25),
                                          llvm::cl::cat(ExecCat));
 
