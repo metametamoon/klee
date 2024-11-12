@@ -79,7 +79,7 @@ KInstruction *Path::getLastInstruction() const {
 }
 
 bool Path::blockCompleted(unsigned index) const {
-  assert(index >= 0 && index < path.size());
+  assert(index < path.size());
   if (index + 1 < path.size()) {
     return true;
   }
@@ -93,7 +93,7 @@ bool Path::blockCompleted(unsigned index) const {
 }
 
 KFunction *Path::getCalledFunction(unsigned index) const {
-  assert(index >= 0 && index < path.size());
+  assert(index < path.size());
   assert(isa<KCallBlock>(path.at(index).block));
   if (index + 1 < path.size()) {
     return path.at(index + 1).block->parent;
@@ -104,7 +104,7 @@ KFunction *Path::getCalledFunction(unsigned index) const {
 }
 
 KInstruction *Path::getCallsiteFromReturn(unsigned index) const {
-  assert(index >= 0 && index < path.size());
+  assert(index < path.size());
   assert(index + 1 < path.size());
   return dyn_cast<KCallBlock>(path.at(index + 1).block)->kcallInstruction;
 }
@@ -305,4 +305,5 @@ KInstruction *klee::getLastInstructionFromPathEntry(Path::entry entry) {
   case Path::TransitionKind::None:
     return entry.block->getLastInstruction();
   }
+  return nullptr;
 }

@@ -558,7 +558,7 @@ Path ParserImpl::ParsePathDecl() {
     auto kb = kf->getLabelMap().at(blockLabel);
     auto nextIndex =
         dyn_cast<ConstantExpr>(nextIndexExpr.get())->getZExtValue();
-    assert(nextIndex >= 0 && nextIndex < kb->getNumInstructions());
+    assert(nextIndex < kb->getNumInstructions());
     next = kb->instructions[nextIndex];
   }
 
