@@ -4910,24 +4910,10 @@ Executor::compose(const ExecutionState &state, const PathConstraints &pob,
     Path::PathIndex index = indexConstraints.first;
     index.block += offset;
     for (ref<Expr> constraint : indexConstraints.second) {
-      // llvm::errs() << "Current rewrite dependencies state:\n";
-       // for (auto [key, value]: rewriteDependencies) {
-      //   llvm::errs() << key->toString() << "\n[\n";
-      //   for (auto expr: value) {
-      //     llvm::errs() << expr->toString() << "\n\n";
-      //   }
-      //   llvm::errs() << "]\n";
-      // }
       std::pair<ref<Expr>, ref<Expr>> composeResult =
           composer.compose(constraint);
       auto safetyCondition = composeResult.first;
       auto composedConstraint = composeResult.second;
-      llvm::errs() << fmt::format(
-      "constraint={}\n", translateToCExpr(constraint).value_or("unknown"));
-      llvm::errs() << fmt::format(
-      "composed constraint={}\n", translateToCExpr(composedConstraint).value_or("unknown"));
-      llvm::errs() << fmt::format(
-      "pure composed constraint=\n{}\n\n", (composedConstraint)->toString());
       if (safetyCondition->isFalse()) {
         result.success = false;
         return result;
@@ -4936,14 +4922,7 @@ Executor::compose(const ExecutionState &state, const PathConstraints &pob,
           composer.state.constraints.cs(),
           AndExpr::create(safetyCondition, composedConstraint));
       ref<Expr> simplifiedComposedConstraint = simplificationInfo.simplified;
-
       rewriteDependencies[simplifiedComposedConstraint].insert(simplifiedComposedConstraint);
-      llvm::errs() << fmt::format(
-      "simplifed composed constraint={}\n",
-      translateToCExpr(simplifiedComposedConstraint).value_or("unknown"));
-      llvm::errs() << "pure simplieifed composed constraint: ";
-      llvm::errs() << simplifiedComposedConstraint->toString() << '\n';
-      // llvm::errs() << "Rewriten with:\n";
       for (const auto &dep : simplificationInfo.dependency) {
         if (rewriteDependencies.find(dep) == rewriteDependencies.end()) {
           rewriteDependencies[simplifiedComposedConstraint].insert(dep);
@@ -5138,10 +5117,10 @@ void Executor::executeAction(ref<SearcherAction> action) {
       auto prop = cast<BackwardAction>(action)->prop;
       llvm::errs() << fmt::format("[backward] state id={}; pob id={}\n",
                                   prop.state->id, prop.pob->id);
-      llvm::errs() << "[backward] State: "
-                   << prop.state->constraints.path().toString() << "\n";
       llvm::errs() << "[backward] Pob: "
                    << prop.pob->constraints.path().toString() << "\n";
+      llvm::errs() << "[backward] State: "
+                   << prop.state->constraints.path().toString() << "\n";
       llvm::errs() << "[backward] To-be pob: "
                    << Path::concat(prop.state->constraints.path(),
                                    prop.pob->constraints.path())
@@ -5153,21 +5132,6 @@ void Executor::executeAction(ref<SearcherAction> action) {
         llvm::errs() << "\n";
         llvm::errs() << "[backward] Pob: \n";
         prop.pob->constraints.cs().dump();
-        // for (auto [pathIndex, exprs]: prop.pob->constraints.orderedCS()) {
-        //   auto pathBlocks = prop.pob->constraints.path().getBlocks();
-        //   assert(pathBlocks.size() > pathIndex.block);
-        //   auto block = pathBlocks[pathIndex.block];
-        //   auto instruction = block.block->instructions[pathIndex.instruction];
-        //   llvm::errs() << fmt::format("{}: [\n", instruction->toString());
-        //   for (const auto& expr: exprs) {
-        //     auto pretty = translateToCExpr(expr);
-        //     if (pretty.has_value()) {
-        //       llvm::errs() << fmt::format(" {}\n", pretty.value());
-        //     }
-        //   }
-        //   llvm::errs() << "]\n";
-        //
-        // }
         llvm::errs() << "\n";
       }
     }
@@ -5284,9 +5248,6 @@ void Executor::goBackward(ref<BackwardAction> action) {
   if (canReachSomeTargetThroughState(*pob, *state)) {
     auto nullPointerExpr =
         state->nullPointerExpr ? state->nullPointerExpr : pob->nullPointerExpr;
-    if (pob->id == 48 && state->id == 38) {
-      llvm::errs() << "Huray!\n";
-    }
     composeResult =
         compose(*state, pob->constraints, nullPointerExpr, pob->symbolics);
   } else {
@@ -5366,6 +5327,12 @@ void Executor::goBackward(ref<BackwardAction> action) {
             callPob->symbolics = composeResult.symbolics;
             pobToParentState[callPob] = state->copy(); // do i need a copy here?
             objectManager->addPob(callPob);
+            if (debugConstraints.isSet(DebugPrint::Backward)) {
+              llvm::errs() << "[backward] Pob after composition: \n";
+              llvm::errs() << fmt::format("path={}\n", callPob->constraints.path().toString());
+              callPob->constraints.cs().dump();
+              llvm::errs() << "\n";
+            }
           }
         }
       } else {
@@ -5374,6 +5341,12 @@ void Executor::goBackward(ref<BackwardAction> action) {
         newPob->symbolics = composeResult.symbolics;
         pobToParentState[newPob] = state->copy(); // do i need a copy here?
         objectManager->addPob(newPob);
+        if (debugConstraints.isSet(DebugPrint::Backward)) {
+          llvm::errs() << "[backward] Pob after composition: \n";
+          llvm::errs() << fmt::format("path={}\n", newPob->constraints.path().toString());
+          newPob->constraints.cs().dump();
+          llvm::errs() << "\n";
+        }
       }
     }
   } else {

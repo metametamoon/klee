@@ -48,7 +48,7 @@ def klee_options(
         "--libc=klee",
         "--skip-not-lazy-initialized",
         f"--output-dir={test_output_dir}",  # Output files into specific directory
-        "--output-source=false",  # Do not output assembly.ll - it can be too large
+        "--output-source=true",  # Do not output assembly.ll - it can be too large
         "--output-stats=false",
         "--output-istats=false",
         # "--istats-write-interval=90s", # Istats file can be large as well
