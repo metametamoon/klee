@@ -15,6 +15,12 @@ void reach_error() {
   klee_assert(0);
 }
 
+int inc(int a) {
+  int b = a;
+  b = b + 1;
+  return b;
+}
+
 int f(int x) {
   int r = x * 2;
   return r;
@@ -33,7 +39,7 @@ int g(int x) {
 int main() {
   int a;
   klee_make_symbolic(&a, sizeof(a), "a");
-//  klee_assume(a > 0 && a < 100000);
+  klee_assume(a > 0 && a < 100000);
   int b = g(a);
   if (b % 2 != 0) {
     reach_error();
