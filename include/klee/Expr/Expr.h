@@ -278,7 +278,8 @@ public:
     CmpKindFirst = Eq,
     CmpKindLast = FOGe,
     Pointer,
-    ConstantPointer
+    ConstantPointer,
+    Variable
   };
 
   /// @brief Required by klee::ref-managed objects
@@ -1785,6 +1786,35 @@ public:
 private:
   ConstantPointerExpr(const ref<ConstantExpr> &b, const ref<ConstantExpr> &v)
       : PointerExpr(b, v) {}
+};
+
+class VariableExpr: public NonConstantExpr {
+public:
+  static const Kind kind = Variable;
+  static const unsigned numKids = 0;
+  Width const width;
+  std::string const name;
+  VariableExpr(Width width, std::string name): width(width), name(std::move(name)) {}
+  Width getWidth() const override { return width; }
+  Kind getKind() const override { return kind; }
+  unsigned getNumKids() const override { return 0; }
+  ref<Expr> getKid(unsigned) const override { return ref<Expr>{}; }
+
+protected:
+  int compareContents(const Expr &b) const override {
+    const VariableExpr &cb = static_cast<const VariableExpr &>(b);
+    if (getWidth() != cb.getWidth())
+      return getWidth() < cb.getWidth() ? -1 : 1;
+    if (name == cb.name)
+      return 0;
+    return name <= cb.name ? -1 : 1;
+  };
+
+public:
+  ref<Expr> rebuild(ref<Expr> kids[]) const override {
+    assert(0 && "rebuild() on VariableExpr");
+    return const_cast<VariableExpr *>(this);
+  };
 };
 
 // Implementations

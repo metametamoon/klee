@@ -158,4 +158,29 @@ TEST(SolverTest, Evaluation) {
   testOpcode<SgeExpr>(*solver);
 }
 
+TEST(SolverTest, VariableExpr) {
+  auto solver = klee::createCoreSolver(CoreSolverToUse);
+  constraints_ty emptyConstraints;
+  auto varExpr = ref<Expr>{new VariableExpr(32, "var")};
+  auto oneExpr = ref{ConstantExpr::alloc(1, 32)};
+  auto twoExpr = ref{ConstantExpr::alloc(2, 32)};
+  auto trivialEqExpr = EqExpr::create(
+    MulExpr::create(varExpr, twoExpr),
+    AddExpr::create(varExpr, oneExpr));
+  auto query = Query(emptyConstraints, trivialEqExpr);
+  bool res;
+  bool success = solver->mayBeTrue(query, res);
+  EXPECT_TRUE(success);
+  EXPECT_TRUE(res);
+  success = solver->mustBeTrue(query, res);
+  EXPECT_TRUE(success);
+  EXPECT_FALSE(res);
+  success = solver->mayBeFalse(query, res);
+  EXPECT_TRUE(success);
+  EXPECT_TRUE(res);
+  success = solver->mustBeFalse(query, res);
+  EXPECT_TRUE(success);
+  EXPECT_FALSE(res);
+}
+
 } // namespace

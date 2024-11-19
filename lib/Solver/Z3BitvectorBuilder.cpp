@@ -885,6 +885,14 @@ Z3ASTHandle Z3BitvectorBuilder::constructActual(ref<Expr> e, int *width_out) {
     assert(*width_out != 1 && "uncanonicalized FNeg");
     return Z3ASTHandle(Z3_mk_fpa_neg(ctx, arg), ctx);
   }
+  case Expr::Variable: {
+    VariableExpr *varExpr = cast<VariableExpr>(e);
+    Expr::Width width = e->getWidth();
+    Z3_sort ty = Z3_mk_bv_sort(ctx, width);
+    Z3_symbol s = Z3_mk_string_symbol(ctx, varExpr->name.c_str());
+    *width_out = width;
+    return Z3ASTHandle(Z3_mk_const(ctx, s, ty), ctx);
+  }
 
 // unused due to canonicalization
 #if 0
