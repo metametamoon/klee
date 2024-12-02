@@ -7,14 +7,11 @@
 #include <queue>
 #include <variant>
 
-
 namespace klee {
-class PdrEngine: public Subscriber {
+class PdrEngine : public Subscriber {
 public:
   PdrEngine(ProofObligation *rootPob, TargetManager *targetManager,
-               ConflictCoreInitializer *initializer,
-               Executor* executor,
-               ObjectManager *objectManager);
+            ConflictCoreInitializer *initializer, ObjectManager *objectManager);
 
   struct AwaitingDepth {
     int n = 1;
@@ -40,7 +37,6 @@ private:
   TargetManager *targetManager;
   ConflictCoreInitializer *initializer;
   ObjectManager *objectManager;
-  Executor* executor;
 
   bool checkPobWouldNotBePropagatedInTheFuture(ProofObligation *pob);
 };

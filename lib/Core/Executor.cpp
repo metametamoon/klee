@@ -5565,7 +5565,7 @@ void Executor::run(ExecutionState *initialState,
     ProofObligation *rootPob = *(objectManager->rootPobs.begin());
     auto lemmaUpdater =
         std::make_unique<PdrEngine>(rootPob, targetManager.get(),
-                                       forCheck, this, objectManager.get());
+                                       forCheck, objectManager.get());
     searcher = std::make_unique<BidirectionalSearcher>(forward, branch,
                                                        backward, initializer, std::move(lemmaUpdater));
   }

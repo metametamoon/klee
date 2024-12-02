@@ -39,8 +39,8 @@ PdrAction PdrEngine::getPdrAction() {
     if (!maxNodeUpdate->updateQueue.empty()) {
       auto nextPob = maxNodeUpdate->updateQueue.front();
       maxNodeUpdate->updateQueue.pop_front();
-      return PdrAction{PdrAction::PobLemmaUpdate{
-          nextPob, maxNodeUpdate->queueMaximalDepth}};
+      return PdrAction{
+          PdrAction::PobLemmaUpdate{nextPob, maxNodeUpdate->queueMaximalDepth}};
     } else {
       currentState = AwaitingDepth{maxNodeUpdate->queueMaximalDepth + 1};
       if (debugPrints.isSet(DebugPrint::Pdr)) {
@@ -102,18 +102,16 @@ PdrEngine::tryExtractingSubtree(ProofObligation *root, int depth) {
   return result;
 }
 
-bool PdrEngine::checkPobWouldNotBePropagatedInTheFuture(
-    ProofObligation *pob) {
+bool PdrEngine::checkPobWouldNotBePropagatedInTheFuture(ProofObligation *pob) {
   return !targetManager->hasTargetedStates(pob->location) &&
          !initializer->initsLeftForTarget(pob->location) &&
          objectManager->propagationCount[pob] == 0;
 }
 
-PdrEngine::PdrEngine(ProofObligation *rootPob,
-                           TargetManager *targetManager,
-                           ConflictCoreInitializer *initializer,
-                           Executor *executor, ObjectManager *objectManager)
+PdrEngine::PdrEngine(ProofObligation *rootPob, TargetManager *targetManager,
+                     ConflictCoreInitializer *initializer,
+                     ObjectManager *objectManager)
     : rootPob(rootPob), targetManager(targetManager), initializer(initializer),
-      objectManager(objectManager), executor(executor) {}
+      objectManager(objectManager) {}
 
 } // namespace klee
