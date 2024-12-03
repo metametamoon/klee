@@ -199,6 +199,9 @@ public:
     Select,
     Concat,
     Extract,
+    Pointer,
+    ConstantPointer,
+    Variable,
 
     // Casting,
     ZExt,
@@ -277,9 +280,6 @@ public:
     BinaryKindLast = FOGe,
     CmpKindFirst = Eq,
     CmpKindLast = FOGe,
-    Pointer,
-    ConstantPointer,
-    Variable
   };
 
   /// @brief Required by klee::ref-managed objects
@@ -1790,6 +1790,9 @@ private:
 
 class VariableExpr: public NonConstantExpr {
 public:
+  static bool classof(const VariableExpr *) { return true; }
+  static bool classof(const Expr *E) { return E->getKind() == Expr::Variable; }
+
   static const Kind kind = Variable;
   static const unsigned numKids = 0;
   Width const width;

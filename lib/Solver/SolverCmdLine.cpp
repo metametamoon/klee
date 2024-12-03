@@ -58,8 +58,8 @@ cl::opt<bool>
                         cl::cat(SolvingCat));
 
 cl::opt<bool>
-    UseConcretizingSolver("use-concretizing-solver", cl::init(true),
-                          cl::desc("Use concretization manager(default=true)"),
+    UseConcretizingSolver("use-concretizing-solver", cl::init(false),
+                          cl::desc("Use concretization manager(default=false)"),
                           cl::cat(SolvingCat));
 
 cl::opt<bool>
