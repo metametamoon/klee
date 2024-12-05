@@ -260,6 +260,7 @@ public:
 
 class ValueSource : public SymbolicSource {
 public:
+  // relative position to the stack frame this source referes to
   const int index;
   const KModule *km;
   ValueSource(int _index, const KModule *km) : index(_index), km(km) {}
