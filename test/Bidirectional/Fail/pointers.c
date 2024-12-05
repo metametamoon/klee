@@ -14,15 +14,14 @@ void reach_error() {
   klee_assert(0);
 }
 
-void M(int *m) {
-  *m = 0;
+void M(int *k) {
+  *k = 0;
 }
 
 int main() {
   int m;
   klee_make_symbolic(&m, sizeof(m), "m");
   klee_assume(0 < m && m < 10000);
-  int m0 = m;
   M(&m);
   if (m != 0) {
     reach_error();
