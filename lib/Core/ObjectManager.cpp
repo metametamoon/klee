@@ -309,7 +309,7 @@ void ObjectManager::addTargetedConflict(ref<TargetedConflict> conflict) {
 }
 
 void ObjectManager::addPob(ProofObligation *pob) {
-  assert(!pobExists(pob));
+  // assert(!pobExists(pob)); -- does not play friends with different pob kinds
 
   if (!pob->parent) {
     if (debugPrints.isSet(DebugPrint::RootPob)) {

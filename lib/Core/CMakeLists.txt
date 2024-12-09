@@ -43,6 +43,7 @@ add_library(kleeCore
   UserSearcher.cpp
   PdrEngine.cpp
   PdrSummary.cpp
+  RetValueExprVisitor.cpp
 )
 
 target_link_libraries(kleeCore PRIVATE

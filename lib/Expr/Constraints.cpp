@@ -372,6 +372,7 @@ ConstraintSet::independentElements() const {
 }
 
 const Path &PathConstraints::path() const { return _path; }
+Path &PathConstraints::path() { return _path; }
 
 const ExprHashMap<Path::PathIndex> &PathConstraints::indexes() const {
   return pathIndexes;

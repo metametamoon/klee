@@ -251,6 +251,7 @@ void Expr::printKind(llvm::raw_ostream &os, Kind k) {
     X(FRint);
     X(Pointer);
     X(ConstantPointer);
+    X(Variable);
 #undef X
   default:
     assert(0 && "invalid kind");

@@ -801,6 +801,9 @@ private:
   void executeAction(ref<SearcherAction> action);
 
   void goForward(ref<ForwardAction> action);
+  void createPobsAtReturnPoints(ExecutionState *state, ProofObligation *pob,
+                                ComposeResult composeResult,
+                                KCallBlock *kCallBlock);
   void goBackward(ref<BackwardAction> action);
   void initializeIsolated(ref<InitializeAction> action);
 

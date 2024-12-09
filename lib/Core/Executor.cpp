@@ -97,6 +97,7 @@
 #include "llvm/IR/GetElementPtrTypeIterator.h"
 #endif
 #include "PdrEngine.h"
+#include "RetValueExprVisitor.h"
 #include "fmt/color.h"
 
 #include "llvm/Support/CommandLine.h"
@@ -4930,9 +4931,6 @@ Executor::compose(const ExecutionState &state, const PathConstraints &pob,
           rewriteDependencies[simplifiedComposedConstraint].insert(
               rewriteDependencies[dep].begin(), rewriteDependencies[dep].end());
         }
-        // llvm::errs() << fmt::format("\t{}\n",
-                                    // translateToCExpr(dep).value_or("unknown"));
-        // llvm::errs() << dep->toString() << "\n\n";
       }
       // llvm::errs() << "Clean deps:\n";
       // for (auto &dep: rewriteDependencies[simplifiedComposedConstraint]) {
@@ -5074,6 +5072,11 @@ Executor::compose(const ExecutionState &state, const PathConstraints &pob,
     return result;
   }
 
+  for (auto const& [key, expr]: pob.trackers) {
+    auto [safetyConstraint, composed] = composer.compose(expr);
+    composer.state.constraints.trackers[key] = composed;
+    llvm::errs() << fmt::format("[compose] updated tracking:\n{} -> {}\n",  key, composed->toString());
+  }
   result.success = true;
   result.composed = composer.state.constraints;
   for (auto &symbolic : composer.state.symbolics) {
@@ -5117,7 +5120,8 @@ void Executor::executeAction(ref<SearcherAction> action) {
       auto prop = cast<BackwardAction>(action)->prop;
       llvm::errs() << fmt::format("[backward] state id={}; pob id={}\n",
                                   prop.state->id, prop.pob->id);
-      llvm::errs() << "[backward] Pob: "
+      llvm::errs() << "[backward] Pob: kind=" << printPobKind(prop.pob->kind)
+                   << " "
                    << prop.pob->constraints.path().toString() << "\n";
       llvm::errs() << "[backward] State: "
                    << prop.state->constraints.path().toString() << "\n";
@@ -5233,6 +5237,44 @@ void Executor::goForward(ref<ForwardAction> action) {
   }
 }
 
+void Executor::createPobsAtReturnPoints(ExecutionState *state,
+                                        ProofObligation *pob,
+                                        Executor::ComposeResult composeResult,
+                                        KCallBlock *kCallBlock) {
+  for (auto kf : kCallBlock->calledFunctions) {
+    for (auto returnBlock : kf->returnKBlocks) {
+      auto callPob = ProofObligation::create(pob, state, composeResult.composed,
+                                             composeResult.nullPointerExpr);
+      ProofObligation::propagateToReturn(callPob, kCallBlock->kcallInstruction,
+                                         returnBlock);
+      callPob->symbolics = composeResult.symbolics;
+      pobToParentState[callPob] = state->copy(); // do i need a copy here?
+      objectManager->addPob(callPob);
+      if (debugConstraints.isSet(DebugPrint::Backward)) {
+        llvm::errs() << "[backward] Pob after composition: \n";
+        llvm::errs() << fmt::format("path={}\n",
+                                    callPob->constraints.path().toString());
+        callPob->constraints.cs().dump();
+        llvm::errs() << "\n";
+      }
+    }
+  }
+}
+
+PathConstraints replaceRetValue(const klee::PathConstraints & composed) {
+  auto result = PathConstraints{};
+  result.path() = composed.path();
+  auto visitor = RetValueExprVisitor(new VariableExpr{32, "ret"});
+  for (auto &indexConstraints : composed.orderedCS()) {
+    Path::PathIndex index = indexConstraints.first;
+    for (ref<Expr> constraint : indexConstraints.second) {
+      auto replacedConstraint = visitor.visit(constraint);
+      result.addConstraint(replacedConstraint, index);
+    }
+  }
+  return result;
+}
+
 void Executor::goBackward(ref<BackwardAction> action) {
   objectManager->removePropagation(action->prop);
 
@@ -5314,26 +5356,25 @@ void Executor::goBackward(ref<BackwardAction> action) {
                                           false);
 
     } else {
-      auto returnPropagation = state->constraints.path().fromOutTransition();
-      if (returnPropagation.first) {
-        auto kCallBlock = returnPropagation.second;
-        for (auto kf : kCallBlock->calledFunctions) {
-          for (auto returnBlock : kf->returnKBlocks) {
-            auto callPob =
-                ProofObligation::create(pob, state, composeResult.composed,
-                                        composeResult.nullPointerExpr);
-            ProofObligation::propagateToReturn(
-                callPob, kCallBlock->kcallInstruction, returnBlock);
-            callPob->symbolics = composeResult.symbolics;
-            pobToParentState[callPob] = state->copy(); // do i need a copy here?
-            objectManager->addPob(callPob);
-            if (debugConstraints.isSet(DebugPrint::Backward)) {
-              llvm::errs() << "[backward] Pob after composition: \n";
-              llvm::errs() << fmt::format("path={}\n", callPob->constraints.path().toString());
-              callPob->constraints.cs().dump();
-              llvm::errs() << "\n";
-            }
-          }
+      auto [isFromFunctionCall, kCallBlock] = state->constraints.path().fromOutTransition();
+      if (isFromFunctionCall) {
+        if (pob->kind == ProofObligation::Kind::Backward) {
+          createPobsAtReturnPoints(state, pob, composeResult, kCallBlock);
+        } else if (pob->kind == ProofObligation::Kind::NonLinearPdr) {
+          auto ki = kCallBlock->kcallInstruction;
+          // inst->
+          auto newConstraints = replaceRetValue(composeResult.composed);
+          auto expr = eval(ki, 0 + 1, *state).value;
+          newConstraints.trackers["arg"] = expr;
+          auto newPob = ProofObligation::create(
+            pob, state, newConstraints, composeResult.nullPointerExpr);
+          newPob->symbolics = composeResult.symbolics;
+          objectManager->addPob(newPob);
+          auto & path = newPob->constraints.path();
+          path.first = 0;
+          // blocks.begin()-> // set first block inst to zero
+          // for (auto [expr, index]: )
+          // pob->constraints;
         }
       } else {
         auto newPob = ProofObligation::create(
@@ -5625,6 +5666,9 @@ void Executor::run(ExecutionState *initialState,
               !forCheck->initsLeftForTarget(pob->location) &&
               objectManager->propagationCount[pob] == 0) {
             if (!pob->parent) {
+              if (pob->kind != ProofObligation::Kind::Backward) {
+
+              }
               llvm::errs() << "[FALSE POSITIVE] "
                            << "FOUND FALSE POSITIVE AT: "
                            << pob->location->toString() << "\n";
@@ -5638,12 +5682,6 @@ void Executor::run(ExecutionState *initialState,
             disjunction kInstLemma = pdrSummary->getInfinityLemmasFromEdgesToPob(pob);
             pdrLog() << fmt::format("[main loop] total lemma size: {}\n",
                                         kInstLemma.elements.size());
-            if (kInstLemma.elements.size() == 0) {
-              llvm::errs() << fmt::format("What???\n entries (size={}):\n", pdrSummary->infinityLemmas.size());
-              for (auto [id, lemmas]: pdrSummary->infinityLemmas) {
-              llvm::errs() << fmt::format("\tpob id={} lemmas={}\n\n", id, disjunctionToString(lemmas));
-              }
-            }
             if (debugConstraints.isSet(DebugPrint::Lemma)) {
               llvm::errs() << fmt::format("[main loop] lemma={}\n",
                                         disjunctionToString(kInstLemma));
@@ -5678,7 +5716,7 @@ void Executor::run(ExecutionState *initialState,
                                           state->constraints.path().toString());
 
               auto composeResult = maxCompose(parent, state);
-              assert(composeResult.level == INF_LEVEL);
+              // assert(composeResult.level == INF_LEVEL);
               pdrSummary->addInfinityLemmaOnSomeEdgeToPob(
                   parent, composeResult.interpolant);
             }
@@ -7640,8 +7678,8 @@ void Executor::lazyInitializeLocalObject(ExecutionState &state, StackFrame &sf,
   ref<const MemoryObject> id = lazyInitializeObject(
       state, pointer, target, elementSize, size, true, conditionExpr,
       state.isolated || UseSymbolicSizeLazyInit);
-  state.addPointerResolution(pointer, id.get());
-  state.addPointerResolution(basePointer, id.get());
+  // state.addPointerResolution(pointer, id.get());
+  // state.addPointerResolution(basePointer, id.get());
   state.addConstraint(EqExpr::create(address, id->getBaseExpr()));
   state.addConstraint(
       Expr::createIsZero(EqExpr::create(address, Expr::createPointer(0))));
@@ -7980,7 +8018,11 @@ void Executor::runFunctionAsMain(Function *f, int argc, char **argv,
     state->symPathOS = symPathOS;
 
   for (auto pob : pobs) {
+    auto clonePob = new ProofObligation(pob->location);
+    clonePob->kind = ProofObligation::Kind::NonLinearPdr;
+    clonePob->targetForest = pob->targetForest;
     objectManager->addPob(pob);
+    objectManager->addPob(clonePob);
   }
 
   summary.readFromFile(kmodule.get());
@@ -9014,7 +9056,7 @@ void Executor::executeCheckInductiveAction(int queueDepth) {
                                     ki->toString(), queueDepth,
                                     lemmaExpr->toString());
         pdrSummary->addLemmaOnKInstruction(
-            ki, std::numeric_limits<int>::max(), lemma);
+            ki, INF_LEVEL, lemma);
       }
     }
   }

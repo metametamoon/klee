@@ -132,12 +132,14 @@ public:
   const ConstraintSet &cs() const;
   const ConstraintSet &withAssumtions(const ExprHashSet &assumptions) const;
   const Path &path() const;
+  Path &path();
   const ExprHashMap<Path::PathIndex> &indexes() const;
   const ordered_constraints_ty &orderedCS() const;
 
   PathConstraints() = default;
   PathConstraints(KInstruction *initpc) : _path(initpc) {}
 
+  std::map<std::string, ref<Expr>> trackers; // to track value changes during backward execution
 private:
   Path _path;
   constraints_ty _original;

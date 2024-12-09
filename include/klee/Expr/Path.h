@@ -124,6 +124,7 @@ public:
   Path(unsigned first, std::vector<entry> path, unsigned last,
        KInstruction *next)
       : first(first), last(last), path(path), next(next) {}
+  unsigned first = 0;
 
 private:
   // The path is stored as:
@@ -132,7 +133,6 @@ private:
 
   // Index of the first executed instruction
   // in the first basic block
-  unsigned first = 0;
   // Index of the last (current) instruction
   // in the lastly executed basic block
   unsigned last = 0;

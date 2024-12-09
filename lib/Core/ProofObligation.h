@@ -59,10 +59,16 @@ private:
     pob->targetForest = targetForest;
     pob->isTargeted_ = isTargeted_;
     children.insert(pob);
+    pob->kind = kind;
     return pob;
   }
 
 public:
+  enum class Kind {
+    Backward,
+    NonLinearPdr,
+  };
+  Kind kind = Kind::Backward;
   std::uint32_t id;
   ProofObligation *parent;
   ProofObligation *root;
@@ -86,6 +92,13 @@ private:
 };
 
 using pobs_ty = std::set<ProofObligation *, ProofObligationIDCompare>;
+inline std::string printPobKind(ProofObligation::Kind kind) {
+  if (kind == ProofObligation::Kind::Backward) {
+    return "Backward";
+  } else {
+    return "NonLinearPdr";
+  }
+}
 
 } // namespace klee
 
