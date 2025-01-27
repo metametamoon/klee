@@ -19,16 +19,7 @@ int main() {
   int m;
   klee_make_symbolic(&m, sizeof(m), "m");
   klee_assume(m != 0);
-  int n = 3;
-  int toggle;
-  klee_make_symbolic(&toggle, sizeof(toggle), "toggle");
-  klee_assume(toggle == 0 || toggle == 1);
-  int* ptr;
-  if (toggle == 0) {
-    ptr = &m;
-  } else {
-    ptr = &m;
-  }
+  int* ptr = &m;
   M(ptr);
   if (m != 0) {
     reach_error();
