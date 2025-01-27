@@ -58,14 +58,14 @@ bool ComposeHelper::tryResolveAddress(ExecutionState &state,
   result.first = guard;
   if (resolvedMemoryObjects.size() > 0) {
     state.assumptions.insert(guard);
-    ref<Expr> resultAddress =
-        resolvedMemoryObjects.at(resolveConditions.size() - 1)->getBaseExpr();
+    ref<PointerExpr> resultAddress =
+        resolvedMemoryObjects.at(resolveConditions.size() - 1)->getBasePointer();
 
     for (unsigned int i = 0; i < resolveConditions.size(); ++i) {
       unsigned int index = resolveConditions.size() - 1 - i;
       ref<const MemoryObject> mo = resolvedMemoryObjects.at(index);
       resultAddress = SelectExpr::create(resolveConditions[index],
-                                         mo->getBaseExpr(), resultAddress);
+                                         mo->getBasePointer(), resultAddress);
     }
     result.second = resultAddress;
   } else {
@@ -220,6 +220,17 @@ ExprVisitor::Action ComposeVisitor::visitConcat(const ConcatExpr &concat) {
 ExprVisitor::Action ComposeVisitor::visitSelect(const SelectExpr &select) {
   return Action::changeTo(
       processSelect(select.cond, select.trueExpr, select.falseExpr));
+}
+
+ExprVisitor::Action
+ComposeVisitor::visitPointer(const PointerExpr &pointerExpr) {
+  return Action::changeTo(processPointer(pointerExpr.base, pointerExpr.value));
+}
+
+ref<Expr> ComposeVisitor::processPointer(ref<Expr> base, ref<Expr> value) {
+  auto trueBase = visit(base)->getValue();
+  auto trueValue = visit(value)->getValue();
+  return PointerExpr::create(trueBase, trueValue);
 }
 
 ref<ObjectState> ComposeVisitor::shareUpdates(ref<ObjectState> os,
