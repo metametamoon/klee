@@ -4870,6 +4870,10 @@ ref<Expr> Executor::fillSymbolicSizeConstantAddress(
   return Expr::createTempRead(newArray, Context::get().getPointerWidth());
 }
 
+namespace klee {
+  extern llvm::cl::opt<unsigned> LemmaUpdateTicks;
+}
+
 Executor::ComposeResult
 Executor::compose(const ExecutionState &state, const PathConstraints &pob,
                   ref<Expr> nullPointerExpr,
@@ -4887,24 +4891,20 @@ Executor::compose(const ExecutionState &state, const PathConstraints &pob,
   // validity core
   auto lemmaVectored = pdrSummary->getLemmasFromKInstruction(
       state.initPC.operator KInstruction *())[INF_LEVEL];
-  for (auto disjunct: lemmaVectored) {
-    llvm::errs() << fmt::format("Pretty inf level lemma: {}\n", disjunctionToCExpr(disjunct, false));
-  }
   auto lemma = cnfToExpr(lemmaVectored);
-  llvm::errs() << fmt::format("Inf level lemma: \n{}\n\n", lemma->toString());
   bool mayBeTrue = false;
-  solver->mayBeTrue(composer.state.constraints.cs(), lemma, mayBeTrue,
-                    composer.state.queryMetaData);
-  if (!mayBeTrue) {
-    result.success = false;
-    if (maxComposeLevel != nullptr) {
-      *maxComposeLevel = INF_LEVEL;
+  if (LemmaUpdateTicks > 0) {
+    solver->mayBeTrue(composer.state.constraints.cs(), lemma, mayBeTrue,
+                      composer.state.queryMetaData);
+    if (!mayBeTrue) {
+      result.success = false;
+      if (maxComposeLevel != nullptr) {
+        *maxComposeLevel = INF_LEVEL;
+      }
+      return result;
     }
-    return result;
+    composer.state.constraints.addConstraint(lemma, Path::PathIndex{0, 0});
   }
-
-  auto added =
-      composer.state.constraints.addConstraint(lemma, Path::PathIndex{0, 0});
   auto rewriteDependencies = ExprHashMap<ExprHashSet>();
   for (auto &indexConstraints : pob.orderedCS()) {
     Path::PathIndex index = indexConstraints.first;
@@ -4930,9 +4930,6 @@ Executor::compose(const ExecutionState &state, const PathConstraints &pob,
           rewriteDependencies[simplifiedComposedConstraint].insert(
               rewriteDependencies[dep].begin(), rewriteDependencies[dep].end());
         }
-        // llvm::errs() << fmt::format("\t{}\n",
-                                    // translateToCExpr(dep).value_or("unknown"));
-        // llvm::errs() << dep->toString() << "\n\n";
       }
       // llvm::errs() << "Clean deps:\n";
       // for (auto &dep: rewriteDependencies[simplifiedComposedConstraint]) {
