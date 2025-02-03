@@ -375,6 +375,9 @@ public:
   }
   bool empty() const override { return nonDefaultValuesCount == 0; }
   void set(size_t key, const ValueType &value) override {
+    if (key >= storageSize) {
+      return;
+    }
     bool wasDefault = Eq()(storage[key], defaultValue);
     bool newDefault = Eq()(value, defaultValue);
     if (wasDefault && !newDefault) {

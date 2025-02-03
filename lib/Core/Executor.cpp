@@ -7688,6 +7688,11 @@ void Executor::lazyInitializeLocalObject(ExecutionState &state, StackFrame &sf,
   }
   RefObjectPair op = state.addressSpace.findOrLazyInitializeObject(id.get());
   state.addressSpace.bindObject(op.first, op.second.get());
+  for (auto localObject: state.localObjects) {
+    auto localObjectAddress = localObject->getBaseExpr();
+    state.constraints.addConstraint(Expr::createIsZero(EqExpr::create(id->getBaseExpr(), localObjectAddress)));
+  }
+  state.localObjects.insert(op.first);
 }
 
 void Executor::lazyInitializeLocalObject(ExecutionState &state,
@@ -8838,9 +8843,9 @@ void Executor::executeNodeLemmaUpdateAction(ProofObligation *pob,
   if (pob == nullptr) {
     return;
   }
-  pdrLog() << fmt::format("[executor:lemmaUpdateAction] pob's location={}\n",
+  pdrLog() << fmt::format("[executor:lemmaUpdateAction] pob location={}\n",
                           pob->location->toString());
-  pdrLog() << fmt::format("[executor:lemmaUpdateAction] pob's path={}\n",
+  pdrLog() << fmt::format("[executor:lemmaUpdateAction] pob path={}\n",
                           pob->constraints.path().toString());
   int infinity = INF_LEVEL;
   int minLevel = infinity;
@@ -8880,7 +8885,7 @@ void Executor::executeNodeLemmaUpdateAction(ProofObligation *pob,
     pdrLog() << fmt::format(
         "{}also considering infinity lemma on edge to the pob\n",
         logPrefixWithSpace);
-    pdrLog() << fmt::format("\tlemma={}", lemma->toString());
+    pdrLog() << fmt::format("\tlemma={}\n", lemma->toString());
   }
   auto nextStateInitPC = pob->location->getBlock()->getFirstInstruction();
   if (pob->parent != nullptr) {
@@ -8970,7 +8975,7 @@ ref<CodeLocation> Executor::locationOf(const ExecutionState &state) const {
                                 state->constraints.path().toString());
     llvm::errs() << fmt::format("\tpob: {}\n",
                                 pob->constraints.path().toString());
-    llvm::errs() << fmt::format("\tlevel: {}\n", currentComposeLevel);
+    llvm::errs() << fmt::format("\tlevel: {}\n", levelToString(currentComposeLevel));
     llvm::errs() << fmt::format(
         "\tinterpolant:\n\t{}\n",
         disjunctionToString(disjunction{result.conflict.core}));
@@ -9014,7 +9019,7 @@ void Executor::executeCheckInductiveAction(int queueDepth) {
   if (queueDepth < 3) {
     return; // play it safe
   }
-  pdrLog() << "[executeCheckInductive] called CheckInductive!\n";
+  pdrLog() << fmt::format("[executeCheckInductive] checking inductiveness at depth {}!\n", queueDepth);
 
   bool lastLevelInductive = true;
   for (int level = 0; level < queueDepth; ++level) {
@@ -9027,10 +9032,11 @@ void Executor::executeCheckInductiveAction(int queueDepth) {
         pdrLog() << fmt::format(
             "[executeCheckInductive] {} states found\n", states.size());
         auto minEdgeLevel = calculateMinEdgeLevel(level, &pob, states);
-        if (minEdgeLevel + 1 > level) {
+        int updatedLemmaLevel = saturatingInc(minEdgeLevel);
+        if (updatedLemmaLevel > level) {
           pdrLog() << fmt::format(
-              "[executeCheckInductive] lemma has upped its level!\n");
-          pdrSummary->kinstructionLemmas[ki][minEdgeLevel + 1].insert(
+              "[executeCheckInductive] lemma has upped its level to {}\n", updatedLemmaLevel);
+          pdrSummary->kinstructionLemmas[ki][updatedLemmaLevel].insert(
               lemma);
           // is this safe?
         } else {

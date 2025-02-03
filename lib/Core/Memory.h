@@ -143,6 +143,9 @@ public:
   ref<Expr> getOffsetExpr(ref<PointerExpr> pointer) const {
     return SubExpr::create(pointer->getValue(), getBaseExpr());
   }
+  ref<PointerExpr> getBasePointer() const {
+    return PointerExpr::create(getBaseExpr(), getBaseExpr());
+  }
 
   ref<Expr> getBoundsCheckOffset(ref<Expr> offset) const {
     ref<Expr> isZeroSizeExpr =

@@ -253,19 +253,23 @@ void ObjectState::write8(ref<Expr> offset, ref<Expr> value) {
   assert(!isa<ConstantExpr>(offset) &&
          "constant offset passed to symbolic write8");
 
-  if (ref<ConstantExpr> sizeExpr =
-          dyn_cast<ConstantExpr>(object->getSizeExpr())) {
-    auto moSize = sizeExpr->getZExtValue();
-    if (object && moSize > 4096) {
-      std::string allocInfo = object->getAllocInfo();
-      klee_warning_once(nullptr,
-                        "Symbolic memory access will send the following array "
-                        "array of %" PRId64 " bytes to "
-                        "the constraint solver -- large symbolic arrays may "
-                        "cause significant "
-                        "performance issues: %s",
-                        moSize, allocInfo.c_str());
+  if (object) {
+    if (ref<ConstantExpr> sizeExpr =
+            dyn_cast<ConstantExpr>(object->getSizeExpr())) {
+      auto moSize = sizeExpr->getZExtValue();
+      if (moSize > 4096) {
+        std::string allocInfo = object->getAllocInfo();
+        klee_warning_once(
+            nullptr,
+            "Symbolic memory access will send the following array "
+            "array of %" PRId64 " bytes to "
+            "the constraint solver -- large symbolic arrays may "
+            "cause significant "
+            "performance issues: %s",
+            moSize, allocInfo.c_str());
+      }
     }
+    
   }
 
   if (auto pointer = dyn_cast<PointerExpr>(value)) {
