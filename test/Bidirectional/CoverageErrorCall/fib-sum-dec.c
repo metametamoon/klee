@@ -2,7 +2,7 @@
 
 // RUN: %clang %s -emit-llvm %O0opt -c -fno-discard-value-names -o %t.bc
 // RUN: rm -rf %t.klee-out
-// RUN: %klee --output-dir=%t.klee-out --execution-mode=bidirectional --max-propagations=3 --max-stack-frames=4 --initialize-in-join-blocks --tmp-skip-fns-in-init=false --function-call-reproduce=reach_error --skip-not-lazy-initialized --skip-not-symbolic-objects --debug-log=rootpob,backward,conflict,closepob,reached,init %t.bc 2> %t.log
+// RUN: %klee --output-dir=%t.klee-out --execution-mode=bidirectional --max-propagations=3 --max-stack-frames=4 --initialize-in-join-blocks --tmp-skip-fns-in-init=false --function-call-reproduce=reach_error --skip-not-lazy-initialized --skip-not-symbolic-objects --debug-log=rootpob,backward,conflict,closepob,reached,init --linear-pdr-ticks=0 %t.bc 2> %t.log
 // RUN: FileCheck %s -input-file=%t.log
 // RUN: sed -n '/\[pob\]/,$p' %t.log | sed -n '1,/KLEE\: done\: newly/ p' > %t.log.tail
 // RUN: diff %t.log.tail %s.good
