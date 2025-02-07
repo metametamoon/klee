@@ -266,14 +266,14 @@ ref<Expr> ComposeVisitor::processRead(const Array *root,
   // 2. An ObjectState that expresses some memory object.
   // 3. A resolution list with resolution conditions that express a set
   //    of objects this array might correspond to after composition.
-  if (false) {
+  if (composedArrays.count(root) == 0) {
     composedArray = composedArrays.at(root);
   } else {
     switch (root->source->getKind()) {
     case SymbolicSource::Kind::Argument:
     case SymbolicSource::Kind::Instruction: {
       composedArray =
-          helper.fillValue(state, cast<ValueSource>(root->source), arraySize);
+         helper.fillValue(state, cast<ValueSource>(root->source), arraySize);
       break;
     }
     case SymbolicSource::Kind::Uninitialized: {
