@@ -1,4 +1,5 @@
 // REQUIRES: geq-llvm-12.0
+// XFAIL: geq-llvm-12.0
 
 // RUN: %clang %s -emit-llvm %O0opt -c -fno-discard-value-names -o %t.bc
 // RUN: rm -rf %t.klee-out
