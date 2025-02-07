@@ -68,18 +68,16 @@ void PdrSummary::addInfinityLemmaOnSomeEdgeToPob(ProofObligation *pob,
   // assert(infinityLemmas.size() > 1); - maybe 'false'
 }
 
-void PdrSummary::addLemmaOnKInstruction(KInstruction *,
-                                        [[maybe_unused]] int level,
-                                        const disjunction &) {
-  // temporary to block
-  // if (debugConstraints.isSet(DebugPrint::Lemma)) {
-  //   llvm::errs() << logPrefixWithSpace
-  //                << fmt::format("Added lemma at ki={} level={}\n",
-  //                               ki->toString(), levelToString(level));
-  //   llvm::errs() << fmt::format("{}Lemma={}\n", logPrefixWithSpace,
-  //                               disjunctionToString(lemma));
-  // }
-  // kinstructionLemmas[ki][level].insert(lemma);
+void PdrSummary::addLemmaOnKInstruction(KInstruction *ki, int level,
+                                        const disjunction &lemma) {
+  if (debugConstraints.isSet(DebugPrint::Lemma)) {
+    llvm::errs() << logPrefixWithSpace
+                 << fmt::format("Added lemma at ki={} level={}\n",
+                                ki->toString(), levelToString(level));
+    llvm::errs() << fmt::format("{}Lemma={}\n", logPrefixWithSpace,
+                                disjunctionToString(lemma));
+  }
+  kinstructionLemmas[ki][level].insert(lemma);
 }
 
 std::map<int, cnf> PdrSummary::getLemmasFromKInstruction(KInstruction *ki) {

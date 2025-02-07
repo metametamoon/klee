@@ -184,6 +184,8 @@ cl::opt<size_t> StackCopySizeMemoryCheckThreshold(
              "copied"),
     cl::cat(ExecCat));
 
+cl::opt<bool> NonLinearPdr("non-linear-pdr", cl::init(false), cl::cat(ExecCat));
+
 namespace {
 
 /*** Lazy initialization options ***/
@@ -8025,11 +8027,13 @@ void Executor::runFunctionAsMain(Function *f, int argc, char **argv,
     state->symPathOS = symPathOS;
 
   for (auto pob : pobs) {
-    auto clonePob = new ProofObligation(pob->location);
-    clonePob->kind = ProofObligation::Kind::NonLinearPdr;
-    clonePob->targetForest = pob->targetForest;
+    if (NonLinearPdr) {
+      auto clonePob = new ProofObligation(pob->location);
+      clonePob->kind = ProofObligation::Kind::NonLinearPdr;
+      clonePob->targetForest = pob->targetForest;
+      objectManager->addPob(clonePob);
+    }
     objectManager->addPob(pob);
-    objectManager->addPob(clonePob);
   }
 
   summary.readFromFile(kmodule.get());
