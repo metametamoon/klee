@@ -266,7 +266,7 @@ ref<Expr> ComposeVisitor::processRead(const Array *root,
   // 2. An ObjectState that expresses some memory object.
   // 3. A resolution list with resolution conditions that express a set
   //    of objects this array might correspond to after composition.
-  if (composedArrays.count(root)) {
+  if (false) {
     composedArray = composedArrays.at(root);
   } else {
     switch (root->source->getKind()) {
