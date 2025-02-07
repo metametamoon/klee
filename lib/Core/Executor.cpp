@@ -7688,11 +7688,13 @@ void Executor::lazyInitializeLocalObject(ExecutionState &state, StackFrame &sf,
   }
   RefObjectPair op = state.addressSpace.findOrLazyInitializeObject(id.get());
   state.addressSpace.bindObject(op.first, op.second.get());
-  for (auto localObject: state.localObjects) {
-    auto localObjectAddress = localObject->getBaseExpr();
-    state.constraints.addConstraint(Expr::createIsZero(EqExpr::create(id->getBaseExpr(), localObjectAddress)));
+  if (state.localObjects.count(id) == 0) {
+    for (auto localObject: state.localObjects) {
+      auto localObjectAddress = localObject->getBaseExpr();
+      state.constraints.addConstraint(Expr::createIsZero(EqExpr::create(id->getBaseExpr(), localObjectAddress)));
+    }
+    state.localObjects.insert(id);
   }
-  state.localObjects.insert(op.first);
 }
 
 void Executor::lazyInitializeLocalObject(ExecutionState &state,
