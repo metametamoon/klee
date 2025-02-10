@@ -804,6 +804,9 @@ private:
   void createPobsAtReturnPoints(ExecutionState *state, ProofObligation *pob,
                                 ComposeResult composeResult,
                                 KCallBlock *kCallBlock);
+  void processSuccessfulComposition(ExecutionState *state,
+                                     ProofObligation *pob,
+                                     Executor::ComposeResult composeResult);
   void goBackward(ref<BackwardAction> action);
   void initializeIsolated(ref<InitializeAction> action);
 

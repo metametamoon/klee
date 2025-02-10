@@ -5263,7 +5263,7 @@ void Executor::createPobsAtReturnPoints(ExecutionState *state,
   }
 }
 
-PathConstraints replaceRetValue(const klee::PathConstraints & composed) {
+PathConstraints replaceRetValue(const klee::PathConstraints &composed) {
   auto result = PathConstraints{};
   result.path() = composed.path();
   auto visitor = RetValueExprVisitor(new VariableExpr{32, "ret"});
@@ -5277,6 +5277,108 @@ PathConstraints replaceRetValue(const klee::PathConstraints & composed) {
   return result;
 }
 
+void Executor::processSuccessfulComposition(
+    ExecutionState *state, ProofObligation *pob,
+    Executor::ComposeResult composeResult) {
+  if (debugPrints.isSet(DebugPrint::Backward)) {
+    llvm::errs() << "[backward] Composition sucessful.\n";
+  }
+  if (state->finalComposing) {
+    if (auto error = dyn_cast<ReproduceErrorTarget>(pob->root->location)) {
+      if (error->isThatError(klee::MustBeNullPointerException) &&
+          !error->isThatError(klee::MayBeNullPointerException)) {
+        ref<Expr> result = composeResult.nullPointerExpr;
+        solver->setTimeout(coreSolverTimeout);
+        solver->tryGetUnique(composeResult.composed.cs(),
+                             composeResult.nullPointerExpr, result,
+                             state->queryMetaData);
+        solver->setTimeout(time::Span());
+        if (!isReadFromSymbolicArray(result)) {
+          if (debugPrints.isSet(DebugPrint::ClosePob)) {
+            llvm::errs() << "[close pob] Pob closed due to backward reach at: "
+                         << pob->root->location->toString() << "\n";
+          }
+          llvm::errs() << "[TRUE POSITIVE] FOUND TRUE POSITIVE AT: "
+                       << pob->root->location->toString() << "\n";
+          pdrSummary->dumpInfinityLevelLemmas(
+              interpreterHandler->getOutputFilename("invs.json"));
+          closeProofObligation(pob);
+        }
+      } else {
+        if (debugPrints.isSet(DebugPrint::ClosePob)) {
+          llvm::errs() << "[close pob] Pob closed due to backward reach at: "
+                       << pob->root->location->toString() << "\n";
+        }
+        llvm::errs() << "[TRUE POSITIVE] FOUND TRUE POSITIVE AT: "
+                     << pob->root->location->toString() << "\n";
+        pdrSummary->dumpInfinityLevelLemmas(
+            interpreterHandler->getOutputFilename("invs.json"));
+        closeProofObligation(pob);
+      }
+    } else {
+      if (NonLinearPdr && pob->kind == ProofObligation::Kind::NonLinearPdr) {
+        // a stub implementation; we want to treat non-linear pobs differently
+        closeProofObligation(pob);
+        return;
+      }
+      if (debugPrints.isSet(DebugPrint::ClosePob)) {
+        llvm::errs() << "[close pob] Pob closed due to backward reach at: "
+                     << pob->root->location->toString() << "\n";
+      }
+      llvm::errs() << "[TRUE POSITIVE] FOUND TRUE POSITIVE AT: "
+                   << pob->root->location->toString() << "\n";
+      pdrSummary->dumpInfinityLevelLemmas(
+          interpreterHandler->getOutputFilename("invs.json"));
+      closeProofObligation(pob);
+    }
+
+    klee_warning("GENERATING TEST FROM PROOF OBLIGATION. GENERATION FOR "
+                 "PATHS WITH LAZY INITIALIZATION IS NOT SUPPORTED.");
+
+    auto state = ExecutionState();
+    state.constraints = pob->constraints;
+    state.symbolics = pob->symbolics;
+    interpreterHandler->processTestCase(state, "backward", "reachable.err",
+                                        false);
+
+  } else {
+    auto [isFromFunctionCall, kCallBlock] =
+        state->constraints.path().fromOutTransition();
+    if (isFromFunctionCall) {
+      if (pob->kind == ProofObligation::Kind::Backward) {
+        createPobsAtReturnPoints(state, pob, composeResult, kCallBlock);
+      } else if (pob->kind == ProofObligation::Kind::NonLinearPdr) {
+        auto ki = kCallBlock->kcallInstruction;
+        // inst->
+        auto newConstraints = replaceRetValue(composeResult.composed);
+        auto expr = eval(ki, 0 + 1, *state).value;
+        newConstraints.trackers["arg"] = expr;
+        auto newPob = ProofObligation::create(pob, state, newConstraints,
+                                              composeResult.nullPointerExpr);
+        newPob->symbolics = composeResult.symbolics;
+        objectManager->addPob(newPob);
+        auto &path = newPob->constraints.path();
+        path.first = 0;
+        // for (auto [expr, index]: )
+        // pob->constraints;
+      }
+    } else {
+      auto newPob = ProofObligation::create(pob, state, composeResult.composed,
+                                            composeResult.nullPointerExpr);
+      newPob->symbolics = composeResult.symbolics;
+      pobToParentState[newPob] = state->copy(); // do i need a copy here?
+      objectManager->addPob(newPob);
+      if (debugConstraints.isSet(DebugPrint::Backward)) {
+        llvm::errs() << "[backward] Pob after composition: \n";
+        llvm::errs() << fmt::format("path={}\n",
+                                    newPob->constraints.path().toString());
+        newPob->constraints.cs().dump();
+        llvm::errs() << "\n";
+      }
+    }
+  }
+}
+
 void Executor::goBackward(ref<BackwardAction> action) {
   objectManager->removePropagation(action->prop);
 
@@ -5284,9 +5386,6 @@ void Executor::goBackward(ref<BackwardAction> action) {
   ProofObligation *pob = action->prop.pob;
 
   objectManager->setContextState(state);
-
-  // Conflict::core_ty conflictCore;
-  // ExprHashMap<ref<Expr>> rebuildMap;
 
   Executor::ComposeResult composeResult;
   if (canReachSomeTargetThroughState(*pob, *state)) {
@@ -5298,100 +5397,24 @@ void Executor::goBackward(ref<BackwardAction> action) {
     composeResult.success = false;
   }
 
-  // ProofObligation *newPob = new ProofObligation(state->initPC->parent, pob);
-  // bool success = Composer::tryRebuild(*pob, *state, *newPob, conflictCore,
-  // rebuildMap); timers.invoke();
-
+  auto isFromFunctionStart = [](ExecutionState const& state) {
+    auto statePath = state.constraints.path();
+    if (!statePath.getBlocks().empty()) {
+      auto firstPathBlock = (statePath.getBlocks()[0]).block;
+      return
+          firstPathBlock == firstPathBlock->parent->entryKBlock;
+    }
+    return false;
+  };
+  bool isFromTheFunctionStart = isFromFunctionStart(*state);
+  llvm::errs() << fmt::format("[backward] path {} is from start:{}\n",
+                              state->constraints.path().toString(),
+                              isFromTheFunctionStart);
+  if (NonLinearPdr && pob->kind == ProofObligation::Kind::Backward) {
+    return;
+  }
   if (composeResult.success) {
-    if (debugPrints.isSet(DebugPrint::Backward)) {
-      llvm::errs() << "[backward] Composition sucessful.\n";
-    }
-    if (state->finalComposing) {
-      if (auto error = dyn_cast<ReproduceErrorTarget>(pob->root->location)) {
-        if (error->isThatError(klee::MustBeNullPointerException) &&
-            !error->isThatError(klee::MayBeNullPointerException)) {
-          ref<Expr> result = composeResult.nullPointerExpr;
-          solver->setTimeout(coreSolverTimeout);
-          solver->tryGetUnique(composeResult.composed.cs(),
-                               composeResult.nullPointerExpr, result,
-                               state->queryMetaData);
-          solver->setTimeout(time::Span());
-          if (!isReadFromSymbolicArray(result)) {
-            if (debugPrints.isSet(DebugPrint::ClosePob)) {
-              llvm::errs()
-                  << "[close pob] Pob closed due to backward reach at: "
-                  << pob->root->location->toString() << "\n";
-            }
-            llvm::errs() << "[TRUE POSITIVE] FOUND TRUE POSITIVE AT: "
-                         << pob->root->location->toString() << "\n";
-            pdrSummary->dumpInfinityLevelLemmas(interpreterHandler->getOutputFilename("invs.json"));
-            closeProofObligation(pob);
-          }
-        } else {
-          if (debugPrints.isSet(DebugPrint::ClosePob)) {
-            llvm::errs() << "[close pob] Pob closed due to backward reach at: "
-                         << pob->root->location->toString() << "\n";
-          }
-          llvm::errs() << "[TRUE POSITIVE] FOUND TRUE POSITIVE AT: "
-                       << pob->root->location->toString() << "\n";
-          pdrSummary->dumpInfinityLevelLemmas(interpreterHandler->getOutputFilename("invs.json"));
-          closeProofObligation(pob);
-        }
-      } else {
-        if (debugPrints.isSet(DebugPrint::ClosePob)) {
-          llvm::errs() << "[close pob] Pob closed due to backward reach at: "
-                       << pob->root->location->toString() << "\n";
-        }
-        llvm::errs() << "[TRUE POSITIVE] FOUND TRUE POSITIVE AT: "
-                     << pob->root->location->toString() << "\n";
-        pdrSummary->dumpInfinityLevelLemmas(interpreterHandler->getOutputFilename("invs.json"));
-        closeProofObligation(pob);
-      }
-
-      klee_warning("GENERATING TEST FROM PROOF OBLIGATION. GENERATION FOR "
-                   "PATHS WITH LAZY INITIALIZATION IS NOT SUPPORTED.");
-
-      auto state = ExecutionState();
-      state.constraints = pob->constraints;
-      state.symbolics = pob->symbolics;
-      interpreterHandler->processTestCase(state, "backward", "reachable.err",
-                                          false);
-
-    } else {
-      auto [isFromFunctionCall, kCallBlock] = state->constraints.path().fromOutTransition();
-      if (isFromFunctionCall) {
-        if (pob->kind == ProofObligation::Kind::Backward) {
-          createPobsAtReturnPoints(state, pob, composeResult, kCallBlock);
-        } else if (pob->kind == ProofObligation::Kind::NonLinearPdr) {
-          auto ki = kCallBlock->kcallInstruction;
-          // inst->
-          auto newConstraints = replaceRetValue(composeResult.composed);
-          auto expr = eval(ki, 0 + 1, *state).value;
-          newConstraints.trackers["arg"] = expr;
-          auto newPob = ProofObligation::create(
-            pob, state, newConstraints, composeResult.nullPointerExpr);
-          newPob->symbolics = composeResult.symbolics;
-          objectManager->addPob(newPob);
-          auto & path = newPob->constraints.path();
-          path.first = 0;
-          // blocks.begin()-> // set first block inst to zero
-          // for (auto [expr, index]: )
-          // pob->constraints;
-        }
-      } else {
-        auto newPob = ProofObligation::create(
-            pob, state, composeResult.composed, composeResult.nullPointerExpr);
-        newPob->symbolics = composeResult.symbolics;
-        pobToParentState[newPob] = state->copy(); // do i need a copy here?
-        objectManager->addPob(newPob);
-        if (debugConstraints.isSet(DebugPrint::Backward)) {
-          llvm::errs() << "[backward] Pob after composition: \n";
-          llvm::errs() << fmt::format("path={}\n", newPob->constraints.path().toString());
-          newPob->constraints.cs().dump();
-          llvm::errs() << "\n";
-        }
-      }
-    }
+    processSuccessfulComposition(state, pob, composeResult);
   } else {
     if (debugPrints.isSet(DebugPrint::Backward)) {
       llvm::errs() << "[backward] Composition failed.\n";
@@ -5668,13 +5691,14 @@ void Executor::run(ExecutionState *initialState,
               !forCheck->initsLeftForTarget(pob->location) &&
               objectManager->propagationCount[pob] == 0) {
             if (!pob->parent) {
-              if (pob->kind != ProofObligation::Kind::Backward) {
-
+              if (pob->kind == ProofObligation::Kind::Backward) {
+                llvm::errs()
+                    << "[FALSE POSITIVE] "
+                    << "FOUND FALSE POSITIVE AT: " << pob->location->toString()
+                    << "\n";
+                pdrSummary->dumpInfinityLevelLemmas(
+                    interpreterHandler->getOutputFilename("invs.json"));
               }
-              llvm::errs() << "[FALSE POSITIVE] "
-                           << "FOUND FALSE POSITIVE AT: "
-                           << pob->location->toString() << "\n";
-              pdrSummary->dumpInfinityLevelLemmas(interpreterHandler->getOutputFilename("invs.json"));
             }
             if (debugPrints.isSet(DebugPrint::Backward)) {
               llvm::errs() << fmt::format(
@@ -8032,8 +8056,9 @@ void Executor::runFunctionAsMain(Function *f, int argc, char **argv,
       clonePob->kind = ProofObligation::Kind::NonLinearPdr;
       clonePob->targetForest = pob->targetForest;
       objectManager->addPob(clonePob);
+    } else {
+      objectManager->addPob(pob);
     }
-    objectManager->addPob(pob);
   }
 
   summary.readFromFile(kmodule.get());
