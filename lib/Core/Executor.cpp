@@ -4696,14 +4696,42 @@ void Executor::doDumpObjects() {
   objectManager->updateSubscribers();
 }
 
+bool isReturnValueFromInitBlock(const ExecutionState &state,
+                              const llvm::Value *value) {
+  return state.initPC->parent->getKBlockType() == KBlockType::Call &&
+         state.initPC == state.initPC->parent->getLastInstruction() &&
+         state.initPC->parent->getFirstInstruction()->inst() == value;
+}
+
+bool matchesCallSite(ref<ValueSource> valueSource, ExecutionState &state) {
+  if (valueSource->getKind() != SymbolicSource::Instruction)
+    return false;
+  const Instruction *inst = cast<Instruction>(&valueSource->value());
+  if (!isa<CallInst>(inst) && !isa<InvokeInst>(inst)) {
+    return false;
+  }
+  const CallBase &cs = cast<CallBase>(*inst);
+  Value *fp = cs.getCalledOperand();
+  Function *calledf = getTargetFunction(fp);
+  KFunction *lastkf =
+      state.pc ? state.pc->parent->parent : state.prevPC->parent->parent;
+  KBlock *pckb = state.pc ? state.pc->parent : state.prevPC->parent;
+  bool isFinalPCKB =
+      std::find(lastkf->returnKBlocks.begin(), lastkf->returnKBlocks.end(),
+                pckb) != lastkf->returnKBlocks.end();
+  return isFinalPCKB && calledf == lastkf->function();
+}
+
 ref<Expr> Executor::fillValue(ExecutionState &state,
                               ref<ValueSource> valueSource, ref<Expr> size) {
   assert(isa<ConstantExpr>(size));
   auto concreteSize = dyn_cast<ConstantExpr>(size)->getZExtValue();
   int diffLevel = -state.stack.stackBalance();
-  if ((valueSource->index >= 0 && diffLevel > 0) ||
-      (valueSource->index > 0 && valueSource->index + diffLevel > 0)) {
-    int reindex = valueSource->index + diffLevel;
+    // negation of the call site condition
+    // reindex != 1 or callsite does not match:
+  int reindex = valueSource->index + diffLevel;
+  bool isReadFromReturnValue = reindex == 1 && matchesCallSite(valueSource, state);
+  if (!isReadFromReturnValue && reindex > 0) {
     const Array *newArray =
         makeArray(size, SourceBuilder::value(valueSource->value(), reindex,
                                              kmodule.get()));
@@ -4723,22 +4751,12 @@ ref<Expr> Executor::fillValue(ExecutionState &state,
   case SymbolicSource::Kind::Instruction: {
     const Instruction *inst = cast<Instruction>(&valueSource->value());
     const KInstruction *ki = getKInst(const_cast<Instruction *>(inst));
-    if (valueSource->index == -1) {
+    if (isReadFromReturnValue) {
 
       assert(isa<CallInst>(inst) || isa<InvokeInst>(inst));
       KFunction *kf = ki->parent->parent;
 
       if (state.stack.empty()) {
-        const CallBase &cs = cast<CallBase>(*inst);
-        Value *fp = cs.getCalledOperand();
-        Function *calledf = getTargetFunction(fp);
-        KFunction *lastkf =
-            state.pc ? state.pc->parent->parent : state.prevPC->parent->parent;
-        KBlock *pckb = state.pc ? state.pc->parent : state.prevPC->parent;
-        bool isFinalPCKB = std::find(lastkf->returnKBlocks.begin(),
-                                     lastkf->returnKBlocks.end(),
-                                     pckb) != lastkf->returnKBlocks.end();
-        assert(isFinalPCKB && calledf == lastkf->function());
         result = state.returnValue;
       } else {
         const StackFrame &frame = state.stack.valueStack().back();
@@ -7650,7 +7668,7 @@ void Executor::lazyInitializeLocalObject(ExecutionState &state, StackFrame &sf,
   if (state.localObjects.count(id) == 0) {
     for (auto localObject: state.localObjects) {
       auto localObjectAddress = localObject->getBaseExpr();
-      state.constraints.addConstraint(Expr::createIsZero(EqExpr::create(id->getBaseExpr(), localObjectAddress)));
+      state.addConstraint(Expr::createIsZero(EqExpr::create(id->getBaseExpr(), localObjectAddress)));
     }
     state.localObjects.insert(id);
   }
@@ -8009,12 +8027,7 @@ void Executor::prepareTargetedExecution(ExecutionState &initialState,
   initialState.setTargets(initialState.targetForest.getTargets());
 }
 
-bool isReturnValueFromInitBlock(const ExecutionState &state,
-                                const llvm::Value *value) {
-  return state.initPC->parent->getKBlockType() == KBlockType::Call &&
-         state.initPC == state.initPC->parent->getLastInstruction() &&
-         state.initPC->parent->getFirstInstruction()->inst() == value;
-}
+
 
 ref<Expr> Executor::makeSymbolicValue(llvm::Value *value,
                                       ExecutionState &state) {
@@ -8023,7 +8036,7 @@ ref<Expr> Executor::makeSymbolicValue(llvm::Value *value,
   auto width = kmodule->targetData->getTypeSizeInBits(value->getType());
   bool argument = (isa<Argument>(value) ? true : false);
   assert(argument || isa<Instruction>(value));
-  int index = isReturnValueFromInitBlock(state, value) ? -1 : 0;
+  int index = 0;
   auto source = argument
                     ? SourceBuilder::argument(*dyn_cast<Argument>(value), index,
                                               kmodule.get())
