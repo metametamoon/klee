@@ -2832,14 +2832,14 @@ ref<Expr> IsSubnormalExpr::either(const ref<Expr> &e0, const ref<Expr> &e1) {
 
 /***/
 
-ref<Expr> PointerExpr::create(const ref<Expr> &b, const ref<Expr> &v) {
+ref<Expr> PointerExpr::create(const ref<Expr> &b, const ref<Expr> &v, int index) {
   assert(!isa<PointerExpr>(b));
   assert(!isa<PointerExpr>(v));
   if (isa<ConstantExpr>(b) && isa<ConstantExpr>(v)) {
     return ConstantPointerExpr::create(cast<ConstantExpr>(b),
                                        cast<ConstantExpr>(v));
   } else {
-    return PointerExpr::alloc(b, v);
+    return PointerExpr::alloc(b, v, index);
   }
 }
 
@@ -2881,10 +2881,11 @@ ref<Expr> PointerExpr::create(const ref<Expr> &expr) {
 }
 
 ref<Expr> ConstantPointerExpr::create(const ref<ConstantExpr> &b,
-                                      const ref<ConstantExpr> &v) {
+                                      const ref<ConstantExpr> &v,
+                                      int index) {
   assert(!isa<PointerExpr>(b));
   assert(!isa<PointerExpr>(v));
-  return ConstantPointerExpr::alloc(b, v);
+  return ConstantPointerExpr::alloc(b, v, index);
 }
 
 #define BCREATE_P(_e_op, _op)                                                  \
