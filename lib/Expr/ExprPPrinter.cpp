@@ -285,6 +285,10 @@ private:
       printSeparator(PC, simple, indent);
       print(ep->getKid(i), PC, printConstWidth);
     }
+    if (auto PtrE = dyn_cast<PointerExpr>(ep)) {
+      printSeparator(PC, simple, indent);
+      PC << PtrE->index;
+    }
   }
 
 public:

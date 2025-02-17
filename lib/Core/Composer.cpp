@@ -224,13 +224,29 @@ ExprVisitor::Action ComposeVisitor::visitSelect(const SelectExpr &select) {
 
 ExprVisitor::Action
 ComposeVisitor::visitPointer(const PointerExpr &pointerExpr) {
-  return Action::changeTo(processPointer(pointerExpr.base, pointerExpr.value));
+  return Action::changeTo(processPointer(pointerExpr.base, pointerExpr.value, pointerExpr.index));
 }
 
-ref<Expr> ComposeVisitor::processPointer(ref<Expr> base, ref<Expr> value) {
+ExprVisitor::Action
+ComposeVisitor::visitConstantPointer(const ConstantPointerExpr &pointerExpr) {
+  return Action::changeTo(processConstantPointer(pointerExpr.getConstantBase(),
+                                                 pointerExpr.getConstantValue(),
+                                                 pointerExpr.index));
+}
+
+ref<Expr> ComposeVisitor::processConstantPointer(const ref<ConstantExpr> base,
+                                                 const ref<ConstantExpr> value,
+                                                 int index) {
+  auto newIndex = index + state.localObjectsCount;
+  return ConstantPointerExpr::create(base, value, newIndex);
+}
+
+ref<Expr> ComposeVisitor::processPointer(ref<Expr> base, ref<Expr> value,
+                                         int index) {
   auto trueBase = visit(base)->getValue();
   auto trueValue = visit(value)->getValue();
-  return PointerExpr::create(trueBase, trueValue);
+  auto newIndex = index + state.localObjectsCount;
+  return PointerExpr::create(trueBase, trueValue, newIndex);
 }
 
 ref<ObjectState> ComposeVisitor::shareUpdates(ref<ObjectState> os,
