@@ -1681,14 +1681,13 @@ public:
   static const unsigned numKids = 2;
   ref<Expr> base;
   ref<Expr> value;
-  int index;
-  static ref<Expr> alloc(const ref<Expr> &b, const ref<Expr> &v, int index) {
-    ref<Expr> r(new PointerExpr(b, v, index));
+  static ref<Expr> alloc(const ref<Expr> &b, const ref<Expr> &v) {
+    ref<Expr> r(new PointerExpr(b, v));
     r->computeHash();
     r->computeHeight();
     return r;
   }
-  static ref<Expr> create(const ref<Expr> &b, const ref<Expr> &o, int index = 0);
+  static ref<Expr> create(const ref<Expr> &b, const ref<Expr> &o);
   static ref<Expr> create(const ref<Expr> &v);
   static ref<Expr> createSymbolic(const ref<Expr> &expr,
                                   const ref<ReadExpr> &pointer,
@@ -1753,8 +1752,7 @@ public:
   ref<Expr> Not();
 
 protected:
-  PointerExpr(const ref<Expr> &b, const ref<Expr> &v, int index)
-      : base(b), value(v), index(index) {}
+  PointerExpr(const ref<Expr> &b, const ref<Expr> &v) : base(b), value(v) {}
 };
 
 class ConstantPointerExpr : public PointerExpr {
@@ -1762,14 +1760,14 @@ public:
   static const Kind kind = Expr::ConstantPointer;
   static const unsigned numKids = 2;
   static ref<ConstantPointerExpr> alloc(const ref<ConstantExpr> &b,
-                                        const ref<ConstantExpr> &o, int index) {
-    ref<ConstantPointerExpr> r = new ConstantPointerExpr(b, o, index);
+                                        const ref<ConstantExpr> &o) {
+    ref<ConstantPointerExpr> r = new ConstantPointerExpr(b, o);
     r->computeHash();
     r->computeHeight();
     return r;
   }
   static ref<Expr> create(const ref<ConstantExpr> &b,
-                          const ref<ConstantExpr> &o, int index = 0);
+                          const ref<ConstantExpr> &o);
 
   Kind getKind() const { return Expr::ConstantPointer; }
   ref<ConstantExpr> getConstantBase() const { return cast<ConstantExpr>(base); }
@@ -1786,8 +1784,8 @@ public:
   static bool classof(const ConstantPointerExpr *) { return true; }
 
 private:
-  ConstantPointerExpr(const ref<ConstantExpr> &b, const ref<ConstantExpr> &v, int index)
-      : PointerExpr(b, v, index) {}
+  ConstantPointerExpr(const ref<ConstantExpr> &b, const ref<ConstantExpr> &v)
+      : PointerExpr(b, v) {}
 };
 
 class VariableExpr: public NonConstantExpr {
