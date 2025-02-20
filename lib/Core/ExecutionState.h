@@ -405,7 +405,6 @@ public:
   // Temp: to know which multiplex path this state has taken
   KFunction *multiplexKF = nullptr;
   std::set<ref<const MemoryObject>> localObjects; // set with reads from alloca instructions
-  int localObjectsCount = 0;
 private:
   PersistentSet<ref<Target>> prevTargets_;
   PersistentSet<ref<Target>> targets_;

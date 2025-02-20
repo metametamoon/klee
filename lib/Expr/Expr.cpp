@@ -180,13 +180,6 @@ int Expr::compare(const Expr &b, ExprEquivSet &equivs) const {
   for (unsigned i = 0; i < aN; i++)
     if (int res = getKid(i)->compare(*b.getKid(i), equivs))
       return res;
-  if (auto aPtr = dyn_cast<PointerExpr>(ap)) {
-    if (auto bPtr = dyn_cast<PointerExpr>(bp)) {
-      if (int res = aPtr->index - bPtr->index) {
-        return res;
-      }
-    }
-  }
 
   equivs.insert(std::make_pair(ap, bp));
   return 0;
@@ -2472,6 +2465,13 @@ BCREATE(AShrExpr, AShr)
             tryCreateWithSiftUpSelectExpr<_e_op>(l, r, true)) {                \
       return withSiftUpSelectExpr;                                             \
     }                                                                          \
+    if (PointerExpr *pl = dyn_cast<PointerExpr>(l)) {                          \
+      if (PointerExpr *pr = dyn_cast<PointerExpr>(r))                          \
+        return pl->_op(pr);                                                    \
+      return _e_op::create(pl->getValue(), r);                                 \
+    } else if (PointerExpr *pr = dyn_cast<PointerExpr>(r)) {                   \
+      return _e_op::create(l, pr->getValue());                                 \
+    }                                                                          \
     if (ConstantExpr *cl = dyn_cast<ConstantExpr>(l)) {                        \
       if (ConstantExpr *cr = dyn_cast<ConstantExpr>(r))                        \
         return cl->_op(cr);                                                    \
@@ -2488,7 +2488,7 @@ static ref<Expr> EqExpr_create(const ref<Expr> &l, const ref<Expr> &r) {
   } else if (isa<AddExpr>(l) &&
              (cast<AddExpr>(l)->left == r || cast<AddExpr>(l)->right == r)) {
     ref<AddExpr> al = cast<AddExpr>(l);
-    if (*al->left == *r) {
+    if (al->left == r) {
       return Expr::createIsZero(al->right);
     } else {
       return Expr::createIsZero(al->left);

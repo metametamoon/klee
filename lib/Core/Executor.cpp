@@ -6425,11 +6425,10 @@ void Executor::executeAlloc(ExecutionState &state, ref<Expr> size, bool isLocal,
     MemoryObject *mo =
         allocate(state, size, isLocal, /*isGlobal=*/false, locationOf(state),
                  allocationAlignment, conditionExpr);
-    int index = state.isolated ? state.localObjectsCount++ : 0;
     if (!mo) {
-      bindLocal(target, state,
-                PointerExpr::create(Expr::createPointer(0),
-                                    Expr::createPointer(0), index));
+      bindLocal(
+          target, state,
+          PointerExpr::create(Expr::createPointer(0), Expr::createPointer(0)));
     } else {
       ref<SymbolicSource> source = nullptr;
       if (zeroMemory) {
@@ -6457,7 +6456,7 @@ void Executor::executeAlloc(ExecutionState &state, ref<Expr> size, bool isLocal,
       }
 
       state.addPointerResolution(PointerExpr::create(address, address), mo);
-      bindLocal(target, state, PointerExpr::create(address, address, index));
+      bindLocal(target, state, PointerExpr::create(address, address));
 
       if (reallocFrom) {
         os->write(reallocFrom);
