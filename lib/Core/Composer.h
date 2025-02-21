@@ -193,7 +193,11 @@ public:
     llvm::errs() << "composing: " << expr->toString() << "\n";
     ref<Expr> result = visit(expr);
     ref<Expr> safetyCondition = Expr::createTrue();
-    llvm::errs() << "composed : " << result->toString() << "\n";
+    if (result == expr) {
+      llvm::errs() << "composed: same\n";
+    } else {
+      llvm::errs() << "composed : " << result->toString() << "\n";
+    }
 
     for (auto expr : safetyConstraints) {
       safetyCondition = AndExpr::create(safetyCondition, expr);
