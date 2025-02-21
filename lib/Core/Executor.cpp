@@ -6760,8 +6760,24 @@ Executor::allocate(ExecutionState &state, ref<Expr> size, bool isLocal,
 
   /* Constant solution exists. Just return it. */
   if (arrayConstantSize && lazyInitializationSource.isNull()) {
-    MemoryObject *mo = memory->allocate(arrayConstantSize, isLocal, isGlobal,
-                                        false, allocSite, allocationAlignment);
+    MemoryObject *mo;
+    if (state.isolated) {
+      auto symbolic_source = SourceBuilder::symbolicSizeConstantAddress(
+          updateNameVersion(state, "const_arr"), allocSite->source,
+          size);
+      auto array = Array::create(
+          Expr::createPointer((Context::get().getPointerWidth()) / CHAR_BIT),
+          symbolic_source);
+      UpdateList updateList{array, ref<UpdateNode>{}};
+      auto addressExpr = Expr::createTempRead(array, Context::get().getPointerWidth());
+      mo =
+          memory->allocate(arrayConstantSize, isLocal, isGlobal, false,
+                           allocSite, allocationAlignment, Expr::createTrue(),
+                           addressExpr);
+    } else {
+      mo = memory->allocate(arrayConstantSize, isLocal, isGlobal, false, allocSite,
+                           allocationAlignment);
+    }
     if (mo && state.isGEPExpr(mo->getBaseExpr())) {
       state.gepExprBases.erase(mo->getBaseExpr());
     }
