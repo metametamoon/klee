@@ -341,7 +341,8 @@ public:
       PC << s->version << " ";
       switch (s->allocSite->getKind()) {
       case KValue::Kind::INSTRUCTION: {
-        cast<KInstruction>(s->allocSite)->getID().print(PC.getStream());
+        auto instruction = cast<KInstruction>(s->allocSite);
+        PC << "[" << instruction->toString() << "]";
         break;
       }
       case KValue::Kind::GLOBAL_VARIABLE: {

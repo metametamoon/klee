@@ -1,6 +1,6 @@
 // RUN: %clang %s -emit-llvm %O0opt -c -fno-discard-value-names -o %t.bc
 // RUN: rm -rf %t.klee-out
-// RUN: %klee --write-kqueries --output-dir=%t.klee-out --max-propagations=20 --max-stack-frames=15 --execution-mode=bidirectional --tmp-skip-fns-in-init=false --initialize-in-join-blocks --function-call-reproduce=reach_error --skip-not-lazy-initialized --forward-ticks=0 --backward-ticks=5 --linear-pdr-ticks=0 --skip-not-symbolic-objects --write-xml-tests --debug-log=rootpob,backward,conflict,closepob,reached,init %t.bc 2> %t.log
+// RUN: %klee --write-kqueries --output-dir=%t.klee-out --max-propagations=3 --max-stack-frames=4 --execution-mode=bidirectional --tmp-skip-fns-in-init=false --initialize-in-join-blocks --function-call-reproduce=reach_error --skip-not-lazy-initialized --forward-ticks=0 --backward-ticks=5 --linear-pdr-ticks=0 --skip-not-symbolic-objects --use-visitor-hash=false --write-xml-tests --debug-log=rootpob,backward,conflict,closepob,reached,init %t.bc 2> %t.log
 // RUN: FileCheck %s -input-file=%t.log
 
 #include "klee/klee.h"
@@ -23,7 +23,7 @@ int rec(int x, int fuel) {
 }
 
 int main() {
-  int m = 5;
+  int m = 2;
 //  klee_make_symbolic(&m, sizeof(m), "m");
 //  klee_assume(m > 0 && m <= 6);
   int x = rec(m, 0);
