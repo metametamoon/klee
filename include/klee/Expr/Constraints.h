@@ -10,6 +10,7 @@
 #ifndef KLEE_CONSTRAINTS_H
 #define KLEE_CONSTRAINTS_H
 
+#include "../../../lib/Core/SummarizerTracker.h"
 #include "klee/ADT/Ref.h"
 
 #include "klee/ADT/PersistentMap.h"
@@ -140,6 +141,7 @@ public:
   PathConstraints(KInstruction *initpc) : _path(initpc) {}
 
   std::map<std::string, ref<Expr>> trackers; // to track value changes during backward execution
+  std::optional<SummarizerTracker> summarizerTracker = std::nullopt;
 private:
   Path _path;
   constraints_ty _original;

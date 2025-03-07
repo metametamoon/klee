@@ -1,6 +1,9 @@
 #ifndef EXPRMAPFILTERVISITOR_H
 #define EXPRMAPFILTERVISITOR_H
+#include "fmt/core.h"
+
 #include <klee/Expr/ExprVisitor.h>
+#include <klee/Module/KInstruction.h>
 #include <optional>
 
 namespace klee {
@@ -10,13 +13,15 @@ namespace klee {
 class RetValueExprVisitor : public ExprVisitor {
 private:
   ref<Expr> dst;
+  KInstruction *callsite;
 
 public:
-  explicit RetValueExprVisitor(const ref<Expr> &_dst) : dst(_dst) {}
+  explicit RetValueExprVisitor(KInstruction *_callsite, const ref<Expr> &_dst)
+      : dst(_dst), callsite(_callsite) {}
 
   Action visitExpr(const Expr &e) override {
     if (isReadFromRetValue(e)) {
-      return Action::changeTo(new VariableExpr{e.getWidth(), "ret"});
+      return Action::changeTo(dst);
     }
     return Action::doChildren();
   }
@@ -26,20 +31,21 @@ public:
 
 private:
   // (ReadLSB w32 0 (array (w64 4) (instruction 0 %10 main -1)))
-  static bool isReadFromRetValue(const Expr &e) {
+  bool isReadFromRetValue(const Expr &e) {
     auto maybeSource = tryRetrieveSourceFromFullArrayRead(e);
     if (!maybeSource.has_value()) {
       return false;
     }
     auto source = *maybeSource;
     if (auto instSource = dyn_cast<InstructionSource>(source)) {
-      if (instSource->index == -1) {
+      if (instSource->index == 0 &&
+          &instSource->allocSite == callsite->inst()) {
         return true;
       }
     }
     return false;
   }
-  static std::optional<ref<SymbolicSource>>
+  std::optional<ref<SymbolicSource>>
   tryRetrieveSourceFromFullArrayRead(Expr const &e) {
     ref<ReadExpr> base = e.hasOrderedReads(false);
     const bool isLSB = (!base.isNull());

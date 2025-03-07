@@ -314,7 +314,8 @@ void ObjectManager::addPob(ProofObligation *pob) {
   if (!pob->parent) {
     if (debugPrints.isSet(DebugPrint::RootPob)) {
       llvm::errs() << "[pob] New root proof obligation at: "
-                   << pob->location->toString() << "\n";
+                   << pob->location->toString() << " with id=" << pob->id
+                   << "\n";
     }
     rootPobs.insert(pob);
   }

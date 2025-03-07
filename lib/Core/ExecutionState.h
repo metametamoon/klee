@@ -118,6 +118,9 @@ public:
   PersistentMap<KFunction *, unsigned long long> multilevel;
   void pushFrame(KInstIterator caller, KFunction *kf);
   void popFrame();
+  void decreaseStackBalance() {
+    --stackBalance_;
+  }
   int stackBalance() const { return stackBalance_; }
   void SETSTACKBALANCETOZERO() { stackBalance_ = 0; }
   inline value_stack_ty &valueStack() { return valueStack_; }

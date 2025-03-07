@@ -1,0 +1,25 @@
+#ifndef SUMMARIZERTRACKER_H
+#define SUMMARIZERTRACKER_H
+#include <klee/ADT/Ref.h>
+#include <klee/Expr/Expr.h>
+
+namespace klee {
+
+struct Hole {
+  std::string functionName; // or any identificator, really
+  ref<Expr> functionRetValueSymbol;
+  std::vector<ref<Expr>> arguments; // in terms of caller; must be composed
+  KInstruction *callSite;
+};
+
+struct SummarizerTracker {
+public:
+  // represents a hole caused by a function call within the outer function body
+
+  ref<Expr> retValueTracker;
+  std::vector<Hole> holes;
+};
+
+} // namespace klee
+
+#endif // SUMMARIZERTRACKER_H

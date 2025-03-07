@@ -67,6 +67,7 @@ public:
   enum class Kind {
     Backward,
     NonLinearPdr,
+    FunctionSummarizer,
   };
   Kind kind = Kind::Backward;
   std::uint32_t id;
@@ -95,9 +96,12 @@ using pobs_ty = std::set<ProofObligation *, ProofObligationIDCompare>;
 inline std::string printPobKind(ProofObligation::Kind kind) {
   if (kind == ProofObligation::Kind::Backward) {
     return "Backward";
-  } else {
+  } else if (kind == ProofObligation::Kind::NonLinearPdr){
     return "NonLinearPdr";
+  } else if (kind == ProofObligation::Kind::FunctionSummarizer) {
+    return "FunctionSummarizer";
   }
+  assert(false && "Unreachable (all kinds tested)");
 }
 
 } // namespace klee

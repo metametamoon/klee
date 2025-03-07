@@ -18,6 +18,7 @@
 #include "BidirectionalSearcher.h"
 #include "ExecutionState.h"
 #include "ObjectManager.h"
+#include "PathSummary.h"
 #include "PdrEngine.h"
 #include "PdrSummary.h"
 #include "ProofObligation.h"
@@ -288,7 +289,7 @@ private:
 
   std::unique_ptr<PdrSummary> pdrSummary;
   std::map<ProofObligation*, ExecutionState*> pobToParentState;
-
+  std::vector<PathSummary> summaries;
 
   /// Return the typeid corresponding to a certain `type_info`
   ref<ConstantExpr> getEhTypeidFor(ref<Expr> type_info);
@@ -804,9 +805,9 @@ private:
   void createPobsAtReturnPoints(ExecutionState *state, ProofObligation *pob,
                                 ComposeResult composeResult,
                                 KCallBlock *kCallBlock);
-  void processSuccessfulComposition(ExecutionState *state,
-                                     ProofObligation *pob,
-                                     Executor::ComposeResult composeResult);
+  void processSuccessfulComposition(ExecutionState *state, ProofObligation *pob,
+                                    Executor::ComposeResult composeResult);
+  bool isFromFunctionStart(ExecutionState const &state);
   void goBackward(ref<BackwardAction> action);
   void initializeIsolated(ref<InitializeAction> action);
 

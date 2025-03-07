@@ -185,6 +185,7 @@ cl::opt<size_t> StackCopySizeMemoryCheckThreshold(
     cl::cat(ExecCat));
 
 cl::opt<bool> NonLinearPdr("non-linear-pdr", cl::init(false), cl::cat(ExecCat));
+cl::opt<bool> EnableFunctionSummarization("enable-function-summarization", cl::init(false), cl::cat(ExecCat));
 
 namespace {
 
@@ -2824,7 +2825,8 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       state.constraints.advancePath(state.prevPC, state.pc);
       state.increaseLevel();
       if (state.isolated) {
-        state.popFrame();
+        state.stack.decreaseStackBalance();
+        // state.popFrame();
         state.returnValue = result;
       }
       terminateStateOnExit(state);
@@ -4759,7 +4761,7 @@ ref<Expr> Executor::fillValue(ExecutionState &state,
       assert(isa<CallInst>(inst) || isa<InvokeInst>(inst));
       KFunction *kf = ki->parent->parent;
 
-      if (state.stack.empty()) {
+      if (state.stack.stackBalance() == -1) {
         result = state.returnValue;
       } else {
         const StackFrame &frame = state.stack.valueStack().back();
@@ -5097,6 +5099,25 @@ Executor::compose(const ExecutionState &state, const PathConstraints &pob,
     composer.state.constraints.trackers[key] = composed;
     llvm::errs() << fmt::format("[compose] updated tracking:\n{} -> {}\n",  key, composed->toString());
   }
+  if (pob.summarizerTracker) {
+    composer.state.constraints.summarizerTracker = SummarizerTracker{};
+    if (pob.summarizerTracker->retValueTracker.isNull() && !state.returnValue.isNull()) {
+      composer.state.constraints.summarizerTracker->retValueTracker = state.returnValue;
+    } else if (!pob.summarizerTracker->retValueTracker.isNull()) {
+      auto [safetyCs, newRetValue] = composer.compose(pob.summarizerTracker->retValueTracker);
+      composer.state.constraints.summarizerTracker->retValueTracker = newRetValue;
+    }
+    for (auto hole : pob.summarizerTracker->holes) {
+      std::vector<ref<Expr>> composedArgs;
+      for (auto arg : hole.arguments) {
+        auto [safetyCs, newExpr] = composer.compose(arg);
+        composedArgs.push_back(newExpr);
+      }
+      composer.state.constraints.summarizerTracker->holes.push_back(
+          Hole{hole.functionName, hole.functionRetValueSymbol, composedArgs,
+               hole.callSite});
+    }
+  }
   result.success = true;
   result.composed = composer.state.constraints;
   for (auto &symbolic : composer.state.symbolics) {
@@ -5281,10 +5302,13 @@ void Executor::createPobsAtReturnPoints(ExecutionState *state,
   }
 }
 
-PathConstraints replaceRetValue(const klee::PathConstraints &composed) {
+std::pair<PathConstraints, ref<Expr>>
+replaceRetValue(const klee::PathConstraints &composed, KInstruction *callsite,
+                std::string symbolName = "ret") {
   auto result = PathConstraints{};
   result.path() = composed.path();
-  auto visitor = RetValueExprVisitor(new VariableExpr{32, "ret"});
+  ref<Expr> symbol = new VariableExpr{32, symbolName};
+  auto visitor = RetValueExprVisitor(callsite, symbol);
   for (auto &indexConstraints : composed.orderedCS()) {
     Path::PathIndex index = indexConstraints.first;
     for (ref<Expr> constraint : indexConstraints.second) {
@@ -5292,7 +5316,23 @@ PathConstraints replaceRetValue(const klee::PathConstraints &composed) {
       result.addConstraint(replacedConstraint, index);
     }
   }
-  return result;
+  if (composed.summarizerTracker) {
+    result.summarizerTracker = composed.summarizerTracker;
+    result.summarizerTracker.value().retValueTracker =
+        visitor.visit(composed.summarizerTracker->retValueTracker);
+    for (auto &hole : result.summarizerTracker->holes) {
+      for (auto &argument : hole.arguments) {
+        argument = visitor.visit(argument);
+      }
+    }
+  }
+  return std::make_pair(result, symbol);
+}
+
+
+int freshInt() {
+  static int i = 0;
+  return i++;
 }
 
 void Executor::processSuccessfulComposition(
@@ -5367,8 +5407,7 @@ void Executor::processSuccessfulComposition(
         createPobsAtReturnPoints(state, pob, composeResult, kCallBlock);
       } else if (pob->kind == ProofObligation::Kind::NonLinearPdr) {
         auto ki = kCallBlock->kcallInstruction;
-        // inst->
-        auto newConstraints = replaceRetValue(composeResult.composed);
+        auto newConstraints = replaceRetValue(composeResult.composed, ki).first;
         auto expr = eval(ki, 0 + 1, *state).value;
         newConstraints.trackers["arg"] = expr;
         auto newPob = ProofObligation::create(pob, state, newConstraints,
@@ -5377,10 +5416,62 @@ void Executor::processSuccessfulComposition(
         objectManager->addPob(newPob);
         auto &path = newPob->constraints.path();
         path.first = 0;
-        // for (auto [expr, index]: )
-        // pob->constraints;
+      } else if (pob->kind == ProofObligation::Kind::FunctionSummarizer) {
+        assert(composeResult.composed.summarizerTracker.has_value());
+        auto calledFunction = kCallBlock->getKFunction();
+        auto ki = kCallBlock->kcallInstruction;
+        auto freshFunctionSymbol =
+            calledFunction->getName().str() + std::to_string(freshInt());
+        auto [newConstraints, symbol] =
+            replaceRetValue(composeResult.composed, ki, freshFunctionSymbol);
+        std::vector<ref<Expr>> args;
+        for (int i = 0; i < calledFunction->getNumArgs(); ++i) {
+          auto arg = eval(ki, i + 1, *state).value;
+          args.push_back(arg);
+        }
+        auto hole = Hole{
+            calledFunction->getName().str(),
+            symbol,
+            args,
+            ki,
+        };
+        newConstraints.summarizerTracker->holes.push_back(hole);
+        auto newPob = ProofObligation::create(pob, state, newConstraints,
+                                              composeResult.nullPointerExpr);
+        newPob->symbolics = composeResult.symbolics;
+        objectManager->addPob(newPob);
+        auto &path = newPob->constraints.path();
+        path.first = 0;
       }
+    } else if (isFromFunctionStart(*state) &&
+               pob->kind == ProofObligation::Kind::FunctionSummarizer) {
+      llvm::errs() << "Function summarization:\n";
+      auto tracker = composeResult.composed.summarizerTracker.value();
+      llvm::errs() << fmt::format("Ret value = {}\n",
+                                  tracker.retValueTracker->toString());
+      llvm::errs() << "Holes:\n";
+      for (auto hole : tracker.holes) {
+        llvm::errs() << fmt::format("\t{} = {} with args:\n",
+                                    hole.functionRetValueSymbol->toString(),
+                                    hole.functionName);
+        for (auto arg : hole.arguments) {
+          llvm::errs() << fmt::format("\t\t{}\n", arg->toString());
+        }
+      }
+      llvm::errs() << "Summarization end\n";
+      summaries.push_back(PathSummary{pob->constraints.path()
+                                          .getFirstInstruction()
+                                          ->getKFunction()
+                                          ->getName()
+                                          .str(),
+                                      composeResult.composed.path(),
+                                      tracker.retValueTracker, tracker.holes});
+      objectManager->removePob(pob);
     } else {
+      if (!state->returnValue.isNull() && composeResult.composed.summarizerTracker.has_value()) {
+        composeResult.composed.summarizerTracker->retValueTracker =
+            state->returnValue;
+      }
       auto newPob = ProofObligation::create(pob, state, composeResult.composed,
                                             composeResult.nullPointerExpr);
       newPob->symbolics = composeResult.symbolics;
@@ -5397,6 +5488,16 @@ void Executor::processSuccessfulComposition(
   }
 }
 
+bool Executor::isFromFunctionStart(ExecutionState const &state) {
+  auto statePath = state.constraints.path();
+  if (!statePath.getBlocks().empty()) {
+    auto firstPathBlock = (statePath.getBlocks()[0]).block;
+    return firstPathBlock == firstPathBlock->parent->entryKBlock;
+  }
+  return false;
+}
+
+
 void Executor::goBackward(ref<BackwardAction> action) {
   objectManager->removePropagation(action->prop);
 
@@ -5404,9 +5505,12 @@ void Executor::goBackward(ref<BackwardAction> action) {
   ProofObligation *pob = action->prop.pob;
 
   objectManager->setContextState(state);
+  if (pob->kind == ProofObligation::Kind::FunctionSummarizer) {
+    llvm::errs() << "here\n";
+  }
 
   Executor::ComposeResult composeResult;
-  if (canReachSomeTargetThroughState(*pob, *state)) {
+  if (canReachSomeTargetThroughState(*pob, *state) || pob->kind == ProofObligation::Kind::FunctionSummarizer) {
     auto nullPointerExpr =
         state->nullPointerExpr ? state->nullPointerExpr : pob->nullPointerExpr;
     composeResult =
@@ -5415,15 +5519,6 @@ void Executor::goBackward(ref<BackwardAction> action) {
     composeResult.success = false;
   }
 
-  auto isFromFunctionStart = [](ExecutionState const& state) {
-    auto statePath = state.constraints.path();
-    if (!statePath.getBlocks().empty()) {
-      auto firstPathBlock = (statePath.getBlocks()[0]).block;
-      return
-          firstPathBlock == firstPathBlock->parent->entryKBlock;
-    }
-    return false;
-  };
   bool isFromTheFunctionStart = isFromFunctionStart(*state);
   llvm::errs() << fmt::format("[backward] path {} is from start:{}\n",
                               state->constraints.path().toString(),
@@ -8063,7 +8158,22 @@ void Executor::runFunctionAsMain(Function *f, int argc, char **argv,
       }
     }
   }
-
+  if (EnableFunctionSummarization) {
+    for (auto const& function: kmodule->functions) {
+      llvm::errs() << "function " << function->getName() << "\n";
+      if (function->getName().str() == "f") {
+        auto targetBlock = *function->returnKBlocks.begin();
+        auto target = ReachBlockTarget::create(targetBlock, true);
+        auto pob = new ProofObligation(target);
+        pob->setTargeted(true);
+        pob->targetForest = TargetForest(kmodule->functionMap[f]);
+        pob->kind = ProofObligation::Kind::FunctionSummarizer;
+        pob->targetForest.stepTo(target);
+        pob->constraints.summarizerTracker = SummarizerTracker{};
+        objectManager->addPob(pob);
+      }
+    }
+  }
   objectManager->addInitialState(state);
 
   TreeOStream pathOS;
@@ -8094,6 +8204,7 @@ void Executor::runFunctionAsMain(Function *f, int argc, char **argv,
       objectManager->addPob(pob);
     }
   }
+
 
   summary.readFromFile(kmodule.get());
 
