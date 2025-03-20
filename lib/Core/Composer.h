@@ -187,8 +187,6 @@ public:
         state(*original.copy()) {}
   ~ComposeVisitor() { delete &state; }
 
-
-
   std::pair<ref<Expr>, ref<Expr>> compose(ref<Expr> expr) {
     llvm::errs() << "composing: " << expr->toString() << "\n";
     ref<Expr> result = visit(expr);
@@ -210,7 +208,8 @@ private:
   ExprVisitor::Action visitConcat(const ConcatExpr &concat) override;
   ExprVisitor::Action visitSelect(const SelectExpr &) override;
   ExprVisitor::Action visitPointer(const PointerExpr &) override;
-
+  ExprVisitor::Action visitVariable(const VariableExpr &) override;
+  ref<Expr> processVariable(const VariableExpr &expr);
   ref<Expr> processPointer(ref<Expr> base, ref<Expr> value);
   ref<Expr> processRead(const Array *root, const UpdateList &updates,
                         ref<Expr> index, Expr::Width width);

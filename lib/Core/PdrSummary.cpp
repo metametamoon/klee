@@ -1,6 +1,7 @@
 #include "PdrSummary.h"
 
 #include "ProofObligation.h"
+#include "StringUtil.h"
 #include "klee/Expr/ExprHashMap.h"
 
 #include <fmt/format.h>
@@ -24,16 +25,12 @@ std::string disjunctionToString(const disjunction &dj) {
   if (dj.elements.empty()) {
     return "false";
   }
-  std::string result{"{"};
-  bool first_atom = true;
+  std::string result{"(\\/"};
   for (const auto &atom : dj.elements) {
-    if (!first_atom) {
-      result += R"( \/ )";
-    }
-    result += atom->toString();
-    first_atom = false;
+    result += "\n";
+    result += indentString(atom->toString(), 1);
   }
-  result += "}";
+  result += ")";
   return result;
 }
 
@@ -59,9 +56,11 @@ void PdrSummary::addInfinityLemmaOnSomeEdgeToPob(ProofObligation *pob,
     llvm::errs() << logPrefixWithSpace
                  << fmt::format("Added inf lemma at pob id={} path={}\n",
                                 pob->id, pob->constraints.path().toString());
-    llvm::errs() << fmt::format("{}Loc={} Lemma={}\n", logPrefixWithSpace,
-                                pob->location->toString(),
+    llvm::errs() << fmt::format("{}Loc={} Pretty lemma={}\n",
+                                logPrefixWithSpace, pob->location->toString(),
                                 disjunctionToCExpr(lemma, false));
+    llvm::errs() << fmt::format("sexpr lemma: \n{}\n",
+                                disjunctionToString(lemma));
   }
   infinityLemmas[pob->id].elements.insert(lemma.elements.begin(),
                                           lemma.elements.end());

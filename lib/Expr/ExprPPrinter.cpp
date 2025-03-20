@@ -420,14 +420,17 @@ public:
   }
 
   void printVariable(const ref<VariableExpr> &e, PrintContext &PC) {
-    PC << "(w" << e->getWidth() << " " << e->name << ")";
+    PC << "(variable w" << e->getWidth() << " " << e->name;
+    if (e->isReadFromRet)
+      PC << " ret";
+    PC << ")";
   }
 
   void print(const ref<Expr> &e, PrintContext &PC,
              bool printConstWidth = false) {
     if (ConstantExpr *CE = dyn_cast<ConstantExpr>(e))
       printConst(CE, PC, printConstWidth);
-    else if (VariableExpr* VE = dyn_cast<VariableExpr>(e)) {
+    else if (VariableExpr *VE = dyn_cast<VariableExpr>(e)) {
       printVariable(VE, PC);
     } else {
       std::map<ref<Expr>, unsigned>::iterator it = bindings.find(e);

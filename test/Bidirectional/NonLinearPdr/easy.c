@@ -29,10 +29,7 @@ int main() {
   klee_assume(a > 0 && a < 100000);
   int b = f(a);
 
-  for (int i = 0; i < 1000; ++i) {
-    b += 1;
-  }
-  if (b % 2 != 0) {
+  if (b != 2 * a != 0) {
     reach_error();
   }
   return 0;

@@ -628,6 +628,12 @@ void Simplificator::removeReplacement(Replacements &replacements,
   }
 }
 
+ref<Expr> klee::replaceExpr(ref<Expr> expr,
+                            ExprHashMap<ref<Expr>> replacements) {
+  auto visitor = ExprReplaceVisitor2(replacements, {});
+  return visitor.visit(expr);
+}
+
 ExprHashMap<ExprHashSet>
 Simplificator::composeExprDependencies(const ExprHashMap<ExprHashSet> &upper,
                                        const ExprHashMap<ExprHashSet> &lower) {

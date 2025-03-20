@@ -108,8 +108,10 @@ void ConflictCoreInitializer::addPob(ProofObligation *pob) {
 
 void ConflictCoreInitializer::removePob(ProofObligation *pob) {
   auto target = pob->location;
-  assert(knownTargets[target] != 0);
-  knownTargets[target]--;
+  // assert(knownTargets[target] != 0);
+  if (knownTargets[target] > 0) {
+    knownTargets[target]--;
+  }
 
   if (knownTargets[target] > 0) {
     return;

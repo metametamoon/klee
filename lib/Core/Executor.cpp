@@ -98,6 +98,7 @@
 #endif
 #include "PdrEngine.h"
 #include "RetValueExprVisitor.h"
+#include "StringUtil.h"
 #include "fmt/color.h"
 
 #include "llvm/Support/CommandLine.h"
@@ -185,7 +186,8 @@ cl::opt<size_t> StackCopySizeMemoryCheckThreshold(
     cl::cat(ExecCat));
 
 cl::opt<bool> NonLinearPdr("non-linear-pdr", cl::init(false), cl::cat(ExecCat));
-cl::opt<bool> EnableFunctionSummarization("enable-function-summarization", cl::init(false), cl::cat(ExecCat));
+cl::opt<bool> EnableFunctionSummarization("enable-function-summarization",
+                                          cl::init(false), cl::cat(ExecCat));
 
 namespace {
 
@@ -529,9 +531,9 @@ Executor::Executor(LLVMContext &ctx, const InterpreterOptions &opts,
     : Interpreter(opts), interpreterHandler(ih), searcher(nullptr),
       externalDispatcher(new ExternalDispatcher(ctx)),
       summary(interpreterHandler), statsTracker(0), pathWriter(0),
-      symPathWriter(0),
-      specialFunctionHandler(0), timers{time::Span(TimerInterval)},
-      guidanceKind(opts.Guidance), codeGraphInfo(new CodeGraphInfo()),
+      symPathWriter(0), specialFunctionHandler(0),
+      timers{time::Span(TimerInterval)}, guidanceKind(opts.Guidance),
+      codeGraphInfo(new CodeGraphInfo()),
       distanceCalculator(new DistanceCalculator(*codeGraphInfo)),
       targetCalculator(new TargetCalculator(*codeGraphInfo)),
       targetManager(new TargetManager(guidanceKind, *distanceCalculator,
@@ -4702,7 +4704,7 @@ void Executor::doDumpObjects() {
 }
 
 bool isReturnValueFromInitBlock(const ExecutionState &state,
-                              const llvm::Value *value) {
+                                const llvm::Value *value) {
   return state.initPC->parent->getKBlockType() == KBlockType::Call &&
          state.initPC == state.initPC->parent->getLastInstruction() &&
          state.initPC->parent->getFirstInstruction()->inst() == value;
@@ -4732,10 +4734,11 @@ ref<Expr> Executor::fillValue(ExecutionState &state,
   assert(isa<ConstantExpr>(size));
   auto concreteSize = dyn_cast<ConstantExpr>(size)->getZExtValue();
   int diffLevel = -state.stack.stackBalance();
-    // negation of the call site condition
-    // reindex != 1 or callsite does not match:
+  // negation of the call site condition
+  // reindex != 1 or callsite does not match:
   int reindex = valueSource->index + diffLevel;
-  bool isReadFromReturnValue = reindex == 1 && matchesCallSite(valueSource, state);
+  bool isReadFromReturnValue =
+      reindex == 1 && matchesCallSite(valueSource, state);
   if (!isReadFromReturnValue && reindex > 0) {
     const Array *newArray =
         makeArray(size, SourceBuilder::value(valueSource->value(), reindex,
@@ -4757,7 +4760,6 @@ ref<Expr> Executor::fillValue(ExecutionState &state,
     const Instruction *inst = cast<Instruction>(&valueSource->value());
     const KInstruction *ki = getKInst(const_cast<Instruction *>(inst));
     if (isReadFromReturnValue) {
-
       assert(isa<CallInst>(inst) || isa<InvokeInst>(inst));
       KFunction *kf = ki->parent->parent;
 
@@ -4798,7 +4800,18 @@ ref<Expr> Executor::fillValue(ExecutionState &state,
     break;
   }
   case SymbolicSource::Kind::Argument: {
-    assert(valueSource->index >= 0);
+    assert(valueSource->index >= -1);
+    if (valueSource->index == -1) {
+      const Argument *argument = cast<Argument>(&valueSource->value());
+      auto size = kmodule->targetData->getTypeStoreSize(
+          argument->getType()); // index below is -1 to account for raise during
+                                // the composition with the functional state
+      auto source = SourceBuilder::argument(*argument, 0, kmodule.get());
+      auto array = makeArray(Expr::createPointer(size), source);
+      auto width = kmodule->targetData->getTypeSizeInBits(argument->getType());
+      result = Expr::createTempRead(array, width);
+      break;
+    }
     assert(!state.stack.empty());
     StackFrame &frame = state.stack.valueStack().at(state.stack.size() -
                                                     valueSource->index - 1);
@@ -4894,12 +4907,12 @@ ref<Expr> Executor::fillSymbolicSizeConstantAddress(
 }
 
 namespace klee {
-  extern llvm::cl::opt<unsigned> LemmaUpdateTicks;
+extern llvm::cl::opt<unsigned> LemmaUpdateTicks;
 }
 
-Executor::ComposeResult
-Executor::compose(const ExecutionState &state, const PathConstraints &pob,
-                  ref<Expr> nullPointerExpr,
+Executor::ComposeResult Executor::compose(const ExecutionState &state,
+                                          const PathConstraints &pob,
+                                          ref<Expr> nullPointerExpr,
                                           ImmutableList<Symbolic> &pobSymbolics,
                                           int *maxComposeLevel) {
   ComposeResult result;
@@ -4945,7 +4958,8 @@ Executor::compose(const ExecutionState &state, const PathConstraints &pob,
           composer.state.constraints.cs(),
           AndExpr::create(safetyCondition, composedConstraint));
       ref<Expr> simplifiedComposedConstraint = simplificationInfo.simplified;
-      rewriteDependencies[simplifiedComposedConstraint].insert(simplifiedComposedConstraint);
+      rewriteDependencies[simplifiedComposedConstraint].insert(
+          simplifiedComposedConstraint);
       for (const auto &dep : simplificationInfo.dependency) {
         if (rewriteDependencies.find(dep) == rewriteDependencies.end()) {
           rewriteDependencies[simplifiedComposedConstraint].insert(dep);
@@ -4956,16 +4970,17 @@ Executor::compose(const ExecutionState &state, const PathConstraints &pob,
       }
       // llvm::errs() << "Clean deps:\n";
       // for (auto &dep: rewriteDependencies[simplifiedComposedConstraint]) {
-        // llvm::errs() << fmt::format("\t{}\n",
-                                    // translateToCExpr(dep).value_or("unknown"));
+      // llvm::errs() << fmt::format("\t{}\n",
+      // translateToCExpr(dep).value_or("unknown"));
       // }
 
       ValidityCore core;
       bool isValid;
       solver->setTimeout(coreSolverTimeout);
       bool success = solver->getValidityCore(
-          composer.state.constraints.cs(), Expr::createIsZero(simplifiedComposedConstraint), core,
-          isValid, composer.state.queryMetaData);
+          composer.state.constraints.cs(),
+          Expr::createIsZero(simplifiedComposedConstraint), core, isValid,
+          composer.state.queryMetaData);
       solver->setTimeout(time::Span());
       if (!success || haltExecution) {
         result.success = false;
@@ -4981,10 +4996,12 @@ Executor::compose(const ExecutionState &state, const PathConstraints &pob,
         constraints_ty rebuiltCore;
         for (auto e : core.constraints) {
           auto &simplMap = composer.state.constraints.simplificationMap();
-          if (simplMap.count(e) > 0) { // we added some infinity lemmas, which do not have an image in the core
+          if (simplMap.count(e) > 0) { // we added some infinity lemmas, which
+                                       // do not have an image in the core
             for (auto original : simplMap.at(e)) {
               if (rebuildMap.count(original)) {
-                conflict.core.insert(Expr::createIsZero(rebuildMap.at(original)));
+                conflict.core.insert(
+                    Expr::createIsZero(rebuildMap.at(original)));
               }
             }
           }
@@ -4993,27 +5010,31 @@ Executor::compose(const ExecutionState &state, const PathConstraints &pob,
           if (e == simplifiedComposedConstraint)
             continue;
           auto &simplMap = composer.state.constraints.simplificationMap();
-          if (simplMap.count(e) > 0) { // we added some infinity lemmas, which do not have an image in the core
+          if (simplMap.count(e) > 0) { // we added some infinity lemmas, which
+                                       // do not have an image in the core
             for (auto original : simplMap.at(e)) {
               if (rebuildMap.count(original)) {
                 auto expr = rebuildMap.at(original);
-                llvm::errs() << fmt::format("\t{}\n", translateToCExpr(expr).value_or("unknown"));
+                llvm::errs() << fmt::format(
+                    "\t{}\n", translateToCExpr(expr).value_or("unknown"));
                 conflict.core.insert(Expr::createIsZero(expr));
               }
             }
           }
         }
 
-        for (auto coreElement: core.constraints) {
+        for (auto coreElement : core.constraints) {
           for (auto e : rewriteDependencies[coreElement]) {
             if (e == simplifiedComposedConstraint)
               continue;
             auto &simplMap = composer.state.constraints.simplificationMap();
-            if (simplMap.count(e) > 0) { // we added some infinity lemmas, which do not have an image in the core
+            if (simplMap.count(e) > 0) { // we added some infinity lemmas, which
+                                         // do not have an image in the core
               for (auto original : simplMap.at(e)) {
                 if (rebuildMap.count(original)) {
                   auto expr = rebuildMap.at(original);
-                  llvm::errs() << fmt::format("\t{}\n", translateToCExpr(expr).value_or("unknown"));
+                  llvm::errs() << fmt::format(
+                      "\t{}\n", translateToCExpr(expr).value_or("unknown"));
                   conflict.core.insert(Expr::createIsZero(expr));
                 }
               }
@@ -5031,7 +5052,8 @@ Executor::compose(const ExecutionState &state, const PathConstraints &pob,
         return result;
       }
 
-      auto added = composer.state.constraints.addConstraint(simplifiedComposedConstraint, index);
+      auto added = composer.state.constraints.addConstraint(
+          simplifiedComposedConstraint, index);
       for (auto expr : added) {
         rebuildMap.insert({expr, constraint});
       }
@@ -5069,10 +5091,12 @@ Executor::compose(const ExecutionState &state, const PathConstraints &pob,
         constraints_ty rebuiltCore;
         for (auto e : core.constraints) {
           auto &simplMap = composer.state.constraints.simplificationMap();
-          if (simplMap.count(e) > 0) { // we added some infinity lemmas, which do not have an image in the core
+          if (simplMap.count(e) > 0) { // we added some infinity lemmas, which
+                                       // do not have an image in the core
             for (auto original : simplMap.at(e)) {
               if (rebuildMap.count(original)) {
-                conflict.core.insert(Expr::createIsZero(rebuildMap.at(original)));
+                conflict.core.insert(
+                    Expr::createIsZero(rebuildMap.at(original)));
               }
             }
           }
@@ -5086,26 +5110,30 @@ Executor::compose(const ExecutionState &state, const PathConstraints &pob,
       Path::PathIndex index;
       index.block = 0ul;
       index.instruction = 0ul;
-      auto added =
-          composer.state.constraints.addConstraint(condition, index);
+      auto added = composer.state.constraints.addConstraint(condition, index);
     }
     result.success = false;
     *maxComposeLevel = -1;
     return result;
   }
 
-  for (auto const& [key, expr]: pob.trackers) {
+  for (auto const &[key, expr] : pob.trackers) {
     auto [safetyConstraint, composed] = composer.compose(expr);
     composer.state.constraints.trackers[key] = composed;
-    llvm::errs() << fmt::format("[compose] updated tracking:\n{} -> {}\n",  key, composed->toString());
+    llvm::errs() << fmt::format("[compose] updated tracking:\n{} -> {}\n", key,
+                                composed->toString());
   }
   if (pob.summarizerTracker) {
     composer.state.constraints.summarizerTracker = SummarizerTracker{};
-    if (pob.summarizerTracker->retValueTracker.isNull() && !state.returnValue.isNull()) {
-      composer.state.constraints.summarizerTracker->retValueTracker = state.returnValue;
+    if (pob.summarizerTracker->retValueTracker.isNull() &&
+        !state.returnValue.isNull()) {
+      composer.state.constraints.summarizerTracker->retValueTracker =
+          state.returnValue;
     } else if (!pob.summarizerTracker->retValueTracker.isNull()) {
-      auto [safetyCs, newRetValue] = composer.compose(pob.summarizerTracker->retValueTracker);
-      composer.state.constraints.summarizerTracker->retValueTracker = newRetValue;
+      auto [safetyCs, newRetValue] =
+          composer.compose(pob.summarizerTracker->retValueTracker);
+      composer.state.constraints.summarizerTracker->retValueTracker =
+          newRetValue;
     }
     for (auto hole : pob.summarizerTracker->holes) {
       std::vector<ref<Expr>> composedArgs;
@@ -5162,8 +5190,7 @@ void Executor::executeAction(ref<SearcherAction> action) {
       llvm::errs() << fmt::format("[backward] state id={}; pob id={}\n",
                                   prop.state->id, prop.pob->id);
       llvm::errs() << "[backward] Pob: kind=" << printPobKind(prop.pob->kind)
-                   << " "
-                   << prop.pob->constraints.path().toString() << "\n";
+                   << " " << prop.pob->constraints.path().toString() << "\n";
       llvm::errs() << "[backward] State: "
                    << prop.state->constraints.path().toString() << "\n";
       llvm::errs() << "[backward] To-be pob: "
@@ -5178,6 +5205,20 @@ void Executor::executeAction(ref<SearcherAction> action) {
         llvm::errs() << "[backward] Pob: \n";
         prop.pob->constraints.cs().dump();
         llvm::errs() << "\n";
+        if (prop.pob->constraints.summarizerTracker) {
+          llvm::errs() << "[backward] SummarizerTracker: \n";
+          for (auto hole : prop.pob->constraints.summarizerTracker->holes) {
+            llvm::errs() << fmt::format(
+                "(\n\t(function {})\n\t(symbol {})\n\t(args\n",
+                hole.functionName, hole.functionRetValueSymbol->toString());
+            for (const auto &arg : hole.arguments) {
+              llvm::errs() << fmt::format("{}\n",
+                                          indentString(arg->toString(), 2));
+            }
+            llvm::errs() << "\t)\n";
+            llvm::errs() << ")\n";
+          }
+        }
       }
     }
     goBackward(cast<BackwardAction>(action));
@@ -5193,10 +5234,9 @@ void Executor::executeAction(ref<SearcherAction> action) {
     if (auto begUpdateAction =
             std::get_if<PdrAction::PobLemmaUpdate>(&action)) {
       executeNodeLemmaUpdateAction(begUpdateAction->pob,
-                                      begUpdateAction->queueDepth);
+                                   begUpdateAction->queueDepth);
     } else if (auto checkInductivenessAction =
-                   std::get_if<PdrAction::CheckInductive>(
-                       &action)) {
+                   std::get_if<PdrAction::CheckInductive>(&action)) {
       executeCheckInductiveAction(checkInductivenessAction->queueDepth);
     }
   }
@@ -5302,12 +5342,12 @@ void Executor::createPobsAtReturnPoints(ExecutionState *state,
   }
 }
 
-std::pair<PathConstraints, ref<Expr>>
+std::pair<PathConstraints, ref<VariableExpr>>
 replaceRetValue(const klee::PathConstraints &composed, KInstruction *callsite,
                 std::string symbolName = "ret") {
   auto result = PathConstraints{};
   result.path() = composed.path();
-  ref<Expr> symbol = new VariableExpr{32, symbolName};
+  ref<VariableExpr> symbol = VariableExpr::create(32, symbolName);
   auto visitor = RetValueExprVisitor(callsite, symbol);
   for (auto &indexConstraints : composed.orderedCS()) {
     Path::PathIndex index = indexConstraints.first;
@@ -5318,8 +5358,10 @@ replaceRetValue(const klee::PathConstraints &composed, KInstruction *callsite,
   }
   if (composed.summarizerTracker) {
     result.summarizerTracker = composed.summarizerTracker;
-    result.summarizerTracker.value().retValueTracker =
-        visitor.visit(composed.summarizerTracker->retValueTracker);
+    if (!result.summarizerTracker->retValueTracker.isNull()) {
+      result.summarizerTracker->retValueTracker =
+          visitor.visit(composed.summarizerTracker->retValueTracker);
+    }
     for (auto &hole : result.summarizerTracker->holes) {
       for (auto &argument : hole.arguments) {
         argument = visitor.visit(argument);
@@ -5329,10 +5371,34 @@ replaceRetValue(const klee::PathConstraints &composed, KInstruction *callsite,
   return std::make_pair(result, symbol);
 }
 
-
 int freshInt() {
   static int i = 0;
   return i++;
+}
+
+void Executor::addFunctionSummaryEntry(ProofObligation *pob,
+                                       PathConstraints composedConstraints) {
+  llvm::errs() << "Function summarization:\n";
+  auto tracker = composedConstraints.summarizerTracker.value();
+  llvm::errs() << fmt::format("Ret value = {}\n",
+                              tracker.retValueTracker->toString());
+  llvm::errs() << "Holes:\n";
+  for (auto hole : tracker.holes) {
+    llvm::errs() << fmt::format("\t{} = {} with args:\n",
+                                hole.functionRetValueSymbol->toString(),
+                                hole.functionName);
+    for (auto arg : hole.arguments) {
+      llvm::errs() << fmt::format("\t\t{}\n", arg->toString());
+    }
+  }
+  llvm::errs() << "Summarization end\n";
+  summaries.push_back(PathSummary{pob->constraints.path()
+                                      .getFirstInstruction()
+                                      ->getKFunction()
+                                      ->getName()
+                                      .str(),
+                                  composedConstraints.path(),
+                                  tracker.retValueTracker, tracker.holes});
 }
 
 void Executor::processSuccessfulComposition(
@@ -5341,7 +5407,140 @@ void Executor::processSuccessfulComposition(
   if (debugPrints.isSet(DebugPrint::Backward)) {
     llvm::errs() << "[backward] Composition sucessful.\n";
   }
-  if (state->finalComposing) {
+  if (!state->finalComposing) {
+    auto [isFromFunctionCall, kCallBlock] =
+        state->constraints.path().fromOutTransition();
+    if (isFromFunctionCall) {
+      if (pob->kind == ProofObligation::Kind::Backward) {
+        createPobsAtReturnPoints(state, pob, composeResult, kCallBlock);
+      } else if (pob->kind == ProofObligation::Kind::FunctionSummarizer ||
+                 pob->kind == ProofObligation::Kind::NonLinearPdr) {
+        assert(composeResult.composed.summarizerTracker.has_value());
+        auto calledFunction = kCallBlock->getKFunction();
+        auto ki = kCallBlock->kcallInstruction;
+        auto freshFunctionSymbol =
+            calledFunction->getName().str() + std::to_string(freshInt());
+        auto [newConstraints, symbol] =
+            replaceRetValue(composeResult.composed, ki, freshFunctionSymbol);
+        std::vector<ref<Expr>> args;
+        for (size_t i = 0; i < calledFunction->getNumArgs(); ++i) {
+          auto arg = eval(ki, i + 1, *state).value;
+          args.push_back(arg);
+        }
+        auto hole = Hole{
+            calledFunction->getName().str(),
+            symbol,
+            args,
+            ki,
+        };
+        newConstraints.summarizerTracker->holes.push_back(hole);
+        auto nonLinearPob = ProofObligation::create(
+            pob, state, newConstraints, composeResult.nullPointerExpr);
+        objectManager->addPob(nonLinearPob);
+
+        auto functionSkipPob = ProofObligation::create(
+            pob, state, newConstraints, composeResult.nullPointerExpr);
+        functionSkipPob->parent->children.erase(functionSkipPob);
+        functionSkipPob->parent = nonLinearPob;
+        nonLinearPob->children.insert(functionSkipPob);
+        functionSkipPob->symbolics = composeResult.symbolics;
+        auto &path = functionSkipPob->constraints.path();
+        path.first = 0;
+        objectManager->addPob(functionSkipPob);
+      }
+    } else if (isFromFunctionStart(*state) &&
+               pob->kind == ProofObligation::Kind::FunctionSummarizer) {
+      addFunctionSummaryEntry(pob, composeResult.composed);
+      objectManager->removePob(pob);
+    } else if (isFromFunctionStart(*state) &&
+               pob->kind == ProofObligation::Kind::NonLinearPdr) {
+      auto isNonLinearPob = [](ProofObligation *maybeNonLinearPob) {
+        auto path = maybeNonLinearPob->constraints.path();
+        if (!path.empty()) {
+          auto firstBlock = path.getFirstInstruction()->getKBlock();
+          if (auto callBlock = dyn_cast<KCallBlock>(firstBlock)) {
+            return callBlock->getFirstInstruction() !=
+                   path.getFirstInstruction();
+          }
+        }
+        return false;
+      };
+
+      auto nonlinearPob = pob;
+      while (!isNonLinearPob(nonlinearPob)) {
+        nonlinearPob = nonlinearPob->parent;
+      }
+      auto nonlinearPobCallBlock = dyn_cast<KCallBlock>(
+          nonlinearPob->constraints.path().getFirstInstruction()->getKBlock());
+      assert(nonlinearPobCallBlock);
+      auto calledFunction = nonlinearPobCallBlock->getKFunction();
+      auto n = calledFunction->getNumArgs();
+      auto functionValue = calledFunction->function();
+      auto relevantHole =
+          composeResult.composed.summarizerTracker.value().holes.back();
+      assert(relevantHole.arguments.size() == n);
+      auto replacements = ExprHashMap<ref<Expr>>{};
+      for (unsigned i = 0; i < n; ++i) {
+        auto argument = functionValue->getArg(i);
+        auto size = kmodule->targetData->getTypeStoreSize(
+            argument
+                ->getType()); // index below is -1 to account for raise during
+                              // the composition with the functional state
+        // setting index to -1 to offset it propagation during composition fith
+        // functional state
+        auto source = SourceBuilder::argument(*argument, -1, kmodule.get());
+        auto array = makeArray(Expr::createPointer(size), source);
+        auto width =
+            kmodule->targetData->getTypeSizeInBits(argument->getType());
+        ref<Expr> result = Expr::createTempRead(array, width);
+        replacements[relevantHole.arguments[i]] = result;
+      }
+      replacements[relevantHole.functionRetValueSymbol] =
+          VariableExpr::create(relevantHole.functionRetValueSymbol->width,
+                               relevantHole.functionRetValueSymbol->name, true);
+      auto newConstaints = PathConstraints{};
+      for (auto constraint : composeResult.composed.cs().cs()) {
+        auto replaced = replaceExpr(constraint, replacements);
+        newConstaints.addConstraint(replaced);
+        llvm::errs() << fmt::format("before:(\n{})\nafter:(\n{})\n",
+                                    constraint->toString(),
+                                    replaced->toString());
+      }
+      newConstaints.path() = nonlinearPob->constraints.path();
+      auto place = nonlinearPob->location;
+
+      for (auto kf : nonlinearPobCallBlock->calledFunctions) {
+        for (auto returnBlock : kf->returnKBlocks) {
+          auto functionalPob = nonlinearPob->makeChild(place);
+          functionalPob->constraints = newConstaints;
+          functionalPob->stack = nonlinearPob->stack;
+          ProofObligation::propagateToReturn(
+              functionalPob, nonlinearPobCallBlock->kcallInstruction,
+              returnBlock);
+          objectManager->addPob(functionalPob);
+        }
+      }
+      llvm::errs() << "\n";
+    } else {
+      if (!state->returnValue.isNull() &&
+          composeResult.composed.summarizerTracker.has_value()) {
+        composeResult.composed.summarizerTracker->retValueTracker =
+            state->returnValue;
+      }
+      auto newPob = ProofObligation::create(pob, state, composeResult.composed,
+                                            composeResult.nullPointerExpr);
+      newPob->symbolics = composeResult.symbolics;
+      pobToParentState[newPob] = state->copy(); // do i need a copy here?
+      objectManager->addPob(newPob);
+      if (debugConstraints.isSet(DebugPrint::Backward)) {
+        llvm::errs() << "[backward] Pob after composition: \n";
+        llvm::errs() << fmt::format("path={}\n",
+                                    newPob->constraints.path().toString());
+        newPob->constraints.cs().dump();
+        llvm::errs() << "\n";
+      }
+    }
+  } else {
     if (auto error = dyn_cast<ReproduceErrorTarget>(pob->root->location)) {
       if (error->isThatError(klee::MustBeNullPointerException) &&
           !error->isThatError(klee::MayBeNullPointerException)) {
@@ -5398,93 +5597,6 @@ void Executor::processSuccessfulComposition(
     state.symbolics = pob->symbolics;
     interpreterHandler->processTestCase(state, "backward", "reachable.err",
                                         false);
-
-  } else {
-    auto [isFromFunctionCall, kCallBlock] =
-        state->constraints.path().fromOutTransition();
-    if (isFromFunctionCall) {
-      if (pob->kind == ProofObligation::Kind::Backward) {
-        createPobsAtReturnPoints(state, pob, composeResult, kCallBlock);
-      } else if (pob->kind == ProofObligation::Kind::NonLinearPdr) {
-        auto ki = kCallBlock->kcallInstruction;
-        auto newConstraints = replaceRetValue(composeResult.composed, ki).first;
-        auto expr = eval(ki, 0 + 1, *state).value;
-        newConstraints.trackers["arg"] = expr;
-        auto newPob = ProofObligation::create(pob, state, newConstraints,
-                                              composeResult.nullPointerExpr);
-        newPob->symbolics = composeResult.symbolics;
-        objectManager->addPob(newPob);
-        auto &path = newPob->constraints.path();
-        path.first = 0;
-      } else if (pob->kind == ProofObligation::Kind::FunctionSummarizer) {
-        assert(composeResult.composed.summarizerTracker.has_value());
-        auto calledFunction = kCallBlock->getKFunction();
-        auto ki = kCallBlock->kcallInstruction;
-        auto freshFunctionSymbol =
-            calledFunction->getName().str() + std::to_string(freshInt());
-        auto [newConstraints, symbol] =
-            replaceRetValue(composeResult.composed, ki, freshFunctionSymbol);
-        std::vector<ref<Expr>> args;
-        for (int i = 0; i < calledFunction->getNumArgs(); ++i) {
-          auto arg = eval(ki, i + 1, *state).value;
-          args.push_back(arg);
-        }
-        auto hole = Hole{
-            calledFunction->getName().str(),
-            symbol,
-            args,
-            ki,
-        };
-        newConstraints.summarizerTracker->holes.push_back(hole);
-        auto newPob = ProofObligation::create(pob, state, newConstraints,
-                                              composeResult.nullPointerExpr);
-        newPob->symbolics = composeResult.symbolics;
-        objectManager->addPob(newPob);
-        auto &path = newPob->constraints.path();
-        path.first = 0;
-      }
-    } else if (isFromFunctionStart(*state) &&
-               pob->kind == ProofObligation::Kind::FunctionSummarizer) {
-      llvm::errs() << "Function summarization:\n";
-      auto tracker = composeResult.composed.summarizerTracker.value();
-      llvm::errs() << fmt::format("Ret value = {}\n",
-                                  tracker.retValueTracker->toString());
-      llvm::errs() << "Holes:\n";
-      for (auto hole : tracker.holes) {
-        llvm::errs() << fmt::format("\t{} = {} with args:\n",
-                                    hole.functionRetValueSymbol->toString(),
-                                    hole.functionName);
-        for (auto arg : hole.arguments) {
-          llvm::errs() << fmt::format("\t\t{}\n", arg->toString());
-        }
-      }
-      llvm::errs() << "Summarization end\n";
-      summaries.push_back(PathSummary{pob->constraints.path()
-                                          .getFirstInstruction()
-                                          ->getKFunction()
-                                          ->getName()
-                                          .str(),
-                                      composeResult.composed.path(),
-                                      tracker.retValueTracker, tracker.holes});
-      objectManager->removePob(pob);
-    } else {
-      if (!state->returnValue.isNull() && composeResult.composed.summarizerTracker.has_value()) {
-        composeResult.composed.summarizerTracker->retValueTracker =
-            state->returnValue;
-      }
-      auto newPob = ProofObligation::create(pob, state, composeResult.composed,
-                                            composeResult.nullPointerExpr);
-      newPob->symbolics = composeResult.symbolics;
-      pobToParentState[newPob] = state->copy(); // do i need a copy here?
-      objectManager->addPob(newPob);
-      if (debugConstraints.isSet(DebugPrint::Backward)) {
-        llvm::errs() << "[backward] Pob after composition: \n";
-        llvm::errs() << fmt::format("path={}\n",
-                                    newPob->constraints.path().toString());
-        newPob->constraints.cs().dump();
-        llvm::errs() << "\n";
-      }
-    }
   }
 }
 
@@ -5497,20 +5609,24 @@ bool Executor::isFromFunctionStart(ExecutionState const &state) {
   return false;
 }
 
-
 void Executor::goBackward(ref<BackwardAction> action) {
   objectManager->removePropagation(action->prop);
 
   ExecutionState *state = action->prop.state;
   ProofObligation *pob = action->prop.pob;
 
-  objectManager->setContextState(state);
-  if (pob->kind == ProofObligation::Kind::FunctionSummarizer) {
-    llvm::errs() << "here\n";
+  bool pathsMatch = pob->constraints.path().empty() ||
+                    state->constraints.path().getNext() == nullptr ||
+                    state->constraints.path().getNext() ==
+                        pob->constraints.path().getFirstInstruction();
+  if (pob->kind == ProofObligation::Kind::NonLinearPdr && !pathsMatch) {
+    return;
   }
 
+  objectManager->setContextState(state);
   Executor::ComposeResult composeResult;
-  if (canReachSomeTargetThroughState(*pob, *state) || pob->kind == ProofObligation::Kind::FunctionSummarizer) {
+  if (canReachSomeTargetThroughState(*pob, *state) ||
+      pob->kind == ProofObligation::Kind::FunctionSummarizer) {
     auto nullPointerExpr =
         state->nullPointerExpr ? state->nullPointerExpr : pob->nullPointerExpr;
     composeResult =
@@ -5701,7 +5817,7 @@ void Executor::reportProgressTowardsTargets() const {
   reportProgressTowardsTargets("", objectManager->getStates());
 }
 
-llvm::raw_ostream& pdrLog() {
+llvm::raw_ostream &pdrLog() {
   if (debugPrints.isSet(DebugPrint::Pdr)) {
     return llvm::errs();
   } else {
@@ -5709,6 +5825,43 @@ llvm::raw_ostream& pdrLog() {
   }
 }
 
+void Executor::addLemmasToPobLocation(ProofObligation *pob) {
+  disjunction kInstLemma = pdrSummary->getInfinityLemmasFromEdgesToPob(pob);
+  pdrLog() << fmt::format("[main loop] total lemma size: {}\n",
+                          kInstLemma.elements.size());
+  if (debugConstraints.isSet(DebugPrint::Lemma)) {
+    llvm::errs() << fmt::format("[main loop] lemma={}\n",
+                                disjunctionToString(kInstLemma));
+  }
+  // assert(!kInstLemma.empty()); -- it might be empty in case
+  // the interpolant was "false"
+  auto nextStateInitPC = pob->location->getBlock()->getFirstInstruction();
+  if (pob->parent != nullptr) {
+    nextStateInitPC = pobToParentState[pob]->initPC;
+  }
+  pdrSummary->addLemmaOnKInstruction(nextStateInitPC, INF_LEVEL, kInstLemma);
+}
+
+void Executor::addLemmaToAndEdgeToParent(ProofObligation *pob,
+                                         ProofObligation *parent) {
+  pdrLog() << fmt::format(
+      "[main loop] compose after removal of pob with id={}\n", pob->id);
+  pdrLog() << fmt::format("\tpob loc={}\n", pob->location->toString());
+  pdrLog() << fmt::format("\tpob path={}\n",
+                          pob->constraints.path().toString());
+  pdrLog() << fmt::format("\tparent pob loc={}\n",
+                          parent->location->toString());
+  pdrLog() << fmt::format("\tparent pob path={}\n",
+                          parent->constraints.path().toString());
+  auto state = pobToParentState[pob];
+  // pdrLog() << fmt::format("\tstate path={}\n",
+  //                             state->constraints.path().toString());
+
+  auto composeResult = maxCompose(parent, state);
+  // assert(composeResult.level == INF_LEVEL);
+  pdrSummary->addInfinityLemmaOnSomeEdgeToPob(parent,
+                                              composeResult.interpolant);
+}
 void Executor::run(ExecutionState *initialState,
                    TargetedExecutionManager::Data &data) {
   // Delay init till now so that ticks don't accrue during optimization and
@@ -5742,11 +5895,10 @@ void Executor::run(ExecutionState *initialState,
         codeGraphInfo.get(), *predicate, errorAndBackward);
     forCheck = (ConflictCoreInitializer *)initializer;
     ProofObligation *rootPob = *(objectManager->rootPobs.begin());
-    auto lemmaUpdater =
-        std::make_unique<PdrEngine>(rootPob, targetManager.get(),
-                                       forCheck, objectManager.get());
-    searcher = std::make_unique<BidirectionalSearcher>(forward, branch,
-                                                       backward, initializer, std::move(lemmaUpdater));
+    auto lemmaUpdater = std::make_unique<PdrEngine>(
+        rootPob, targetManager.get(), forCheck, objectManager.get());
+    searcher = std::make_unique<BidirectionalSearcher>(
+        forward, branch, backward, initializer, std::move(lemmaUpdater));
   }
 
   if (errorAndBackward) {
@@ -5788,6 +5940,12 @@ void Executor::run(ExecutionState *initialState,
     auto action = searcher->selectAction();
     executeAction(action);
     objectManager->updateSubscribers();
+    if ((*objectManager->rootPobs.begin())->children.size() >= 1) {
+      auto child = *((*objectManager->rootPobs.begin())->children.begin());
+      if (child->children.size() > 1) {
+        llvm::errs() << "here!\n";
+      }
+    }
 
     if (!checkMemoryUsage()) {
       // update searchers when states were terminated early due to memory
@@ -5815,49 +5973,16 @@ void Executor::run(ExecutionState *initialState,
             }
             if (debugPrints.isSet(DebugPrint::Backward)) {
               llvm::errs() << fmt::format(
-                  "[main loop] removed pob id={} at path {}\n",
-                  pob->id, pob->constraints.path().toString());
+                  "[main loop] removed pob id={} at path {}\n", pob->id,
+                  pob->constraints.path().toString());
             }
-            disjunction kInstLemma = pdrSummary->getInfinityLemmasFromEdgesToPob(pob);
-            pdrLog() << fmt::format("[main loop] total lemma size: {}\n",
-                                        kInstLemma.elements.size());
-            if (debugConstraints.isSet(DebugPrint::Lemma)) {
-              llvm::errs() << fmt::format("[main loop] lemma={}\n",
-                                        disjunctionToString(kInstLemma));
+            if (pob->kind == ProofObligation::Kind::Backward) {
+              addLemmasToPobLocation(pob);
             }
-            // assert(!kInstLemma.empty()); -- it might be empty in case
-            // the interpolant was "false"
-            auto nextStateInitPC =
-                pob->location->getBlock()->getFirstInstruction();
-            if (pob->parent != nullptr) {
-              nextStateInitPC = pobToParentState[pob]->initPC;
-            }
-            pdrSummary->addLemmaOnKInstruction(nextStateInitPC, INF_LEVEL,
-                                                     kInstLemma);
             auto parent = pob->parent;
-            if (parent != nullptr) {
-              pdrLog() << fmt::format(
-                  "[main loop] compose after removal of pob with id={}\n", pob->id);
-              if (pob->id == 24) {
-                llvm::nulls() << "Here!";
-              }
-              pdrLog() << fmt::format("\tpob loc={}\n",
-                                          pob->location->toString());
-              pdrLog() << fmt::format("\tpob path={}\n",
-                                          pob->constraints.path().toString());
-              pdrLog() << fmt::format("\tparent pob loc={}\n",
-                                          parent->location->toString());
-              pdrLog() << fmt::format(
-                  "\tparent pob path={}\n",
-                  parent->constraints.path().toString());
-              auto state = pobToParentState[pob];
-              pdrLog() << fmt::format("\tstate path={}\n",
-                                          state->constraints.path().toString());
-
-              auto composeResult = maxCompose(parent, state);
-              // assert(composeResult.level == INF_LEVEL);
-              pdrSummary->addInfinityLemmaOnSomeEdgeToPob(
-                  parent, composeResult.interpolant);
+            if (parent != nullptr &&
+                pob->kind == ProofObligation::Kind::Backward) {
+              addLemmaToAndEdgeToParent(pob, parent);
             }
 
             objectManager->removePob(pob);
@@ -6925,20 +7050,19 @@ Executor::allocate(ExecutionState &state, ref<Expr> size, bool isLocal,
     MemoryObject *mo;
     if (state.isolated) {
       auto symbolic_source = SourceBuilder::symbolicSizeConstantAddress(
-          updateNameVersion(state, "const_arr"), allocSite->source,
-          size);
+          updateNameVersion(state, "const_arr"), allocSite->source, size);
       auto array = Array::create(
           Expr::createPointer((Context::get().getPointerWidth()) / CHAR_BIT),
           symbolic_source);
       UpdateList updateList{array, ref<UpdateNode>{}};
-      auto addressExpr = Expr::createTempRead(array, Context::get().getPointerWidth());
-      mo =
-          memory->allocate(arrayConstantSize, isLocal, isGlobal, false,
-                           allocSite, allocationAlignment, Expr::createTrue(),
-                           addressExpr);
+      auto addressExpr =
+          Expr::createTempRead(array, Context::get().getPointerWidth());
+      mo = memory->allocate(arrayConstantSize, isLocal, isGlobal, false,
+                            allocSite, allocationAlignment, Expr::createTrue(),
+                            addressExpr);
     } else {
-      mo = memory->allocate(arrayConstantSize, isLocal, isGlobal, false, allocSite,
-                           allocationAlignment);
+      mo = memory->allocate(arrayConstantSize, isLocal, isGlobal, false,
+                            allocSite, allocationAlignment);
     }
     if (mo && state.isGEPExpr(mo->getBaseExpr())) {
       state.gepExprBases.erase(mo->getBaseExpr());
@@ -7844,9 +7968,10 @@ void Executor::lazyInitializeLocalObject(ExecutionState &state, StackFrame &sf,
   RefObjectPair op = state.addressSpace.findOrLazyInitializeObject(id.get());
   state.addressSpace.bindObject(op.first, op.second.get());
   if (state.localObjects.count(id) == 0) {
-    for (auto localObject: state.localObjects) {
+    for (auto localObject : state.localObjects) {
       auto localObjectAddress = localObject->getBaseExpr();
-      state.addConstraint(Expr::createIsZero(EqExpr::create(id->getBaseExpr(), localObjectAddress)));
+      state.addConstraint(Expr::createIsZero(
+          EqExpr::create(id->getBaseExpr(), localObjectAddress)));
     }
     state.localObjects.insert(id);
   }
@@ -8159,7 +8284,7 @@ void Executor::runFunctionAsMain(Function *f, int argc, char **argv,
     }
   }
   if (EnableFunctionSummarization) {
-    for (auto const& function: kmodule->functions) {
+    for (auto const &function : kmodule->functions) {
       llvm::errs() << "function " << function->getName() << "\n";
       if (function->getName().str() == "f") {
         auto targetBlock = *function->returnKBlocks.begin();
@@ -8198,13 +8323,13 @@ void Executor::runFunctionAsMain(Function *f, int argc, char **argv,
     if (NonLinearPdr) {
       auto clonePob = new ProofObligation(pob->location);
       clonePob->kind = ProofObligation::Kind::NonLinearPdr;
+      clonePob->constraints.summarizerTracker = SummarizerTracker();
       clonePob->targetForest = pob->targetForest;
       objectManager->addPob(clonePob);
     } else {
       objectManager->addPob(pob);
     }
   }
-
 
   summary.readFromFile(kmodule.get());
 
@@ -8227,8 +8352,6 @@ void Executor::prepareTargetedExecution(ExecutionState &initialState,
   initialState.setHistory(initialState.targetForest.getHistory());
   initialState.setTargets(initialState.targetForest.getTargets());
 }
-
-
 
 ref<Expr> Executor::makeSymbolicValue(llvm::Value *value,
                                       ExecutionState &state) {
@@ -9010,7 +9133,7 @@ int saturatingInc(int value) {
  * 1)
  */
 void Executor::executeNodeLemmaUpdateAction(ProofObligation *pob,
-                                               int queueDepth) {
+                                            int queueDepth) {
   if (pob == nullptr) {
     return;
   }
@@ -9049,8 +9172,7 @@ void Executor::executeNodeLemmaUpdateAction(ProofObligation *pob,
           logPrefixWithSpace);
     }
   }
-  for (auto const &lemma :
-       pdrSummary->getInfinityLemmasFromEdgesToPob(pob)) {
+  for (auto const &lemma : pdrSummary->getInfinityLemmasFromEdgesToPob(pob)) {
     // do not update level, as min(x, infinity) = x;
     edgeLemmas.elements.insert(lemma);
     pdrLog() << fmt::format(
@@ -9079,7 +9201,6 @@ ref<Target> Executor::kInstructionToTarget(KInstruction *kiCopy) {
     return ReachBlockTarget::create(lastBlock, true);
   }
 }
-
 
 /// @brief Determines current code location for given state.
 /// @param state given state.
@@ -9118,7 +9239,7 @@ ref<CodeLocation> Executor::locationOf(const ExecutionState &state) const {
                               kinst->getLine(), kinst->getColumn());
 }
 
-  Executor::MaxComposeResult Executor::maxCompose(klee::ProofObligation *pob,
+Executor::MaxComposeResult Executor::maxCompose(klee::ProofObligation *pob,
                                                 const ExecutionState *state) {
   // if (debugPrints.isSet(DebugPrint::MaxCompose)) {
   //   llvm::errs() << fmt::format("[maxcompose] pob info:\n");
@@ -9146,7 +9267,8 @@ ref<CodeLocation> Executor::locationOf(const ExecutionState &state) const {
                                 state->constraints.path().toString());
     llvm::errs() << fmt::format("\tpob: {}\n",
                                 pob->constraints.path().toString());
-    llvm::errs() << fmt::format("\tlevel: {}\n", levelToString(currentComposeLevel));
+    llvm::errs() << fmt::format("\tlevel: {}\n",
+                                levelToString(currentComposeLevel));
     llvm::errs() << fmt::format(
         "\tinterpolant:\n\t{}\n",
         disjunctionToString(disjunction{result.conflict.core}));
@@ -9190,25 +9312,27 @@ void Executor::executeCheckInductiveAction(int queueDepth) {
   if (queueDepth < 3) {
     return; // play it safe
   }
-  pdrLog() << fmt::format("[executeCheckInductive] checking inductiveness at depth {}!\n", queueDepth);
+  pdrLog() << fmt::format(
+      "[executeCheckInductive] checking inductiveness at depth {}!\n",
+      queueDepth);
 
   bool lastLevelInductive = true;
   for (int level = 0; level < queueDepth; ++level) {
-    pdrLog() << fmt::format(
-        "[executeCheckInductive] considering level={}\n", level);
+    pdrLog() << fmt::format("[executeCheckInductive] considering level={}\n",
+                            level);
     for (auto &[ki, subarray] : pdrSummary->kinstructionLemmas) {
       for (auto &lemma : subarray[level]) {
         std::set<ExecutionState *, ExecutionStateIDCompare> states;
         auto pob = lemmaAndKInstructionToPobAndStates(level, lemma, ki, states);
-        pdrLog() << fmt::format(
-            "[executeCheckInductive] {} states found\n", states.size());
+        pdrLog() << fmt::format("[executeCheckInductive] {} states found\n",
+                                states.size());
         auto minEdgeLevel = calculateMinEdgeLevel(level, &pob, states);
         int updatedLemmaLevel = saturatingInc(minEdgeLevel);
         if (updatedLemmaLevel > level) {
           pdrLog() << fmt::format(
-              "[executeCheckInductive] lemma has upped its level to {}\n", updatedLemmaLevel);
-          pdrSummary->kinstructionLemmas[ki][updatedLemmaLevel].insert(
-              lemma);
+              "[executeCheckInductive] lemma has upped its level to {}\n",
+              updatedLemmaLevel);
+          pdrSummary->kinstructionLemmas[ki][updatedLemmaLevel].insert(lemma);
           // is this safe?
         } else {
           int lastLemmaLevel = queueDepth - 1;
@@ -9219,21 +9343,17 @@ void Executor::executeCheckInductiveAction(int queueDepth) {
       }
     }
   }
-  pdrLog() << fmt::format(
-      "[executeCheckInductive] lastLevelInductive: {}\n",
-      lastLevelInductive);
+  pdrLog() << fmt::format("[executeCheckInductive] lastLevelInductive: {}\n",
+                          lastLevelInductive);
   if (lastLevelInductive) {
-    pdrLog() << fmt::format(
-        "[executeCheckInductive] last level lemmas:\n");
+    pdrLog() << fmt::format("[executeCheckInductive] last level lemmas:\n");
     for (auto &[ki, subarray] : pdrSummary->kinstructionLemmas) {
       for (auto &lemma : subarray[queueDepth]) {
         auto lemmaExpr = disjunctionToExpr(lemma);
         auto loc = ki->inst()->getDebugLoc();
-        pdrLog() << fmt::format("\tki={} level={} lemma={}\n",
-                                    ki->toString(), queueDepth,
-                                    lemmaExpr->toString());
-        pdrSummary->addLemmaOnKInstruction(
-            ki, INF_LEVEL, lemma);
+        pdrLog() << fmt::format("\tki={} level={} lemma={}\n", ki->toString(),
+                                queueDepth, lemmaExpr->toString());
+        pdrSummary->addLemmaOnKInstruction(ki, INF_LEVEL, lemma);
       }
     }
   }

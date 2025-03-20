@@ -140,8 +140,10 @@ public:
   PathConstraints() = default;
   PathConstraints(KInstruction *initpc) : _path(initpc) {}
 
-  std::map<std::string, ref<Expr>> trackers; // to track value changes during backward execution
+  std::map<std::string, ref<Expr>>
+      trackers; // to track value changes during backward execution
   std::optional<SummarizerTracker> summarizerTracker = std::nullopt;
+
 private:
   Path _path;
   constraints_ty _original;
@@ -218,6 +220,8 @@ inline llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
   constraints.print(os);
   return os;
 }
+
+ref<Expr> replaceExpr(ref<Expr> expr, ExprHashMap<ref<Expr>> replacements);
 
 } // namespace klee
 

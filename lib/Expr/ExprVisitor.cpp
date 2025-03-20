@@ -40,7 +40,7 @@ ref<Expr> ExprVisitor::visit(const ref<Expr> &e) {
 }
 
 ref<Expr> ExprVisitor::visitActual(const ref<Expr> &e) {
-  if (isa<ConstantExpr>(e) || isa<VariableExpr>(e)) {
+  if (isa<ConstantExpr>(e)) {
     return e;
   } else {
     Expr &ep = *e.get();
@@ -233,6 +233,9 @@ ref<Expr> ExprVisitor::visitActual(const ref<Expr> &e) {
       break;
     case Expr::ConstantPointer:
       res = visitConstantPointer(static_cast<ConstantPointerExpr &>(ep));
+      break;
+    case Expr::Variable:
+      res = visitVariable(static_cast<VariableExpr &>(ep));
       break;
     case Expr::Constant:
     default:
@@ -508,6 +511,10 @@ ExprVisitor::Action ExprVisitor::visitFMin(const FMinExpr &) {
 }
 
 ExprVisitor::Action ExprVisitor::visitPointer(const PointerExpr &) {
+  return Action::doChildren();
+}
+
+ExprVisitor::Action ExprVisitor::visitVariable(const VariableExpr &) {
   return Action::doChildren();
 }
 

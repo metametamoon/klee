@@ -40,7 +40,6 @@ ProofObligation *ProofObligation::create(ProofObligation *parent,
   auto statestack = state->stack.callStack();
   CallStackFrame::subtractFrames(pob->stack, statestack);
   pob->nullPointerExpr = nullPointerExpr;
-  pob->kind = parent->kind;
 
   return pob;
 }

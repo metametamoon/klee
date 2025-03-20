@@ -1788,7 +1788,7 @@ private:
       : PointerExpr(b, v) {}
 };
 
-class VariableExpr: public NonConstantExpr {
+class VariableExpr : public NonConstantExpr {
 public:
   static bool classof(const VariableExpr *) { return true; }
   static bool classof(const Expr *E) { return E->getKind() == Expr::Variable; }
@@ -1797,7 +1797,26 @@ public:
   static const unsigned numKids = 0;
   Width const width;
   std::string const name;
-  VariableExpr(Width width, std::string name): width(width), name(std::move(name)) {}
+  bool isReadFromRet;
+
+private:
+  VariableExpr(Width width, std::string name, bool isReadFromRet)
+      : width(width), name(std::move(name)), isReadFromRet(isReadFromRet) {}
+
+public:
+  static ref<VariableExpr> alloc(Width width, std::string name,
+                                 bool isReadFromRet) {
+    ref<VariableExpr> r = new VariableExpr(width, name, isReadFromRet);
+    r->computeHash();
+    r->computeHeight();
+    return r;
+  }
+
+  static ref<VariableExpr> create(Width width, std::string name,
+                                  bool isReadFromRet = false) {
+    return alloc(width, name, isReadFromRet);
+  }
+
   Width getWidth() const override { return width; }
   Kind getKind() const override { return kind; }
   unsigned getNumKids() const override { return 0; }
@@ -1808,6 +1827,8 @@ protected:
     const VariableExpr &cb = static_cast<const VariableExpr &>(b);
     if (getWidth() != cb.getWidth())
       return getWidth() < cb.getWidth() ? -1 : 1;
+    if (isReadFromRet != cb.isReadFromRet)
+      return isReadFromRet ? -1 : 1;
     if (name == cb.name)
       return 0;
     return name <= cb.name ? -1 : 1;

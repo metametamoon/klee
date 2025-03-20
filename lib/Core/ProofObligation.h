@@ -49,7 +49,6 @@ public:
   static void propagateToReturn(ProofObligation *pob, KInstruction *callSite,
                                 KBlock *returnBlock);
 
-private:
   ProofObligation *makeChild(ref<Target> target) {
     auto pob = new ProofObligation(target);
     pob->id = nextID++;
@@ -96,7 +95,7 @@ using pobs_ty = std::set<ProofObligation *, ProofObligationIDCompare>;
 inline std::string printPobKind(ProofObligation::Kind kind) {
   if (kind == ProofObligation::Kind::Backward) {
     return "Backward";
-  } else if (kind == ProofObligation::Kind::NonLinearPdr){
+  } else if (kind == ProofObligation::Kind::NonLinearPdr) {
     return "NonLinearPdr";
   } else if (kind == ProofObligation::Kind::FunctionSummarizer) {
     return "FunctionSummarizer";

@@ -135,7 +135,6 @@ class Executor : public Interpreter {
     ImmutableList<Symbolic> symbolics;
   };
 
-
   struct MaxComposeResult {
     int level;
     disjunction interpolant;
@@ -288,7 +287,7 @@ private:
       okExternalsList + (sizeof(okExternalsList) / sizeof(okExternalsList[0])));
 
   std::unique_ptr<PdrSummary> pdrSummary;
-  std::map<ProofObligation*, ExecutionState*> pobToParentState;
+  std::map<ProofObligation *, ExecutionState *> pobToParentState;
   std::vector<PathSummary> summaries;
 
   /// Return the typeid corresponding to a certain `type_info`
@@ -299,6 +298,8 @@ private:
   void executeInstruction(ExecutionState &state, KInstruction *ki);
 
   void seed(ExecutionState &initialState);
+  void addLemmasToPobLocation(ProofObligation *pob);
+  void addLemmaToAndEdgeToParent(ProofObligation *pob, ProofObligation *parent);
   void run(ExecutionState *initialState, TargetedExecutionManager::Data &data);
 
   // Given a concrete object in our [klee's] address space, add it to
@@ -805,6 +806,8 @@ private:
   void createPobsAtReturnPoints(ExecutionState *state, ProofObligation *pob,
                                 ComposeResult composeResult,
                                 KCallBlock *kCallBlock);
+  void addFunctionSummaryEntry(ProofObligation *pob,
+                               PathConstraints composedConstraints);
   void processSuccessfulComposition(ExecutionState *state, ProofObligation *pob,
                                     Executor::ComposeResult composeResult);
   bool isFromFunctionStart(ExecutionState const &state);

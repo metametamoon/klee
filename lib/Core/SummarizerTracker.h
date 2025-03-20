@@ -7,7 +7,7 @@ namespace klee {
 
 struct Hole {
   std::string functionName; // or any identificator, really
-  ref<Expr> functionRetValueSymbol;
+  ref<VariableExpr> functionRetValueSymbol;
   std::vector<ref<Expr>> arguments; // in terms of caller; must be composed
   KInstruction *callSite;
 };

@@ -59,7 +59,8 @@ bool ComposeHelper::tryResolveAddress(ExecutionState &state,
   if (resolvedMemoryObjects.size() > 0) {
     state.assumptions.insert(guard);
     ref<PointerExpr> resultAddress =
-        resolvedMemoryObjects.at(resolveConditions.size() - 1)->getBasePointer();
+        resolvedMemoryObjects.at(resolveConditions.size() - 1)
+            ->getBasePointer();
 
     for (unsigned int i = 0; i < resolveConditions.size(); ++i) {
       unsigned int index = resolveConditions.size() - 1 - i;
@@ -227,6 +228,19 @@ ComposeVisitor::visitPointer(const PointerExpr &pointerExpr) {
   return Action::changeTo(processPointer(pointerExpr.base, pointerExpr.value));
 }
 
+ExprVisitor::Action
+ComposeVisitor::visitVariable(const VariableExpr &variable_expr) {
+  return Action::changeTo(processVariable(variable_expr));
+}
+ref<Expr> ComposeVisitor::processVariable(const VariableExpr &expr) {
+  if (!expr.isReadFromRet)
+    return VariableExpr::create(expr.width, expr.name, expr.isReadFromRet);
+  else {
+    assert(state.stack.stackBalance() == -1);
+    return state.returnValue;
+  }
+}
+
 ref<Expr> ComposeVisitor::processPointer(ref<Expr> base, ref<Expr> value) {
   auto trueBase = visit(base)->getValue();
   auto trueValue = visit(value)->getValue();
@@ -273,7 +287,7 @@ ref<Expr> ComposeVisitor::processRead(const Array *root,
     case SymbolicSource::Kind::Argument:
     case SymbolicSource::Kind::Instruction: {
       composedArray =
-         helper.fillValue(state, cast<ValueSource>(root->source), arraySize);
+          helper.fillValue(state, cast<ValueSource>(root->source), arraySize);
       break;
     }
     case SymbolicSource::Kind::Uninitialized: {

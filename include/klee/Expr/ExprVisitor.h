@@ -140,6 +140,8 @@ protected:
   virtual Action visitPointer(const PointerExpr &);
   virtual Action visitConstantPointer(const ConstantPointerExpr &);
 
+  virtual Action visitVariable(const VariableExpr &);
+
   typedef VisitorHash visited_ty;
   visited_ty visited;
 

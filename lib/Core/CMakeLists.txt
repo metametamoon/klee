@@ -44,11 +44,8 @@ add_library(kleeCore
   PdrEngine.cpp
   PdrSummary.cpp
   RetValueExprVisitor.cpp
-        SummarizerTracker.cpp
-        SummarizerTracker.h
-        SummarizerTracker.cpp
-        SummarizerTracker.h
-        PathSummary.h
+  SummarizerTracker.cpp
+  SummarizerTracker.cpp
 )
 
 target_link_libraries(kleeCore PRIVATE
