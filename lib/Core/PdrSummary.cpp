@@ -79,6 +79,18 @@ void PdrSummary::addLemmaOnKInstruction(KInstruction *ki, int level,
   kinstructionLemmas[ki][level].insert(lemma);
 }
 
+void PdrSummary::addFunctionLemma(KFunction *kf, int level,
+                                  const disjunction &lemma) {
+  functionLemmas[kf][level].insert(lemma);
+  if (debugConstraints.isSet(DebugPrint::Lemma)) {
+    llvm::errs() << logPrefixWithSpace
+                 << fmt::format("Added lemma at kf={} level={}\n",
+                                kf->getName().str(), levelToString(level));
+    llvm::errs() << fmt::format("{}Lemma={}\n", logPrefixWithSpace,
+                                disjunctionToString(lemma));
+  }
+}
+
 std::map<int, cnf> PdrSummary::getLemmasFromKInstruction(KInstruction *ki) {
   return kinstructionLemmas[ki];
 }

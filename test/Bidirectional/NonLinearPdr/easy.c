@@ -15,21 +15,28 @@ void reach_error() {
   klee_assert(0);
 }
 
-
+// \exist sigma. read x = sigma /\ sigma > 0 /\ sigma < 10000 /\ 2 * read x != 2 sigma
+  // \exist y: y > 0
+  // read x = sigma
 int f(int x) {
   int r = x * 2;
+
+  int y = 3 * r;
   return r;
-}
+} // \exist sigma. read x = sigma /\ sigma > 0 /\ sigma < 10000 /\ f1 != 2 sigma
+  // \exist y: y > 0
+  // read x = sigma
 
-
-int main() {
-  int a;
-
+int main(int y) {
+  klee_assume(y > 0);
+  int a; // a -> sigma, sigma > 0 /\ sigma < 100000
+  // f1 != 2 * sigma
   klee_make_symbolic(&a, sizeof(a), "a");
   klee_assume(a > 0 && a < 100000);
+  // f1 != 2 * read a
   int b = f(a);
-
-  if (b != 2 * a != 0) {
+  // read b != 2 * read a
+  if (b != 2 * a) {
     reach_error();
   }
   return 0;

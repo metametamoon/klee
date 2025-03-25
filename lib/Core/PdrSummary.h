@@ -30,6 +30,7 @@ public:
 
   void addLemmaOnKInstruction(KInstruction *, int level,
                               const disjunction &lemma);
+  void addFunctionLemma(KFunction *kf, int level, const disjunction &lemma);
 
   // is it true that each level has only lemma? I have no idea
   std::map<int, cnf> getLemmasFromKInstruction(KInstruction *);
@@ -40,6 +41,7 @@ public:
 
   std::map<KInstruction *, std::map<int, cnf>, KInstructionCompare>
       kinstructionLemmas;
+  std::map<KFunction *, std::map<int, cnf>, KFunctionCompare> functionLemmas;
 
   // from pob id
   // infinity lemmas on edges to pobs;

@@ -17,14 +17,31 @@ void reach_error() {
 
 
 int f(int x) {
-  int r = x + 2;
-  return r;
+  int r = x + 1;
+  // F1(x, r)
+  int k = r + 1;
+  return k;
+}
+
+
+int T(int x) {
+  int t;
+  if (x < 0) {
+    t = x;
+  }
+  else {
+     int y = x - 1;
+     // A(x, y)
+     int z = T(y);
+     // B(x, y, z) <- T(y, z) /\ A(x, y)
+     t = z + 1;
+  }
+  return t; // t != x
 }
 
 
 int main() {
   int a;
-
   klee_make_symbolic(&a, sizeof(a), "a");
   klee_assume(a % 2 == 0);
   int b = f(a);

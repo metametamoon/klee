@@ -5401,6 +5401,41 @@ void Executor::addFunctionSummaryEntry(ProofObligation *pob,
                                   tracker.retValueTracker, tracker.holes});
 }
 
+PathConstraints Executor::createConstraintsWithHoleForSkipFunctionPob(
+    ExecutionState *state, PathConstraints const &oldConstraints,
+    KCallBlock *kCallBlock) {
+  auto calledFunction = kCallBlock->getKFunction();
+  auto ki = kCallBlock->kcallInstruction;
+  auto freshFunctionSymbol =
+      calledFunction->KValue::getName().str() + std::to_string(freshInt());
+  auto [newConstraints, symbol] =
+      replaceRetValue(oldConstraints, ki, freshFunctionSymbol);
+  std::vector<ref<Expr>> args;
+  for (size_t i = 0; i < calledFunction->getNumArgs(); ++i) {
+    auto arg = eval(ki, i + 1, *state).value;
+    args.push_back(arg);
+  }
+  auto hole = Hole{
+      calledFunction->KValue::getName().str(),
+      symbol,
+      args,
+      ki,
+  };
+  newConstraints.summarizerTracker->holes.push_back(hole);
+  return newConstraints;
+}
+
+bool isNonLinearPob(ProofObligation *maybeNonLinearPob) {
+  auto path = maybeNonLinearPob->constraints.path();
+  if (!path.empty()) {
+    auto firstBlock = path.getFirstInstruction()->getKBlock();
+    if (auto callBlock = dyn_cast<KCallBlock>(firstBlock)) {
+      return callBlock->getFirstInstruction() != path.getFirstInstruction();
+    }
+  }
+  return false;
+}
+
 void Executor::processSuccessfulComposition(
     ExecutionState *state, ProofObligation *pob,
     Executor::ComposeResult composeResult) {
@@ -5413,29 +5448,14 @@ void Executor::processSuccessfulComposition(
     if (isFromFunctionCall) {
       if (pob->kind == ProofObligation::Kind::Backward) {
         createPobsAtReturnPoints(state, pob, composeResult, kCallBlock);
-      } else if (pob->kind == ProofObligation::Kind::FunctionSummarizer ||
-                 pob->kind == ProofObligation::Kind::NonLinearPdr) {
-        assert(composeResult.composed.summarizerTracker.has_value());
-        auto calledFunction = kCallBlock->getKFunction();
-        auto ki = kCallBlock->kcallInstruction;
-        auto freshFunctionSymbol =
-            calledFunction->getName().str() + std::to_string(freshInt());
-        auto [newConstraints, symbol] =
-            replaceRetValue(composeResult.composed, ki, freshFunctionSymbol);
-        std::vector<ref<Expr>> args;
-        for (size_t i = 0; i < calledFunction->getNumArgs(); ++i) {
-          auto arg = eval(ki, i + 1, *state).value;
-          args.push_back(arg);
-        }
-        auto hole = Hole{
-            calledFunction->getName().str(),
-            symbol,
-            args,
-            ki,
-        };
-        newConstraints.summarizerTracker->holes.push_back(hole);
+      } else if (pob->kind == ProofObligation::Kind::NonLinearPdr) {
+        auto oldConstraints = composeResult.composed;
+        assert(oldConstraints.summarizerTracker.has_value());
+        auto newConstraints = createConstraintsWithHoleForSkipFunctionPob(
+            state, oldConstraints, kCallBlock);
         auto nonLinearPob = ProofObligation::create(
             pob, state, newConstraints, composeResult.nullPointerExpr);
+        pobToParentState[nonLinearPob] = state;
         objectManager->addPob(nonLinearPob);
 
         auto functionSkipPob = ProofObligation::create(
@@ -5454,18 +5474,6 @@ void Executor::processSuccessfulComposition(
       objectManager->removePob(pob);
     } else if (isFromFunctionStart(*state) &&
                pob->kind == ProofObligation::Kind::NonLinearPdr) {
-      auto isNonLinearPob = [](ProofObligation *maybeNonLinearPob) {
-        auto path = maybeNonLinearPob->constraints.path();
-        if (!path.empty()) {
-          auto firstBlock = path.getFirstInstruction()->getKBlock();
-          if (auto callBlock = dyn_cast<KCallBlock>(firstBlock)) {
-            return callBlock->getFirstInstruction() !=
-                   path.getFirstInstruction();
-          }
-        }
-        return false;
-      };
-
       auto nonlinearPob = pob;
       while (!isNonLinearPob(nonlinearPob)) {
         nonlinearPob = nonlinearPob->parent;
@@ -5482,11 +5490,8 @@ void Executor::processSuccessfulComposition(
       auto replacements = ExprHashMap<ref<Expr>>{};
       for (unsigned i = 0; i < n; ++i) {
         auto argument = functionValue->getArg(i);
-        auto size = kmodule->targetData->getTypeStoreSize(
-            argument
-                ->getType()); // index below is -1 to account for raise during
-                              // the composition with the functional state
-        // setting index to -1 to offset it propagation during composition fith
+        auto size = kmodule->targetData->getTypeStoreSize(argument->getType());
+        // setting index to -1 to offset it propagation during composition with
         // functional state
         auto source = SourceBuilder::argument(*argument, -1, kmodule.get());
         auto array = makeArray(Expr::createPointer(size), source);
@@ -5978,6 +5983,20 @@ void Executor::run(ExecutionState *initialState,
             }
             if (pob->kind == ProofObligation::Kind::Backward) {
               addLemmasToPobLocation(pob);
+            }
+            if (pob->kind == ProofObligation::Kind::NonLinearPdr) {
+              if (isNonLinearPob(pob->parent)) {
+                auto place = dyn_cast<ReachBlockTarget>(pob->location);
+                auto isFunctionalPob = place->isAtEnd();
+                if (isFunctionalPob) {
+                  disjunction functionLemma =
+                      pdrSummary->getInfinityLemmasFromEdgesToPob(pob);
+                  pdrSummary->addFunctionLemma(place->getBlock()->parent,
+                                               INF_LEVEL, functionLemma);
+                }
+              } else {
+                addLemmasToPobLocation(pob);
+              }
             }
             auto parent = pob->parent;
             if (parent != nullptr &&

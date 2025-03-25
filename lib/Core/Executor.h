@@ -808,6 +808,9 @@ private:
                                 KCallBlock *kCallBlock);
   void addFunctionSummaryEntry(ProofObligation *pob,
                                PathConstraints composedConstraints);
+  PathConstraints createConstraintsWithHoleForSkipFunctionPob(
+      ExecutionState *state, PathConstraints const &oldConstraints,
+      KCallBlock *kCallBlock);
   void processSuccessfulComposition(ExecutionState *state, ProofObligation *pob,
                                     Executor::ComposeResult composeResult);
   bool isFromFunctionStart(ExecutionState const &state);
