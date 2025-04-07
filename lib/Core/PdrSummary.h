@@ -13,8 +13,6 @@ namespace klee {
 struct KInstruction;
 class ProofObligation;
 
-;
-
 ref<Expr> disjunctionToExpr(const disjunction &dj);
 std::string disjunctionToString(const disjunction &dj);
 ref<Expr> cnfToExpr(const cnf &formula);

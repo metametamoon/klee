@@ -46,6 +46,7 @@ add_library(kleeCore
   RetValueExprVisitor.cpp
   SummarizerTracker.cpp
   SummarizerTracker.cpp
+  NonLinearPdrSummary.cpp
 )
 
 target_link_libraries(kleeCore PRIVATE

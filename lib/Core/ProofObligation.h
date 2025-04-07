@@ -59,6 +59,7 @@ public:
     pob->isTargeted_ = isTargeted_;
     children.insert(pob);
     pob->kind = kind;
+    pob->fuel = this->fuel - 1;
     return pob;
   }
 
@@ -86,12 +87,15 @@ public:
 
   ref<Expr> nullPointerExpr;
 
+  int fuel = INT32_MAX;
+
 private:
   static unsigned nextID;
   bool isTargeted_ = false;
 };
 
 using pobs_ty = std::set<ProofObligation *, ProofObligationIDCompare>;
+
 inline std::string printPobKind(ProofObligation::Kind kind) {
   if (kind == ProofObligation::Kind::Backward) {
     return "Backward";
@@ -101,6 +105,13 @@ inline std::string printPobKind(ProofObligation::Kind kind) {
     return "FunctionSummarizer";
   }
   assert(false && "Unreachable (all kinds tested)");
+}
+
+inline std::string pobToShortString(ProofObligation *pob) {
+  return "Pob id=" + std::to_string(pob->getID()) +
+         " kind=" + printPobKind(pob->kind) +
+         " fuel=" + std::to_string(pob->fuel) +
+         " path=" + pob->constraints.path().toString();
 }
 
 } // namespace klee

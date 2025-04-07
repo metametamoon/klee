@@ -17,6 +17,7 @@
 
 #include "BidirectionalSearcher.h"
 #include "ExecutionState.h"
+#include "NonLinearPdrSummary.h"
 #include "ObjectManager.h"
 #include "PathSummary.h"
 #include "PdrEngine.h"
@@ -287,6 +288,7 @@ private:
       okExternalsList + (sizeof(okExternalsList) / sizeof(okExternalsList[0])));
 
   std::unique_ptr<PdrSummary> pdrSummary;
+  std::unique_ptr<NonLinearPdrSummary> nonLinearPdrSummary;
   std::map<ProofObligation *, ExecutionState *> pobToParentState;
   std::vector<PathSummary> summaries;
 
@@ -850,6 +852,7 @@ private:
       std::set<ExecutionState *, ExecutionStateIDCompare> &states);
 
   void executeCheckInductiveAction(int queueDepth);
+  void checkInductiveNonLinear(int queueDepth);
 
 public:
   Executor(llvm::LLVMContext &ctx, const InterpreterOptions &opts,
