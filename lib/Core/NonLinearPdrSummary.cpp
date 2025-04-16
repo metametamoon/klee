@@ -38,4 +38,28 @@ NonLinearPdrSummary::getLemmasFromKInstruction(KInstruction *ki) {
   return kinstructionLemmas[ki];
 }
 
+void NonLinearPdrSummary::addFunctionLemma(KFunction *kf, int level,
+                                           const disjunction &lemma) {
+  functionLemmas[kf][level].insert(lemma);
+  if (debugConstraints.isSet(DebugPrint::Lemma)) {
+    llvm::errs() << fmt::format("{}Added function lemma function={} level={}\n",
+                                logPrefixWithSpace, kf->getName().str(),
+                                levelToString(level));
+  }
+}
+
+void NonLinearPdrSummary::addDisjunctFunctionLemma(KFunction *kf, int level,
+                                                   const disjunction &lemma) {
+  auto &disjunct = kfunctionsIntermediateLemmas[kf][level];
+  disjunct.elements.insert(lemma.elements.begin(), lemma.elements.end());
+}
+
+void NonLinearPdrSummary::fixFunctionLemma(KFunction *kf, int level) {
+  functionLemmas[kf][level].insert(kfunctionsIntermediateLemmas[kf][level]);
+}
+
+std::map<int, cnf> NonLinearPdrSummary::getFunctionLemmas(KFunction *kf) {
+  return functionLemmas[kf];
+}
+
 } // namespace klee

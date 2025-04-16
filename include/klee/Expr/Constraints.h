@@ -221,7 +221,7 @@ inline llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
   return os;
 }
 
-ref<Expr> replaceExpr(ref<Expr> expr, ExprHashMap<ref<Expr>> replacements);
+ref<Expr> replaceExprWithReplacements(ref<Expr> expr, ExprHashMap<ref<Expr>> replacements);
 
 } // namespace klee
 

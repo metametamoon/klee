@@ -47,6 +47,7 @@ add_library(kleeCore
   SummarizerTracker.cpp
   SummarizerTracker.cpp
   NonLinearPdrSummary.cpp
+        Interpolate.cpp
 )
 
 target_link_libraries(kleeCore PRIVATE

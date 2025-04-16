@@ -20,15 +20,12 @@ void reach_error() {
   // read x = sigma
 int f(int x) {
   int r = x * 2;
-
-  int y = 3 * r;
   return r;
 } // \exist sigma. read x = sigma /\ sigma > 0 /\ sigma < 10000 /\ f1 != 2 sigma
   // \exist y: y > 0
   // read x = sigma
 
-int main(int y) {
-  klee_assume(y > 0);
+int main() {
   int a; // a -> sigma, sigma > 0 /\ sigma < 100000
   // f1 != 2 * sigma
   klee_make_symbolic(&a, sizeof(a), "a");

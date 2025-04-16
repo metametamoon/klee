@@ -628,8 +628,9 @@ void Simplificator::removeReplacement(Replacements &replacements,
   }
 }
 
-ref<Expr> klee::replaceExpr(ref<Expr> expr,
-                            ExprHashMap<ref<Expr>> replacements) {
+ref<Expr>
+klee::replaceExprWithReplacements(ref<Expr> expr,
+                                  ExprHashMap<ref<Expr>> replacements) {
   auto visitor = ExprReplaceVisitor2(replacements, {});
   return visitor.visit(expr);
 }

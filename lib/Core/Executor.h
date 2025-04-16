@@ -302,6 +302,11 @@ private:
   void seed(ExecutionState &initialState);
   void addLemmasToPobLocation(ProofObligation *pob);
   void addLemmaToAndEdgeToParent(ProofObligation *pob, ProofObligation *parent);
+  PathConstraints
+  eliminateQuantifiers(const klee::PathConstraints &path_constraints);
+  void processLeafPobBeforeRemoval(ProofObligation *pob);
+  bool removeLeafPobIfDead(ConflictCoreInitializer *forCheck, bool &changed,
+                           ProofObligation *pob);
   void run(ExecutionState *initialState, TargetedExecutionManager::Data &data);
 
   // Given a concrete object in our [klee's] address space, add it to
@@ -813,6 +818,9 @@ private:
   PathConstraints createConstraintsWithHoleForSkipFunctionPob(
       ExecutionState *state, PathConstraints const &oldConstraints,
       KCallBlock *kCallBlock);
+  cnf extractLemmaToApply(ExecutionState *state, KCallBlock *kCallBlock,
+                          int pobLevel);
+  void removeSubtree(klee::ProofObligation *pob);
   void processSuccessfulComposition(ExecutionState *state, ProofObligation *pob,
                                     Executor::ComposeResult composeResult);
   bool isFromFunctionStart(ExecutionState const &state);

@@ -21,6 +21,15 @@ ref<Expr> disjunctionToExpr(const disjunction &dj) {
   return expr;
 }
 
+PathConstraints cnfToPathConstraints(const cnf &formula) {
+  PathConstraints result{};
+  for (auto &disjunct : formula) {
+    auto expr = disjunctionToExpr(disjunct);
+    result.addConstraint(expr);
+  }
+  return result;
+}
+
 std::string disjunctionToString(const disjunction &dj) {
   if (dj.elements.empty()) {
     return "false";

@@ -19,8 +19,18 @@ public:
   std::map<int, cnf> getLemmasFromKInstruction(KInstruction *);
   // void pobDied(ProofObligation *);
 
+  void addFunctionLemma(KFunction *kf, int level, const disjunction &lemma);
+
+  void addDisjunctFunctionLemma(KFunction *kf, int level,
+                                const disjunction &lemma);
+  void fixFunctionLemma(KFunction *kf, int level);
+
+  std::map<int, cnf> getFunctionLemmas(KFunction *kf);
+
   std::map<KInstruction *, std::map<int, disjunction>, KInstructionCompare>
       kinstructionIntermediateLemmas;
+  std::map<KFunction *, std::map<int, disjunction>, KFunctionCompare>
+      kfunctionsIntermediateLemmas;
   std::map<KInstruction *, std::map<int, cnf>, KInstructionCompare>
       kinstructionLemmas;
   std::map<KFunction *, std::map<int, cnf>, KFunctionCompare> functionLemmas;
