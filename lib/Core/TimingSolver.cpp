@@ -294,6 +294,8 @@ bool TimingSolver::evaluate(const ConstraintSet &constraints, ref<Expr> expr,
   return success;
 }
 
+// /\_{c \in cs} c -> expr => /\_{c \in cs_sub | cs_sub \consists cs} c -> expr
+// (if isValid)
 bool TimingSolver::getValidityCore(const ConstraintSet &constraints,
                                    ref<Expr> expr, ValidityCore &validityCore,
                                    bool &result,

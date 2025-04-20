@@ -290,6 +290,7 @@ private:
   std::unique_ptr<PdrSummary> pdrSummary;
   std::unique_ptr<NonLinearPdrSummary> nonLinearPdrSummary;
   std::map<ProofObligation *, ExecutionState *> pobToParentState;
+  std::map<KCallBlock *, ExecutionState *> nonLinearNodeToStateBeginningThere;
   std::vector<PathSummary> summaries;
 
   /// Return the typeid corresponding to a certain `type_info`
@@ -818,9 +819,14 @@ private:
   PathConstraints createConstraintsWithHoleForSkipFunctionPob(
       ExecutionState *state, PathConstraints const &oldConstraints,
       KCallBlock *kCallBlock);
+  std::function<ref<Expr>(ref<Expr>)>
+  extractFunctionLemmaAdapter(ExecutionState *state, KCallBlock *kCallBlock,
+                              KFunction *kf);
   cnf extractLemmaToApply(ExecutionState *state, KCallBlock *kCallBlock,
                           int pobLevel);
   void removeSubtree(klee::ProofObligation *pob);
+  void createFunctionPobUsingAcquiredUnderapproximation(
+      const ComposeResult &composeResult, ProofObligation *nonlinearPob);
   void processSuccessfulComposition(ExecutionState *state, ProofObligation *pob,
                                     Executor::ComposeResult composeResult);
   bool isFromFunctionStart(ExecutionState const &state);
@@ -860,6 +866,9 @@ private:
       std::set<ExecutionState *, ExecutionStateIDCompare> &states);
 
   void executeCheckInductiveAction(int queueDepth);
+  void updateLemmaLevelInNonlinearNode(int queueDepth,
+                                       const disjunction &lemmaToLiftLevel,
+                                       KCallBlock *nonlinearNode);
   void checkInductiveNonLinear(int queueDepth);
 
 public:

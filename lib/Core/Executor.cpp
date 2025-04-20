@@ -13,7 +13,6 @@
 #include "Composer.h"
 #include "ConstructStorage.h"
 #include "CoreStats.h"
-#include "CustomVisitor.h"
 #include "DistanceCalculator.h"
 #include "ExecutionState.h"
 #include "ExternalDispatcher.h"
@@ -98,6 +97,7 @@
 #if LLVM_VERSION_CODE >= LLVM_VERSION(15, 0)
 #include "llvm/IR/GetElementPtrTypeIterator.h"
 #endif
+#include "ContainsQuantifiersVisitor.h"
 #include "Interpolate.h"
 #include "PdrEngine.h"
 #include "RetValueExprVisitor.h"
@@ -5209,7 +5209,7 @@ void Executor::executeAction(ref<SearcherAction> action) {
         prop.state->constraints.cs().dump();
         llvm::errs() << "\n";
         llvm::errs() << "[backward] Pob: \n";
-        prop.pob->constraints.cs().dump();
+        dumpConstraintSet(prop.pob->constraints.cs());
         llvm::errs() << "\n";
         if (prop.pob->constraints.summarizerTracker) {
           llvm::errs() << "[backward] SummarizerTracker: \n";
@@ -5443,9 +5443,9 @@ struct RetVariableReplace : public ExprVisitor {
   }
 };
 
-cnf Executor::extractLemmaToApply(ExecutionState *state, KCallBlock *kCallBlock,
-                                  int pobLevel) {
-  auto kf = kCallBlock->getKFunction();
+std::function<ref<Expr>(ref<Expr>)>
+Executor::extractFunctionLemmaAdapter(ExecutionState *state,
+                                      KCallBlock *kCallBlock, KFunction *kf) {
   size_t n = kf->getNumArgs();
   auto functionValue = kf->function();
   auto ki = kCallBlock->kcallInstruction;
@@ -5470,13 +5470,22 @@ cnf Executor::extractLemmaToApply(ExecutionState *state, KCallBlock *kCallBlock,
   auto width = kmodule->targetData->getTypeSizeInBits(callsite->getType());
   ref<Expr> readFromRetValue = Expr::createTempRead(array, width);
 
-  RetVariableReplace replacer{readFromRetValue};
-  auto replaceVariablesInLemmas = [&](ref<Expr> value) {
+  auto replaceVariablesInLemmas = [replacements,
+                                   readFromRetValue](ref<Expr> value) {
+    RetVariableReplace replacer{readFromRetValue};
     auto withReplacedArgs =
         replaceExprWithReplacements(std::move(value), replacements);
     auto withReplacedRetValue = replacer.visit(withReplacedArgs);
     return withReplacedRetValue;
   };
+  return replaceVariablesInLemmas;
+}
+
+cnf Executor::extractLemmaToApply(ExecutionState *state, KCallBlock *kCallBlock,
+                                  int pobLevel) {
+  auto kf = kCallBlock->getKFunction();
+  auto replaceVariablesInLemmas =
+      extractFunctionLemmaAdapter(state, kCallBlock, kf);
 
   cnf allAppliedLemmas{};
   for (const auto &[lemmaLevel, lemma] :
@@ -5498,14 +5507,59 @@ void Executor::removeSubtree(ProofObligation *pob) {
 }
 
 bool isNonLinearPob(ProofObligation *maybeNonLinearPob) {
-  auto path = maybeNonLinearPob->constraints.path();
-  if (!path.empty()) {
-    auto firstBlock = path.getFirstInstruction()->getKBlock();
-    if (auto callBlock = dyn_cast<KCallBlock>(firstBlock)) {
-      return callBlock->getFirstInstruction() != path.getFirstInstruction();
+  auto block = dyn_cast<ReachBlockTarget>(maybeNonLinearPob->location);
+  return block->getBlock()->getKBlockType() == KBlockType::Call &&
+         maybeNonLinearPob->constraints.path().getFirstIndex() > 0;
+}
+
+void Executor::createFunctionPobUsingAcquiredUnderapproximation(
+    const ComposeResult &composeResult, ProofObligation *nonlinearPob) {
+  auto nonlinearPobCallBlock = dyn_cast<KCallBlock>(
+      nonlinearPob->constraints.path().getFirstInstruction()->getKBlock());
+  assert(nonlinearPobCallBlock);
+  auto calledFunction = nonlinearPobCallBlock->getKFunction();
+  auto n = calledFunction->getNumArgs();
+  auto functionValue = calledFunction->function();
+  auto relevantHole =
+      composeResult.composed.summarizerTracker.value().holes.back();
+  assert(relevantHole.arguments.size() == n);
+  auto replacements = ExprHashMap<ref<Expr>>{};
+  for (unsigned i = 0; i < n; ++i) {
+    auto argument = functionValue->getArg(i);
+    auto size = kmodule->targetData->getTypeStoreSize(argument->getType());
+    // setting index to -1 to offset it propagation during composition
+    // with functional state
+    auto source = SourceBuilder::argument(*argument, -1, kmodule.get());
+    auto array = makeArray(Expr::createPointer(size), source);
+    auto width = kmodule->targetData->getTypeSizeInBits(argument->getType());
+    ref<Expr> result = Expr::createTempRead(array, width);
+    replacements[relevantHole.arguments[i]] = result;
+  }
+  replacements[relevantHole.functionRetValueSymbol] =
+      VariableExpr::create(relevantHole.functionRetValueSymbol->width,
+                           relevantHole.functionRetValueSymbol->name, true);
+  auto newConstraints = PathConstraints{};
+  for (auto constraint : composeResult.composed.cs().cs()) {
+    auto replaced = replaceExprWithReplacements(constraint, replacements);
+    newConstraints.addConstraint(replaced);
+    llvm::errs() << fmt::format("before:(\n{})\nafter:(\n{})\n",
+                                constraint->toString(), replaced->toString());
+  }
+  newConstraints.path() = nonlinearPob->constraints.path();
+  newConstraints.summarizerTracker =
+      nonlinearPob->constraints.summarizerTracker;
+  auto place = nonlinearPob->location;
+
+  for (auto kf : nonlinearPobCallBlock->calledFunctions) {
+    for (auto returnBlock : kf->returnKBlocks) {
+      auto functionalPob = nonlinearPob->makeChild(place);
+      functionalPob->constraints = newConstraints;
+      functionalPob->stack = nonlinearPob->stack;
+      ProofObligation::propagateToReturn(
+          functionalPob, nonlinearPobCallBlock->kcallInstruction, returnBlock);
+      objectManager->addPob(functionalPob);
     }
   }
-  return false;
 }
 
 void Executor::processSuccessfulComposition(
@@ -5521,37 +5575,46 @@ void Executor::processSuccessfulComposition(
       if (pob->kind == ProofObligation::Kind::Backward) {
         createPobsAtReturnPoints(state, pob, composeResult, kCallBlock);
       } else if (pob->kind == ProofObligation::Kind::NonLinearPdr) {
+        assert(kCallBlock != nullptr);
+        nonLinearNodeToStateBeginningThere[kCallBlock] = state->copy();
         if (pob->fuel == 0) {
           assert(0 && "pob should not appear here with zero fuel");
         } else if (pob->fuel == 1) {
-          auto instruction = state->getInitPCBlock()->getFirstInstruction();
+          auto kiNonLinear = state->getInitPCBlock()->instructions[1];
           auto falseLemma = disjunction{};
-          nonLinearPdrSummary->addDisjunctOfLemmaOnKInstruction(instruction, 0,
+          nonLinearPdrSummary->addDisjunctOfLemmaOnKInstruction(kiNonLinear, 0,
                                                                 falseLemma);
-          nonLinearPdrSummary->fixLemmaOnKInstruction(instruction, 0);
+          nonLinearPdrSummary->fixLemmaOnKInstruction(kiNonLinear, 0);
           return;
         }
         auto oldConstraints = composeResult.composed;
         assert(oldConstraints.summarizerTracker.has_value());
-        auto newConstraints = createConstraintsWithHoleForSkipFunctionPob(
-            state, oldConstraints, kCallBlock);
+
+        auto functionAdapter = extractFunctionLemmaAdapter(
+            nonLinearNodeToStateBeginningThere[kCallBlock], kCallBlock,
+            kCallBlock->getKFunction());
         auto functionLemmas =
-            nonLinearPdrSummary->getFunctionLemmas(kCallBlock->getKFunction());
-        for (const auto &[level, lemmas] : functionLemmas) {
-          if (level >= pob->fuel - 1) {
-            for (auto lemma : lemmas) {
-              llvm::errs() << "lemma to apply: \n"
-                           << indentString(disjunctionToString(lemma), 1);
-            }
-          }
+            fmap(nonLinearPdrSummary->getFunctionOverapproximation(
+                     kCallBlock->getKFunction(), pob->fuel),
+                 functionAdapter);
+        auto oldConstraintsWithAppliedLemmas{oldConstraints};
+        for (const auto &lemma : functionLemmas) {
+          oldConstraintsWithAppliedLemmas.addConstraint(
+              disjunctionToExpr(lemma));
         }
+        auto newConstraints = createConstraintsWithHoleForSkipFunctionPob(
+            state, oldConstraintsWithAppliedLemmas, kCallBlock);
+        auto newConstrainsWithoutQuantifiers =
+            eliminateQuantifiers(newConstraints);
+
         auto nonLinearPob = ProofObligation::create(
             pob, state, oldConstraints, composeResult.nullPointerExpr);
         pobToParentState[nonLinearPob] = state;
         objectManager->addPob(nonLinearPob);
 
-        auto functionSkipPob = ProofObligation::create(
-            pob, state, newConstraints, composeResult.nullPointerExpr);
+        auto functionSkipPob =
+            ProofObligation::create(pob, state, newConstrainsWithoutQuantifiers,
+                                    composeResult.nullPointerExpr);
         functionSkipPob->fuel -= 1;
         functionSkipPob->parent->children.erase(functionSkipPob);
         functionSkipPob->parent = nonLinearPob;
@@ -5586,53 +5649,42 @@ void Executor::processSuccessfulComposition(
         nonlinearPob = parent;
       }
       assert(queryKind == functional || queryKind == skipFunction);
-      assert(queryKind == skipFunction); // tmp only
-      auto nonlinearPobCallBlock = dyn_cast<KCallBlock>(
-          nonlinearPob->constraints.path().getFirstInstruction()->getKBlock());
-      assert(nonlinearPobCallBlock);
-      auto calledFunction = nonlinearPobCallBlock->getKFunction();
-      auto n = calledFunction->getNumArgs();
-      auto functionValue = calledFunction->function();
-      auto relevantHole =
-          composeResult.composed.summarizerTracker.value().holes.back();
-      assert(relevantHole.arguments.size() == n);
-      auto replacements = ExprHashMap<ref<Expr>>{};
-      for (unsigned i = 0; i < n; ++i) {
-        auto argument = functionValue->getArg(i);
-        auto size = kmodule->targetData->getTypeStoreSize(argument->getType());
-        // setting index to -1 to offset it propagation during composition with
-        // functional state
-        auto source = SourceBuilder::argument(*argument, -1, kmodule.get());
-        auto array = makeArray(Expr::createPointer(size), source);
-        auto width =
-            kmodule->targetData->getTypeSizeInBits(argument->getType());
-        ref<Expr> result = Expr::createTempRead(array, width);
-        replacements[relevantHole.arguments[i]] = result;
-      }
-      replacements[relevantHole.functionRetValueSymbol] =
-          VariableExpr::create(relevantHole.functionRetValueSymbol->width,
-                               relevantHole.functionRetValueSymbol->name, true);
-      auto newConstraints = PathConstraints{};
-      for (auto constraint : composeResult.composed.cs().cs()) {
-        auto replaced = replaceExprWithReplacements(constraint, replacements);
-        newConstraints.addConstraint(replaced);
-        llvm::errs() << fmt::format("before:(\n{})\nafter:(\n{})\n",
-                                    constraint->toString(),
-                                    replaced->toString());
-      }
-      newConstraints.path() = nonlinearPob->constraints.path();
-      auto place = nonlinearPob->location;
-
-      for (auto kf : nonlinearPobCallBlock->calledFunctions) {
-        for (auto returnBlock : kf->returnKBlocks) {
-          auto functionalPob = nonlinearPob->makeChild(place);
-          functionalPob->constraints = newConstraints;
-          functionalPob->stack = nonlinearPob->stack;
-          ProofObligation::propagateToReturn(
-              functionalPob, nonlinearPobCallBlock->kcallInstruction,
-              returnBlock);
-          objectManager->addPob(functionalPob);
+      if (queryKind == skipFunction) {
+        createFunctionPobUsingAcquiredUnderapproximation(composeResult,
+                                                         nonlinearPob);
+      } else {
+        struct ReadReplacer : public ExprVisitor {
+          ExprHashMap<ref<Expr>> replacements;
+          Action visitConcat(const ConcatExpr &CE) override {
+            auto readLsb = CE.hasOrderedReads();
+            if (!readLsb) {
+              return Action::skipChildren();
+            }
+            auto source = readLsb->updates.root->source;
+            if (replacements.find(readLsb) == replacements.end()) {
+              auto varName =
+                  "src" + source->toString() + std::to_string(freshInt());
+              auto substituteVar = VariableExpr::create(CE.getWidth(), varName);
+              replacements[readLsb] = substituteVar;
+            }
+            return Action::changeTo(replacements[readLsb]);
+          }
+        };
+        PathConstraints replaced{};
+        // replaced.path() = assert(0);
+        replaced.summarizerTracker = SummarizerTracker{};
+        ReadReplacer replacer{};
+        for (auto hole : composeResult.composed.summarizerTracker->holes) {
+          auto updateArgs = std::vector<ref<Expr>>{};
+          for (auto const &arg : hole.arguments) {
+            updateArgs.push_back(replacer.visit(arg));
+          }
         }
+        for (auto const &constraint : composeResult.composed.cs().cs()) {
+          replaced.addConstraint(replacer.visit(constraint));
+        }
+
+        assert(0 && "not implemented yet");
       }
       llvm::errs() << "\n";
     } else {
@@ -5966,51 +6018,76 @@ void Executor::addLemmasToPobLocation(ProofObligation *pob) {
 
 void Executor::addLemmaToAndEdgeToParent(ProofObligation *pob,
                                          ProofObligation *parent) {
-  pdrLog() << fmt::format(
-      "[main loop] compose after removal of pob with id={}\n", pob->id);
-  pdrLog() << fmt::format("\tpob loc={}\n", pob->location->toString());
-  pdrLog() << fmt::format("\tpob path={}\n",
-                          pob->constraints.path().toString());
-  pdrLog() << fmt::format("\tparent pob loc={}\n",
-                          parent->location->toString());
-  pdrLog() << fmt::format("\tparent pob path={}\n",
-                          parent->constraints.path().toString());
-  auto state = pobToParentState[pob];
-  // pdrLog() << fmt::format("\tstate path={}\n",
-  //                             state->constraints.path().toString());
+  // pdrLog() << fmt::format(
+  //     "[main loop] compose after removal of pob with id={}\n", pob->id);
+  // pdrLog() << fmt::format("\tpob loc={}\n", pob->location->toString());
+  // pdrLog() << fmt::format("\tpob path={}\n",
+  //                         pob->constraints.path().toString());
+  // pdrLog() << fmt::format("\tparent pob loc={}\n",
+  //                         parent->location->toString());
+  // pdrLog() << fmt::format("\tparent pob path={}\n",
+  //                         parent->constraints.path().toString());
+  // auto state = pobToParentState[pob];
+  // // pdrLog() << fmt::format("\tstate path={}\n",
+  // //                             state->constraints.path().toString());
+  //
+  // auto composeResult = maxCompose(parent, state);
+  // // assert(composeResult.level == INF_LEVEL);
+  // pdrSummary->addInfinityLemmaOnSomeEdgeToPob(parent,
+  //                                             composeResult.interpolant);
+}
 
-  auto composeResult = maxCompose(parent, state);
-  // assert(composeResult.level == INF_LEVEL);
-  pdrSummary->addInfinityLemmaOnSomeEdgeToPob(parent,
-                                              composeResult.interpolant);
+std::optional<std::pair<ref<VariableExpr>, ref<Expr>>>
+extractReplacementFromSingleEquality(const ref<EqExpr> &eqExpr) {
+  if (isa<VariableExpr>(eqExpr->right)) {
+    return std::make_pair(cast<VariableExpr>(eqExpr->right), eqExpr->left);
+  } else if (isa<VariableExpr>(eqExpr->left)) {
+    return std::make_pair(cast<VariableExpr>(eqExpr->left), eqExpr->right);
+  }
+
+  if (auto addExprRight = dyn_cast<AddExpr>(eqExpr->right)) {
+    if (auto variableExpr = dyn_cast<VariableExpr>(addExprRight->left)) {
+      auto replacement = SubExpr::create(eqExpr->left, addExprRight->right);
+      return std::make_pair(variableExpr, replacement);
+    } else if (auto variableExpr =
+                   dyn_cast<VariableExpr>(addExprRight->right)) {
+      auto replacement = SubExpr::create(eqExpr->left, addExprRight->left);
+      return std::make_pair(variableExpr, replacement);
+    }
+  } else if (auto addExprLeft = dyn_cast<AddExpr>(eqExpr->left)) {
+    if (auto variableExpr = dyn_cast<VariableExpr>(addExprLeft->left)) {
+      auto replacement = SubExpr::create(eqExpr->right, addExprLeft->right);
+      return std::make_pair(variableExpr, replacement);
+    }
+    if (auto variableExpr = dyn_cast<VariableExpr>(addExprLeft->right)) {
+      auto replacement = SubExpr::create(eqExpr->right, addExprLeft->left);
+      return std::make_pair(variableExpr, replacement);
+    }
+  }
+
+  return std::nullopt;
 }
 
 PathConstraints
-Executor::eliminateQuantifiers(const klee::PathConstraints &pathConstraints) {
+Executor::eliminateQuantifiers(const PathConstraints &pathConstraints) {
   PathConstraints newConstraints{};
-  struct FindReplacementsVisitor : public ExprVisitor {
-    ExprHashMap<ref<Expr>> possibleReplacements{};
-    Action visitExpr(const Expr &e) override {
-      auto ePtr = &e;
-      if (auto eqExpr = dyn_cast<EqExpr>(ePtr)) {
-        if (isa<VariableExpr>(eqExpr->right)) {
-          possibleReplacements[eqExpr->right] = eqExpr->left;
-        } else if (isa<VariableExpr>(eqExpr->left)) {
-          possibleReplacements[eqExpr->left] = eqExpr->right;
-        }
-      }
-      return Action::doChildren();
-    }
-  };
-  auto replacementFinderVisitor = FindReplacementsVisitor{};
+  newConstraints.path() = pathConstraints.path();
+  newConstraints.summarizerTracker = pathConstraints.summarizerTracker;
+  ExprHashMap<ref<Expr>> possibleReplacements{};
   for (auto expr : pathConstraints.cs().cs()) {
-    replacementFinderVisitor.visit(expr);
+    if (auto eqExpr = dyn_cast<EqExpr>(expr)) {
+      auto singleReplacement = extractReplacementFromSingleEquality(eqExpr);
+      if (singleReplacement) {
+        possibleReplacements[singleReplacement->first] =
+            singleReplacement->second;
+      }
+    }
   }
   for (auto expr : pathConstraints.cs().cs()) {
-    auto replacedExpr = replaceExprWithReplacements(
-        expr, replacementFinderVisitor.possibleReplacements);
+    auto replacedExpr = replaceExprWithReplacements(expr, possibleReplacements);
     newConstraints.addConstraint(replacedExpr);
   }
+  // assert(!containsQuantifiers(newConstraints));
   return newConstraints;
 }
 
@@ -6038,12 +6115,25 @@ void Executor::processLeafPobBeforeRemoval(ProofObligation *pob) {
       nonLinearPdrSummary->fixLemmaOnKInstruction(
           pob->location->getBlock()->getFirstInstruction(), pob->fuel);
       checkInductiveNonLinear(pob->fuel);
-      auto clonePob = new ProofObligation(pob->location);
-      clonePob->kind = ProofObligation::Kind::NonLinearPdr;
-      clonePob->constraints.summarizerTracker = SummarizerTracker();
-      clonePob->targetForest = pob->targetForest;
-      clonePob->fuel = pob->fuel + 1;
-      objectManager->addPob(clonePob);
+      auto infInstruction = nonLinearPdrSummary->getLemmasFromKInstruction(
+          pob->location->getBlock()->getFirstInstruction())[INF_LEVEL];
+      if (std::any_of(
+              infInstruction.begin(), infInstruction.end(),
+              [](disjunction const &dj) { return dj.elements.empty(); })) {
+
+        llvm::errs() << "[FALSE POSITIVE] "
+                     << "FOUND FALSE POSITIVE AT: " << pob->location->toString()
+                     << "\n";
+        nonLinearPdrSummary->dumpInfinityLevelLemmas(
+            interpreterHandler->getOutputFilename("invs.json"));
+      } else {
+        auto clonePob = new ProofObligation(pob->location);
+        clonePob->kind = ProofObligation::Kind::NonLinearPdr;
+        clonePob->constraints.summarizerTracker = SummarizerTracker();
+        clonePob->targetForest = pob->targetForest;
+        clonePob->fuel = pob->fuel + 1;
+        objectManager->addPob(clonePob);
+      }
       objectManager->removePob(pob);
     }
   }
@@ -6091,10 +6181,10 @@ void Executor::processLeafPobBeforeRemoval(ProofObligation *pob) {
                   Return) {
             auto function = statePath.getLastInstruction()->getKBlock()->parent;
             nonLinearPdrSummary->addDisjunctFunctionLemma(
-                function, pob->fuel, composeResult.interpolant);
+                function, pob->fuel + 1, composeResult.interpolant);
           } else {
             nonLinearPdrSummary->addDisjunctOfLemmaOnKInstruction(
-                parentInstruction, saturatingInc(pob->fuel),
+                parentInstruction, saturatingInc(pob->fuel + 1),
                 composeResult.interpolant);
           }
         } else {
@@ -6109,32 +6199,51 @@ void Executor::processLeafPobBeforeRemoval(ProofObligation *pob) {
           auto state = pobToParentState[parent];
           auto lemmas = extractLemmaToApply(state, kCallBlock, pob->fuel);
           auto updatedConstraints = parent->constraints;
+          bool sat = true;
           for (auto lemma : lemmas) {
-            updatedConstraints.addConstraint(disjunctionToExpr(lemma));
+            bool mayBeTrue;
+            SolverQueryMetaData md{};
+            solver->mayBeTrue(updatedConstraints.cs(), disjunctionToExpr(lemma),
+                              mayBeTrue, md);
+            if (mayBeTrue) {
+              updatedConstraints.addConstraint(disjunctionToExpr(lemma));
+            } else {
+              sat = false;
+              break;
+            }
           }
-          auto updatedConstraintsWithHole =
-              eliminateQuantifiers(createConstraintsWithHoleForSkipFunctionPob(
-                  state, updatedConstraints, kCallBlock));
-          assert(parent->parent != nullptr);
-          auto functionSkipPob = ProofObligation::create(
-              parent->parent, state, updatedConstraintsWithHole, {});
-          functionSkipPob->fuel -= 1;
-          functionSkipPob->parent->children.erase(functionSkipPob);
-          functionSkipPob->parent = parent;
-          parent->children.insert(functionSkipPob);
-          auto &path = functionSkipPob->constraints.path();
-          path.first = 0;
-          objectManager->addPob(functionSkipPob);
+          if (sat) {
+            auto updatedConstraintsWithHole = eliminateQuantifiers(
+                createConstraintsWithHoleForSkipFunctionPob(
+                    state, updatedConstraints, kCallBlock));
+            assert(parent->parent != nullptr);
+            auto functionSkipPob = ProofObligation::create(
+                parent->parent, state, updatedConstraintsWithHole, {});
+            functionSkipPob->fuel -= 1;
+            functionSkipPob->parent->children.erase(functionSkipPob);
+            functionSkipPob->parent = parent;
+            parent->children.insert(functionSkipPob);
+            auto &path = functionSkipPob->constraints.path();
+            path.first = 0;
+            objectManager->addPob(functionSkipPob);
+          }
 
         } else { // isFunctionSkipPob
           assert(kCallBlock != nullptr);
           auto kiLemmas = nonLinearPdrSummary->getLemmasFromKInstruction(
               kCallBlock->getFirstInstruction());
           auto leveledLemmas = kiLemmas[pob->fuel];
-          auto functionLemmas = nonLinearPdrSummary->getFunctionLemmas(
-              kCallBlock->getKFunction())[pob->fuel];
-          auto interpolationResult = interpolate(
-              leveledLemmas, pob->constraints, solver, coreSolverTimeout);
+
+          auto functionAdapter = extractFunctionLemmaAdapter(
+              nonLinearNodeToStateBeginningThere[kCallBlock], kCallBlock,
+              kCallBlock->getKFunction());
+          auto functionLemmas = fmap(nonLinearPdrSummary->getFunctionLemmas(
+                                         kCallBlock->getKFunction())[pob->fuel],
+                                     functionAdapter);
+          leveledLemmas.insert(functionLemmas.begin(), functionLemmas.end());
+          auto interpolationResult =
+              interpolate(leveledLemmas, pob->parent->constraints, solver,
+                          coreSolverTimeout);
           if (auto interpolant =
                   std::get_if<Interpolant>(&interpolationResult)) {
             llvm::errs() << fmt::format(
@@ -6174,6 +6283,7 @@ bool Executor::removeLeafPobIfDead(ConflictCoreInitializer *forCheck,
       !forCheck->initsLeftForTarget(pob->location) &&
       objectManager->propagationCount[pob] == 0) {
     processLeafPobBeforeRemoval(pob);
+    pobToParentState.erase(pob);
     objectManager->removePob(pob);
     changed = true;
   }
@@ -9526,18 +9636,18 @@ ref<CodeLocation> Executor::locationOf(const ExecutionState &state) const {
 
 Executor::MaxComposeResult Executor::maxCompose(klee::ProofObligation *pob,
                                                 const ExecutionState *state) {
-  // if (debugPrints.isSet(DebugPrint::MaxCompose)) {
-  //   llvm::errs() << fmt::format("[maxcompose] pob info:\n");
-  //   llvm::errs() << fmt::format("\tpob unordered cs:\n");
-  //   pob->constraints.cs().dump();
-  //   llvm::errs() << fmt::format("\tpob ordered cs:\n");
-  //   for (auto [pathOffset, exprs]: pob->constraints.orderedCS()) {
-  //     for (auto expr: exprs) {
-  //       llvm::errs() << fmt::format("{}\n", expr->toString());
-  //     }
-  //   }
-  //   llvm::errs() << "\n";
-  // }
+  if (debugPrints.isSet(DebugPrint::MaxCompose)) {
+    llvm::errs() << fmt::format("[maxcompose] pob info:\n");
+    llvm::errs() << fmt::format("\tpob unordered cs:\n");
+    pob->constraints.cs().dump();
+    // llvm::errs() << fmt::format("\tpob ordered cs:\n");
+    // for (auto [pathOffset, exprs]: pob->constraints.orderedCS()) {
+    //   for (auto expr: exprs) {
+    //     llvm::errs() << fmt::format("{}\n", expr->toString());
+    //   }
+    // }
+    llvm::errs() << "\n";
+  }
   int currentComposeLevel = -2;
   currentComposeLevel = -2;
   auto result = compose(*state, pob->constraints, pob->nullPointerExpr,
@@ -9580,10 +9690,12 @@ int Executor::calculateMinEdgeLevel(
   return minEdgeLevel;
 }
 
-klee::ProofObligation Executor::lemmaAndKInstructionToPobAndStates(
+ProofObligation Executor::lemmaAndKInstructionToPobAndStates(
     int level, const disjunction &lemma, KInstruction *ki,
     std::set<ExecutionState *, ExecutionStateIDCompare> &states) {
-  auto pobTarget = kInstructionToTarget(ki);
+  auto pobTarget = ki->getKBlock()->getKBlockType() == Return
+                       ? ReachBlockTarget::create(ki->getKBlock(), true)
+                       : kInstructionToTarget(ki);
   auto pob = ProofObligation{pobTarget};
   pdrLog() << fmt::format("[executeCheckInductive] level={} ki={} lemma {}\n",
                           level, ki->toString(), disjunctionToString(lemma));
@@ -9645,6 +9757,72 @@ void Executor::executeCheckInductiveAction(int queueDepth) {
   }
 }
 
+PathConstraints negateDisjunct(disjunction dj) {
+  PathConstraints result{};
+  for (auto atom : dj.elements) {
+    result.addConstraint(Expr::createIsZero(atom));
+  }
+  return result;
+}
+
+void Executor::updateLemmaLevelInNonlinearNode(
+    int queueDepth, const disjunction &lemmaToLiftLevel,
+    KCallBlock *nonlinearNode) {
+  auto stateForFunctionLemmaAdapter =
+      nonLinearNodeToStateBeginningThere[nonlinearNode];
+
+  auto functionLemmaAdapter =
+      extractFunctionLemmaAdapter(stateForFunctionLemmaAdapter, nonlinearNode,
+                                  nonlinearNode->getKFunction());
+  auto skipFunctionInstruction = nonlinearNode->getFirstInstruction();
+  auto skipFunctionLemmas =
+      nonLinearPdrSummary->kinstructionLemmas[skipFunctionInstruction];
+  auto function = nonlinearNode->getKFunction();
+  auto functionLemmas = nonLinearPdrSummary->functionLemmas[function];
+  llvm::errs() << "skip function lemmas:\n";
+  auto infinityLevels = skipFunctionLemmas[INF_LEVEL];
+  auto functionInfinityLemmas =
+      fmap(functionLemmas[INF_LEVEL], functionLemmaAdapter);
+  infinityLevels.insert(functionInfinityLemmas.begin(),
+                        functionInfinityLemmas.end());
+  auto infInterpolant =
+      interpolate(infinityLevels, negateDisjunct(lemmaToLiftLevel), solver,
+                  coreSolverTimeout);
+  auto ki = nonlinearNode->instructions[1];
+  if (std::get_if<Interpolant>(&infInterpolant)) {
+    nonLinearPdrSummary->kinstructionLemmas[ki][INF_LEVEL].insert(
+        lemmaToLiftLevel);
+    pdrLog() << fmt::format(
+        "[checkInductive] lemma has upped its level to {}\n",
+        levelToString(INF_LEVEL));
+  } else {
+    for (int consideredLevel = queueDepth; consideredLevel >= 0;
+         consideredLevel--) {
+      cnf consideredLevelLemmas{infinityLevels};
+      for (int i = consideredLevel; i <= queueDepth; ++i) {
+        consideredLevelLemmas.insert(skipFunctionLemmas[i].begin(),
+                                     skipFunctionLemmas[i].end());
+        auto functionLemmasAtLevel =
+            fmap(functionLemmas[i], functionLemmaAdapter);
+        consideredLevelLemmas.insert(functionLemmasAtLevel.begin(),
+                                     functionLemmasAtLevel.end());
+      }
+
+      auto maybeInterpolant =
+          interpolate(consideredLevelLemmas, negateDisjunct(lemmaToLiftLevel),
+                      solver, coreSolverTimeout);
+      if (std::get_if<Interpolant>(&maybeInterpolant)) {
+        nonLinearPdrSummary->kinstructionLemmas[ki][consideredLevel].insert(
+            lemmaToLiftLevel);
+        pdrLog() << fmt::format(
+            "[checkInductive] lemma has upped its level to {}\n",
+            levelToString(consideredLevel));
+        break;
+      }
+    }
+  }
+}
+
 void Executor::checkInductiveNonLinear(int queueDepth) {
   if (queueDepth < 3) {
     return; // play it safe
@@ -9654,44 +9832,20 @@ void Executor::checkInductiveNonLinear(int queueDepth) {
   bool lastLevelInductive = true;
   for (int level = 0; level < queueDepth; ++level) {
     pdrLog() << fmt::format("[checkInductive] considering level={}\n", level);
-    for (auto &[ki, subarray] : nonLinearPdrSummary->kinstructionLemmas) {
-      for (auto &lemma : subarray[level]) {
-        std::set<ExecutionState *, ExecutionStateIDCompare> states;
+    for (auto &[ki, kiLemmas] : nonLinearPdrSummary->kinstructionLemmas) {
+      for (auto &lemmaToLiftLevel : kiLemmas[level]) {
         if (ki->getIndex() > 0) {
-          auto skipFunctionInstruction = ki->getKBlock()->getFirstInstruction();
-          auto skipFunctionLemmas =
-              nonLinearPdrSummary->kinstructionLemmas[skipFunctionInstruction];
-          auto function = dyn_cast<KCallBlock>(ki->getKBlock())->getKFunction();
-          auto functionLemmas = nonLinearPdrSummary->functionLemmas[function];
-          llvm::errs() << "skip function lemmas:\n";
-          for (auto [level, lemmas] : skipFunctionLemmas) {
-            llvm::errs() << fmt::format("level={}\n", levelToString(level));
-            for (auto lemma : lemmas) {
-              llvm::errs() << fmt::format(
-                  "{}\n", indentString(disjunctionToString(lemma), 1));
-            }
-          }
-          llvm::errs() << "function lemmas:";
-          for (auto [level, lemmas] : functionLemmas) {
-            llvm::errs() << fmt::format("level={}\n", levelToString(level));
-            for (auto lemma : lemmas) {
-              llvm::errs() << fmt::format(
-                  "{}\n", indentString(disjunctionToString(lemma), 1));
-            }
-          }
-          llvm::errs() << "here!";
-          // nonLinearPdrSummary->kinstructionLemmas[ki][saturatingInc(level)]
-          //     .insert(lemma);
-          // pdrLog() << fmt::format("[checkInductive] nonlinear lemma (tmp) at
-          // "
-          //                         "ki={} automatically updated to
-          //                         level={}\n", ki->toString(),
-          //                         levelToString(saturatingInc(level)));
-          // pdrLog() << fmt::format("\tlemma:\n{}\n",
-          // disjunctionToString(lemma));
+          auto nonLinearNode = dyn_cast<KCallBlock>(ki->getKBlock());
+          assert(nonLinearNode != nullptr);
+          pdrLog() << fmt::format(
+              "[checkInductive] level={} ki={} lemma=\n{}\n\n", level,
+              ki->toString(), disjunctionToString(lemmaToLiftLevel));
+          updateLemmaLevelInNonlinearNode(queueDepth, lemmaToLiftLevel,
+                                          nonLinearNode);
         } else {
-          auto pob =
-              lemmaAndKInstructionToPobAndStates(level, lemma, ki, states);
+          std::set<ExecutionState *, ExecutionStateIDCompare> states;
+          auto pob = lemmaAndKInstructionToPobAndStates(level, lemmaToLiftLevel,
+                                                        ki, states);
           pdrLog() << fmt::format("[checkInductive] {} states found\n",
                                   states.size());
           auto minEdgeLevel = calculateMinEdgeLevel(level, &pob, states);
@@ -9701,7 +9855,7 @@ void Executor::checkInductiveNonLinear(int queueDepth) {
                 "[checkInductive] lemma has upped its level to {}\n",
                 levelToString(updatedLemmaLevel));
             nonLinearPdrSummary->kinstructionLemmas[ki][updatedLemmaLevel]
-                .insert(lemma);
+                .insert(lemmaToLiftLevel);
           } else {
             int lastLemmaLevel = queueDepth - 1;
             if (level == lastLemmaLevel) {
@@ -9711,7 +9865,32 @@ void Executor::checkInductiveNonLinear(int queueDepth) {
         }
       }
     }
+    for (auto &[kf, kfLemmas] : nonLinearPdrSummary->functionLemmas) {
+      for (auto &lemmaToLiftLevel : kfLemmas[level]) {
+        auto ki = kf->returnKBlocks[0]->getFirstInstruction();
+        std::set<ExecutionState *, ExecutionStateIDCompare> states;
+        auto pob = lemmaAndKInstructionToPobAndStates(level, lemmaToLiftLevel,
+                                                      ki, states);
+        pdrLog() << fmt::format("[checkInductive] {} states found\n",
+                                states.size());
+        auto minEdgeLevel = calculateMinEdgeLevel(level, &pob, states);
+        int updatedLemmaLevel = saturatingInc(minEdgeLevel);
+        if (updatedLemmaLevel > level) {
+          pdrLog() << fmt::format(
+              "[checkInductive] lemma has upped its level to {}\n",
+              levelToString(updatedLemmaLevel));
+          nonLinearPdrSummary->functionLemmas[kf][updatedLemmaLevel].insert(
+              lemmaToLiftLevel);
+        } else {
+          int lastLemmaLevel = queueDepth - 1;
+          if (level == lastLemmaLevel) {
+            lastLevelInductive = false;
+          }
+        }
+      }
+    }
   }
+
   pdrLog() << fmt::format("[checkInductive] lastLevelInductive: {}\n",
                           lastLevelInductive);
   if (lastLevelInductive) {

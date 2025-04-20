@@ -16,18 +16,15 @@ std::string printConstAsC(const ref<ConstantExpr> &e) {
     return std::to_string(e->getZExtValue());
 }
 
-std::optional<std::string> retrieveName(const llvm::AllocaInst *ai) {
-  llvm::Function const *caller = ai->getParent()->getParent();
+std::optional<std::string> retrieveName(const llvm::Instruction *inst) {
+  llvm::Function const *caller = inst->getParent()->getParent();
   // Search for llvm.dbg.declare
   for (auto i = caller->begin(); i != caller->end(); ++i) {
     llvm::BasicBlock const &BB = *i;
-
     for (llvm::Instruction const &I : BB) {
       if (auto const *dbg = dyn_cast<llvm::DbgDeclareInst>(&I)) {
-        // found. is it for an AllocaInst?
-        if (auto *dbgAI = dyn_cast<llvm::AllocaInst>(dbg->getAddress())) {
-          // is it for our AllocaInst?
-          if (dbgAI == ai) {
+        if (auto *dbgInst = dyn_cast<llvm::Instruction>(dbg->getAddress())) {
+          if (dbgInst == inst) {
             if (llvm::DILocalVariable *varMD = dbg->getVariable()) {
               return varMD->getName().str();
             }
@@ -61,10 +58,9 @@ instSourceToString(ref<InstructionSource> instSource) {
   auto &instruction = instSource->allocSite;
   auto kf = instSource->km->functionMap.at(instruction.getFunction());
   auto ki = kf->instructionMap.at(&instruction);
-  if (ki->inst()->getOpcode() == llvm::Instruction::Alloca) {
-    if (auto *allocaInst = dyn_cast<llvm::AllocaInst>(ki->inst());
-        allocaInst != nullptr) {
-      auto name = retrieveName(allocaInst);
+  if (true) {
+    if (true) {
+      auto name = retrieveName(&instruction);
       if (name.has_value()) {
         return name.value();
       }
@@ -82,7 +78,8 @@ instSourceToString(ref<InstructionSource> instSource) {
 // (array (w64 8) (lazyInitializationAddress N1:(ReadLSB w64 0 (array (w64 8)
 // (instruction 2 %entry loop 0)))))))))
 std::optional<std::string> printConcatAsC(const ref<Expr> &e) {
-  auto content = tryRetrieveSourceFromFullArrayRead(e);
+  auto readExpr = dyn_cast<ConcatExpr>(e);
+  auto content = tryRetrieveSourceFromFullArrayRead(readExpr);
   if (!content.has_value())
     return std::nullopt;
   if (auto liContent =
@@ -102,6 +99,15 @@ std::optional<std::string> printConcatAsC(const ref<Expr> &e) {
             return instSourceToString(instSource);
           }
         }
+      }
+    }
+  } else {
+    auto source = tryRetrieveSourceFromFullArrayRead(readExpr);
+    if (source.has_value()) {
+      if (auto const instSource = dyn_cast<InstructionSource>(source.value())) {
+        return instSourceToString(instSource);
+      } else if (auto const argSource = dyn_cast<ArgumentSource>(source.value())) {
+        return argSource->allocSite.getName().str();
       }
     }
   }

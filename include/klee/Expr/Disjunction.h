@@ -36,6 +36,18 @@ template <typename F> cnf fmap(cnf oldFormula, F function) {
   return result;
 }
 
+template <typename F> void forEach(disjunction disjunction, F function) {
+  for (auto atom : disjunction) {
+    function(atom);
+  }
+}
+
+template <typename F> void forEach(cnf formula, F function) {
+  for (auto disjunct : formula) {
+    forEach(disjunct, function);
+  }
+}
+
 } // namespace klee
 
 #endif // DISJUNCTION_H

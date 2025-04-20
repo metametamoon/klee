@@ -1,10 +1,12 @@
 #include "Interpolate.h"
 
+#include "ContainsQuantifiersVisitor.h"
 #include "PdrSummary.h"
 #include "TimingSolver.h"
 
 namespace klee {
-InterpolationResult interpolate(cnf lhs, PathConstraints negatedRhs,
+InterpolationResult interpolate(const cnf &lhs,
+                                const PathConstraints &negatedRhs,
                                 std::unique_ptr<TimingSolver> const &solver,
                                 time::Span coreSolverTimeout) {
   if (lhs.count(disjunction{})) {
@@ -12,7 +14,7 @@ InterpolationResult interpolate(cnf lhs, PathConstraints negatedRhs,
   }
   auto lhsAsConstraints = cnfToPathConstraints(lhs);
   auto addedToLhs = ExprHashSet{};
-  for (auto constraint : negatedRhs.cs().cs()) {
+  for (auto const &constraint : negatedRhs.cs().cs()) {
     ValidityCore core;
     bool isValid;
     solver->setTimeout(coreSolverTimeout);
@@ -26,16 +28,16 @@ InterpolationResult interpolate(cnf lhs, PathConstraints negatedRhs,
     }
     if (isValid) {
       disjunction interpolant;
-      for (auto coreElement : core.constraints) {
+      for (auto const &coreElement : core.constraints) {
         if (addedToLhs.count(coreElement)) {
-          interpolant.elements.insert(coreElement);
+          interpolant.elements.insert(NotExpr::createIsZero(coreElement));
         }
       }
       interpolant.elements.insert(NotExpr::createIsZero(constraint));
+      assert(!containsQuantifiers(interpolant));
       return Interpolant{interpolant};
     }
-    auto addedConstraint = NotExpr::createIsZero(constraint);
-    lhsAsConstraints.addConstraint(addedConstraint);
+    lhsAsConstraints.addConstraint(constraint);
     addedToLhs.insert(constraint);
   }
   return NoInterpolantExist{};

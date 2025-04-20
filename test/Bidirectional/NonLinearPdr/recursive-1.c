@@ -15,29 +15,30 @@ void reach_error() {
   klee_assert(0);
 }
 
-int splitter(int n) {
-  return 2;
+int T(int x){
+  int t;
+  if (x < 0) {
+    t = x;
+  }
+  else {
+     int y = x - 1;
+     // A(x, y)
+     int z = T(y);
+     // B(x, y, z) <- T(y, z) /\ A(x, y)
+     t = z + 1;
+  }
+  return t; // t != x
 }
-
-int f(int x) {
-  int r = x * 2;
-  int s = r + splitter(r);
-
-  return s;
-}
-
 
 int main() {
-  int a;
-
+  int a; // a -> sigma, sigma > 0 /\ sigma < 100000
+  // f1 != 2 * sigma
   klee_make_symbolic(&a, sizeof(a), "a");
   klee_assume(a > 0 && a < 100000);
-  int b = f(a);
-
-  for (int i = 0; i < 1000; ++i) {
-    b += 1;
-  }
-  if (b % 2 != 0) {
+  // f1 != 2 * read a
+  int b = T(a);
+  // read b != 2 * read a
+  if (b != a) {
     reach_error();
   }
   return 0;

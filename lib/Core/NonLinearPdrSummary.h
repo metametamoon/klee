@@ -25,6 +25,10 @@ public:
                                 const disjunction &lemma);
   void fixFunctionLemma(KFunction *kf, int level);
 
+  cnf getFunctionOverapproximation(KFunction *kf, int level);
+
+  void dumpInfinityLevelLemmas(std::string const &outputPath);
+
   std::map<int, cnf> getFunctionLemmas(KFunction *kf);
 
   std::map<KInstruction *, std::map<int, disjunction>, KInstructionCompare>

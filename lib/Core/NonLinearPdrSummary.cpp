@@ -1,8 +1,12 @@
 #include "NonLinearPdrSummary.h"
+
+#include "ContainsQuantifiersVisitor.h"
 #include "PdrSummary.h"
 #include "ProofObligation.h"
 
 #include <fmt/format.h>
+#include <fstream>
+#include <klee/Expr/CExprWriter.h>
 #include <klee/Module/KInstruction.h>
 #include <klee/Support/DebugFlags.h>
 
@@ -16,6 +20,7 @@ void NonLinearPdrSummary::addDisjunctOfLemmaOnKInstruction(
     llvm::errs() << fmt::format("{}Lemma={}\n", logPrefixWithSpace,
                                 disjunctionToString(lemma));
   }
+  assert(!containsQuantifiers(lemma));
   auto &disjunct = kinstructionIntermediateLemmas[ki][level];
   disjunct.elements.insert(lemma.elements.begin(), lemma.elements.end());
 }
@@ -52,10 +57,69 @@ void NonLinearPdrSummary::addDisjunctFunctionLemma(KFunction *kf, int level,
                                                    const disjunction &lemma) {
   auto &disjunct = kfunctionsIntermediateLemmas[kf][level];
   disjunct.elements.insert(lemma.elements.begin(), lemma.elements.end());
+
+  if (debugConstraints.isSet(DebugPrint::Lemma)) {
+    llvm::errs() << logPrefixWithSpace
+                 << fmt::format("Extended lemma at kf={} level={}\n",
+                                kf->getName().str(), levelToString(level));
+    llvm::errs() << fmt::format("{}Lemma={}\n", logPrefixWithSpace,
+                                disjunctionToString(lemma));
+  }
 }
 
 void NonLinearPdrSummary::fixFunctionLemma(KFunction *kf, int level) {
-  functionLemmas[kf][level].insert(kfunctionsIntermediateLemmas[kf][level]);
+  auto lemma = kfunctionsIntermediateLemmas[kf][level];
+  functionLemmas[kf][level].insert(lemma);
+
+  if (debugConstraints.isSet(DebugPrint::Lemma)) {
+    llvm::errs() << logPrefixWithSpace
+                 << fmt::format("Added lemma at kf={} level={}\n",
+                                kf->getName().str(), levelToString(level));
+    llvm::errs() << fmt::format("{}Lemma={}\n", logPrefixWithSpace,
+                                disjunctionToString(lemma));
+  }
+}
+
+cnf NonLinearPdrSummary::getFunctionOverapproximation(KFunction *kf,
+                                                      int level) {
+  cnf result{};
+  for (auto &[lemmaLevel, lemmas] : functionLemmas[kf]) {
+    if (lemmaLevel >= level) {
+      result.insert(lemmas.begin(), lemmas.end());
+    }
+  }
+  return result;
+}
+
+void NonLinearPdrSummary::dumpInfinityLevelLemmas(
+    std::string const &outputPath) {
+  nlohmann::json invariants = nlohmann::json::array();
+  llvm::errs() << "Infinity level lemmas:\n";
+  for (const auto &[ki, leveledLemmas] : kinstructionLemmas) {
+    for (const auto &[level, lemmas] : leveledLemmas) {
+      if (level == INF_LEVEL) {
+        llvm::errs() << fmt::format("ki={} ki_loc={} lemmas=\n", ki->toString(),
+                                    ki->getSourceLocationString());
+        for (const auto &lemma : lemmas) {
+          nlohmann::json invariant{
+              {"ki", ki->toString()},
+              {"line", ki->getLine()},
+              {"column", ki->getColumn()},
+              {"function", ki->parent->parent->getName()},
+              {"c_expression",
+               disjunctionToCExpr(lemma, true)}, // better to over-truthify
+              {"c_expression_with_errors", disjunctionToCExpr(lemma, false)},
+              {"pure_expression", disjunctionToString(lemma)}};
+          invariants.push_back(invariant);
+        }
+        llvm::errs() << "\n";
+      }
+    }
+  }
+  create_directories(std::filesystem::path{outputPath}.parent_path());
+  auto inv_string = invariants.dump(2);
+  std::fstream file{outputPath, std::ios::out};
+  file << inv_string;
 }
 
 std::map<int, cnf> NonLinearPdrSummary::getFunctionLemmas(KFunction *kf) {
