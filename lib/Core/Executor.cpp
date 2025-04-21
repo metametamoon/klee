@@ -5523,7 +5523,8 @@ void Executor::createFunctionPobUsingAcquiredUnderapproximation(
   auto relevantHole =
       composeResult.composed.summarizerTracker.value().holes.back();
   assert(relevantHole.arguments.size() == n);
-  auto replacements = ExprHashMap<ref<Expr>>{};
+  auto equalitiesBindingContext =
+      std::vector<std::pair<ref<Expr>, ref<Expr>>>{};
   for (unsigned i = 0; i < n; ++i) {
     auto argument = functionValue->getArg(i);
     auto size = kmodule->targetData->getTypeStoreSize(argument->getType());
@@ -5532,24 +5533,32 @@ void Executor::createFunctionPobUsingAcquiredUnderapproximation(
     auto source = SourceBuilder::argument(*argument, -1, kmodule.get());
     auto array = makeArray(Expr::createPointer(size), source);
     auto width = kmodule->targetData->getTypeSizeInBits(argument->getType());
-    ref<Expr> result = Expr::createTempRead(array, width);
-    replacements[relevantHole.arguments[i]] = result;
+    ref<Expr> ithArgRead = Expr::createTempRead(array, width);
+    // replacements[relevantHole.arguments[i]] = ithArgRead;
+    equalitiesBindingContext.push_back(
+        std::make_pair(relevantHole.arguments[i], ithArgRead));
   }
-  replacements[relevantHole.functionRetValueSymbol] =
+  auto retValueSymbol =
       VariableExpr::create(relevantHole.functionRetValueSymbol->width,
                            relevantHole.functionRetValueSymbol->name, true);
+  auto replacements = ExprHashMap<ref<Expr>>{};
+  replacements[relevantHole.functionRetValueSymbol] = retValueSymbol;
   auto newConstraints = PathConstraints{};
-  for (auto constraint : composeResult.composed.cs().cs()) {
+  newConstraints.path() = nonlinearPob->constraints.path();
+  newConstraints.summarizerTracker =
+      nonlinearPob->constraints.summarizerTracker;
+  for (auto const &constraint : composeResult.composed.cs().cs()) {
     auto replaced = replaceExprWithReplacements(constraint, replacements);
     newConstraints.addConstraint(replaced);
     llvm::errs() << fmt::format("before:(\n{})\nafter:(\n{})\n",
                                 constraint->toString(), replaced->toString());
   }
-  newConstraints.path() = nonlinearPob->constraints.path();
-  newConstraints.summarizerTracker =
-      nonlinearPob->constraints.summarizerTracker;
-  auto place = nonlinearPob->location;
+  for (auto const &[exprL, exprR] : equalitiesBindingContext) {
+    newConstraints.addConstraint(EqExpr::create(exprL, exprR));
+  }
+  newConstraints = eliminateQuantifiers(newConstraints);
 
+  auto place = nonlinearPob->location;
   for (auto kf : nonlinearPobCallBlock->calledFunctions) {
     for (auto returnBlock : kf->returnKBlocks) {
       auto functionalPob = nonlinearPob->makeChild(place);
@@ -6037,12 +6046,22 @@ void Executor::addLemmaToAndEdgeToParent(ProofObligation *pob,
   //                                             composeResult.interpolant);
 }
 
-std::optional<std::pair<ref<VariableExpr>, ref<Expr>>>
+bool isSymbolicRead(ref<Expr> expr) {
+  if (auto readLsb = expr->hasOrderedReads()) {
+    auto source = readLsb->updates.root->source;
+    if (source->getKind() == SymbolicSource::MakeSymbolic) {
+      return true;
+    }
+  }
+  return false;
+}
+
+std::optional<std::pair<ref<Expr>, ref<Expr>>>
 extractReplacementFromSingleEquality(const ref<EqExpr> &eqExpr) {
-  if (isa<VariableExpr>(eqExpr->right)) {
-    return std::make_pair(cast<VariableExpr>(eqExpr->right), eqExpr->left);
-  } else if (isa<VariableExpr>(eqExpr->left)) {
-    return std::make_pair(cast<VariableExpr>(eqExpr->left), eqExpr->right);
+  if (isa<VariableExpr>(eqExpr->right) || isSymbolicRead(eqExpr->right)) {
+    return std::make_pair(eqExpr->right, eqExpr->left);
+  } else if (isa<VariableExpr>(eqExpr->left) || isSymbolicRead(eqExpr->left)) {
+    return std::make_pair(eqExpr->left, eqExpr->right);
   }
 
   if (auto addExprRight = dyn_cast<AddExpr>(eqExpr->right)) {

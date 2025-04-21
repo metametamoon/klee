@@ -17,7 +17,7 @@ struct Interpolant {
 using InterpolationResult =
     std::variant<NoInterpolantExist, InterpolationTimeOut, Interpolant>;
 
-InterpolationResult interpolate(cnf lhs, PathConstraints notRhs,
+InterpolationResult interpolate(const cnf &lhs, const PathConstraints &notRhs,
                                 std::unique_ptr<TimingSolver> const &solver,
                                 time::Span coreSolverTimeout);
 
