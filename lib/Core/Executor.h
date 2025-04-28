@@ -17,6 +17,7 @@
 
 #include "BidirectionalSearcher.h"
 #include "ExecutionState.h"
+#include "LemmaUpdateRecord.h"
 #include "NonLinearPdrSummary.h"
 #include "ObjectManager.h"
 #include "PathSummary.h"
@@ -866,9 +867,11 @@ private:
       std::set<ExecutionState *, ExecutionStateIDCompare> &states);
 
   void executeCheckInductiveAction(int queueDepth);
-  void updateLemmaLevelInNonlinearNode(int queueDepth,
-                                       const disjunction &lemmaToLiftLevel,
-                                       KCallBlock *nonlinearNode);
+  void updateLemmaLevelInNonlinearNode(
+      int queueDepth, const disjunction &lemmaToLiftLevel,
+      KCallBlock *nonlinearNode, int oldLemmaLevel,
+      std::vector<LemmaUpdateRecord> &lemmaUpdateRecords,
+      bool &lastLevelInductive);
   void checkInductiveNonLinear(int queueDepth);
 
 public:

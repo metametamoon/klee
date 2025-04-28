@@ -26,7 +26,7 @@ pobs_ty ProofObligation::getSubtree() {
 
 ProofObligation *ProofObligation::create(ProofObligation *parent,
                                          ExecutionState *state,
-                                         PathConstraints &composed,
+                                         PathConstraints const& composed,
                                          ref<Expr> nullPointerExpr) {
   auto &statePath = state->constraints.path();
   auto place = statePath.getBlocks().empty()

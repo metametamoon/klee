@@ -3,6 +3,7 @@
 #include "ContainsQuantifiersVisitor.h"
 #include "PdrSummary.h"
 #include "ProofObligation.h"
+#include "StringUtil.h"
 
 #include <fmt/format.h>
 #include <fstream>
@@ -89,6 +90,39 @@ cnf NonLinearPdrSummary::getFunctionOverapproximation(KFunction *kf,
     }
   }
   return result;
+}
+
+cnf NonLinearPdrSummary::getKInstructionOverapproximation(KInstruction *ki,
+                                                          int level) {
+  cnf result{};
+  for (auto &[lemmaLevel, lemmas] : kinstructionLemmas[ki]) {
+    if (lemmaLevel >= level) {
+      result.insert(lemmas.begin(), lemmas.end());
+    }
+  }
+  return result;
+}
+
+void NonLinearPdrSummary::dumpCurrentKiLemmas() {
+  llvm::errs() << "begin lemmas dumping\n";
+  for (auto [ki, subarray] : kinstructionLemmas) {
+    for (auto [level, lemmas] : subarray) {
+      for (auto lemma : lemmas) {
+        llvm::errs() << fmt::format(
+            "(lemma level={} location={}\n{})\n", levelToString(level),
+            ki->toString(), indentString(disjunctionToString(lemma), 1));
+      }
+    }
+  }
+  for (auto [kf, subarray] : functionLemmas) {
+    for (auto [level, lemmas] : subarray) {
+      for (auto lemma : lemmas) {
+        llvm::errs() << fmt::format(
+            "(lemma level={} location=func {}\n{})\n", levelToString(level),
+            kf->getName().str(), indentString(disjunctionToString(lemma), 1));
+      }
+    }
+  }
 }
 
 void NonLinearPdrSummary::dumpInfinityLevelLemmas(

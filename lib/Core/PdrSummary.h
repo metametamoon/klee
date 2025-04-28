@@ -17,7 +17,7 @@ ref<Expr> disjunctionToExpr(const disjunction &dj);
 std::string disjunctionToString(const disjunction &dj);
 ref<Expr> cnfToExpr(const cnf &formula);
 
-PathConstraints cnfToPathConstraints(const cnf &formula);
+ConstraintSet cnfToConstraintSet(const cnf &formula);
 constexpr int INF_LEVEL = std::numeric_limits<int>::max();
 std::string levelToString(int level);
 

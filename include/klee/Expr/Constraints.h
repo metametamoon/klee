@@ -223,6 +223,7 @@ inline llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
 
 ref<Expr> replaceExprWithReplacements(ref<Expr> expr, ExprHashMap<ref<Expr>> replacements);
 
+bool safelyAddConstraint(PathConstraints& pathConstraints, ref<Expr> expr);
 } // namespace klee
 
 #endif /* KLEE_CONSTRAINTS_H */

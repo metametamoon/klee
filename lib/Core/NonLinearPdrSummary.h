@@ -26,6 +26,9 @@ public:
   void fixFunctionLemma(KFunction *kf, int level);
 
   cnf getFunctionOverapproximation(KFunction *kf, int level);
+  cnf getKInstructionOverapproximation(KInstruction *ki, int level);
+
+  void dumpCurrentKiLemmas();
 
   void dumpInfinityLevelLemmas(std::string const &outputPath);
 

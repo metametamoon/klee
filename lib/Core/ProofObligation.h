@@ -43,7 +43,7 @@ public:
   void setTargeted(bool targeted) { isTargeted_ = targeted; }
 
   static ProofObligation *create(ProofObligation *parent, ExecutionState *state,
-                                 PathConstraints &composed,
+                                 PathConstraints const &composed,
                                  ref<Expr> nullPointerExpr);
 
   static void propagateToReturn(ProofObligation *pob, KInstruction *callSite,
