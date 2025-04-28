@@ -21,8 +21,8 @@ ref<Expr> disjunctionToExpr(const disjunction &dj) {
   return expr;
 }
 
-PathConstraints cnfToPathConstraints(const cnf &formula) {
-  PathConstraints result{};
+ConstraintSet cnfToConstraintSet(const cnf &formula) {
+  ConstraintSet result{};
   for (auto &disjunct : formula) {
     auto expr = disjunctionToExpr(disjunct);
     result.addConstraint(expr);
