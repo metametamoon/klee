@@ -808,6 +808,7 @@ private:
                         ref<Expr> nullPointerExpr,
                         ImmutableList<Symbolic> &pobSymbolics,
                         int *maxComposeLevel = nullptr);
+  void dumpSummarizerTracker(SummarizerTracker prop);
 
   void executeAction(ref<SearcherAction> action);
 
@@ -827,7 +828,7 @@ private:
                           int pobLevel);
   void removeSubtree(klee::ProofObligation *pob);
   void createFunctionPobUsingAcquiredUnderapproximation(
-      const ComposeResult &composeResult, ProofObligation *nonlinearPob);
+      const PathConstraints &composed, ProofObligation *nonlinearPob);
   void processSuccessfulComposition(ExecutionState *state, ProofObligation *pob,
                                     Executor::ComposeResult composeResult);
   bool isFromFunctionStart(ExecutionState const &state);

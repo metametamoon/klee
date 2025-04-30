@@ -2,6 +2,7 @@
 #define SUMMARIZERTRACKER_H
 #include <klee/ADT/Ref.h>
 #include <klee/Expr/Expr.h>
+#include <klee/Expr/ExprHashMap.h>
 
 namespace klee {
 
@@ -18,6 +19,7 @@ public:
 
   ref<Expr> retValueTracker;
   std::vector<Hole> holes;
+  std::vector<ExprHashMap<ref<Expr>>> reversedMappingStack;
 };
 
 } // namespace klee

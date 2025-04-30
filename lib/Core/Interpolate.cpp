@@ -6,10 +6,10 @@
 
 namespace klee {
 
-std::optional<ConstraintSet>
-tryExcludeOne(const ConstraintSet &validityCore, ref<Expr> query,
-              std::unique_ptr<TimingSolver> const &solver,
-              time::Span coreSolverTimeout) {
+std::optional<ConstraintSet> tryExcludeOne(const ConstraintSet &validityCore,
+                                           ref<Expr> query,
+                                           TimingSolver *solver,
+                                           time::Span coreSolverTimeout) {
   for (auto exprToExclude : validityCore.cs()) {
     ConstraintSet coreWithExclusion{};
     for (auto exprToInclude : validityCore.cs()) {
@@ -32,8 +32,7 @@ tryExcludeOne(const ConstraintSet &validityCore, ref<Expr> query,
 }
 
 ConstraintSet minimizeValidityCore(const ConstraintSet &validityCore,
-                                   ref<Expr> query,
-                                   std::unique_ptr<TimingSolver> const &solver,
+                                   ref<Expr> query, TimingSolver *solver,
                                    time::Span coreSolverTimeout) {
   auto currentCs = validityCore;
   while (true) {
@@ -50,7 +49,7 @@ ConstraintSet minimizeValidityCore(const ConstraintSet &validityCore,
 
 InterpolationResult interpolate(const cnf &lhs,
                                 const PathConstraints &negatedRhs,
-                                std::unique_ptr<TimingSolver> const &solver,
+                                TimingSolver *solver,
                                 time::Span coreSolverTimeout) {
   if (lhs.count(disjunction{})) {
     return Interpolant{disjunction{}};
@@ -75,8 +74,8 @@ InterpolationResult interpolate(const cnf &lhs,
       for (auto const &coreElement : core.constraints) {
         coreCs.addConstraint(coreElement);
       }
-      auto optimizedCore =
-          minimizeValidityCore(coreCs, Expr::createIsZero(constraint), solver, coreSolverTimeout);
+      auto optimizedCore = minimizeValidityCore(
+          coreCs, Expr::createIsZero(constraint), solver, coreSolverTimeout);
       for (auto const &coreElement : optimizedCore.cs()) {
         if (addedToLhs.count(coreElement)) {
           interpolant.elements.insert(NotExpr::createIsZero(coreElement));

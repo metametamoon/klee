@@ -5129,6 +5129,9 @@ Executor::ComposeResult Executor::compose(const ExecutionState &state,
   }
   if (pob.summarizerTracker) {
     composer.state.constraints.summarizerTracker = SummarizerTracker{};
+    composer.state.constraints.summarizerTracker.value().reversedMappingStack =
+        pob.summarizerTracker.value().reversedMappingStack;
+
     if (pob.summarizerTracker->retValueTracker.isNull() &&
         !state.returnValue.isNull()) {
       composer.state.constraints.summarizerTracker->retValueTracker =
@@ -5172,6 +5175,18 @@ Executor::ComposeResult Executor::compose(const ExecutionState &state,
   return result;
 }
 
+void Executor::dumpSummarizerTracker(SummarizerTracker summarizerTracker) {
+  for (auto hole : summarizerTracker.holes) {
+    llvm::errs() << fmt::format("(\n\t(function {})\n\t(symbol {})\n\t(args\n",
+                                hole.functionName,
+                                hole.functionRetValueSymbol->toString());
+    for (const auto &arg : hole.arguments) {
+      llvm::errs() << fmt::format("{}\n", indentString(arg->toString(), 2));
+    }
+    llvm::errs() << "\t)\n";
+    llvm::errs() << ")\n";
+  }
+}
 void Executor::executeAction(ref<SearcherAction> action) {
   switch (action->getKind()) {
   case SearcherAction::Kind::Forward: {
@@ -5195,49 +5210,43 @@ void Executor::executeAction(ref<SearcherAction> action) {
                       prop.state->constraints.path().getNext() ==
                           prop.pob->constraints.path().getFirstInstruction();
     if (prop.pob->kind == ProofObligation::Kind::NonLinearPdr && !pathsMatch) {
-      llvm::errs() << fmt::format(
-          "[backward] skip propagation state={} pob={} for path mismatch\n",
-          prop.state->id, prop.pob->id);
+      if (debugPrints.isSet(DebugPrint::Backward)) {
+        llvm::errs() << fmt::format(
+            "[backward] skip propagation state={} pob={} for path mismatch\n",
+            prop.state->id, prop.pob->id);
+      }
       objectManager->removePropagation(prop);
       break;
     }
     if (debugPrints.isSet(DebugPrint::Backward)) {
-      llvm::errs() << "[backward] Composition start:\n";
-      llvm::errs() << fmt::format("[backward] state id={}; pob id={}\n",
-                                  prop.state->id, prop.pob->id);
-      llvm::errs() << "[backward] Pob: kind=" << printPobKind(prop.pob->kind)
-                   << " " << prop.pob->constraints.path().toString() << "\n"
-                   << "\t fuel=" << prop.pob->fuel << " parentId="
-                   << (prop.pob->parent ? prop.pob->parent->id : -1) << "\n";
-
-      llvm::errs() << "[backward] State: "
-                   << prop.state->constraints.path().toString() << "\n";
-      llvm::errs() << "[backward] To-be pob: "
+      llvm::errs() << fmt::format(
+          "[backward] Composition state id={}; pob id={} [kind={} fuel={} "
+          "parentId={}]\n",
+          prop.state->id, prop.pob->id, printPobKind(prop.pob->kind),
+          prop.pob->fuel,
+          prop.pob->parent ? std::to_string(prop.pob->parent->id) : "null");
+      llvm::errs() << fmt::format("[backward] [pob  ] {}\n",
+                                  prop.pob->constraints.path().toString());
+      llvm::errs() << fmt::format("[backward] [state] {}\n",
+                                  prop.state->constraints.path().toString());
+      llvm::errs() << "[backward] [after] "
                    << Path::concat(prop.state->constraints.path(),
                                    prop.pob->constraints.path())
                           .toString()
                    << "\n";
       if (debugConstraints.isSet(DebugPrint::Backward)) {
-        llvm::errs() << "[backward] State: ";
-        prop.state->constraints.cs().dump();
-        llvm::errs() << "\n";
         llvm::errs() << "[backward] Pob: \n";
         dumpConstraintSet(prop.pob->constraints.cs());
         llvm::errs() << "\n";
         if (prop.pob->constraints.summarizerTracker) {
           llvm::errs() << "[backward] SummarizerTracker: \n";
-          for (auto hole : prop.pob->constraints.summarizerTracker->holes) {
-            llvm::errs() << fmt::format(
-                "(\n\t(function {})\n\t(symbol {})\n\t(args\n",
-                hole.functionName, hole.functionRetValueSymbol->toString());
-            for (const auto &arg : hole.arguments) {
-              llvm::errs() << fmt::format("{}\n",
-                                          indentString(arg->toString(), 2));
-            }
-            llvm::errs() << "\t)\n";
-            llvm::errs() << ")\n";
-          }
+          dumpSummarizerTracker(
+              prop.pob->constraints.summarizerTracker.value());
+          llvm::errs() << "\n";
         }
+        llvm::errs() << "[backward] State: ";
+        prop.state->constraints.cs().dump();
+        llvm::errs() << "\n";
       }
     }
     goBackward(cast<BackwardAction>(action));
@@ -5355,6 +5364,10 @@ void Executor::createPobsAtReturnPoints(ExecutionState *state,
         llvm::errs() << fmt::format("path={}\n",
                                     callPob->constraints.path().toString());
         callPob->constraints.cs().dump();
+        if (callPob->constraints.summarizerTracker) {
+          llvm::errs() << "Summarizer tracker:\n";
+          dumpSummarizerTracker(callPob->constraints.summarizerTracker.value());
+        }
         llvm::errs() << "\n";
       }
     }
@@ -5526,15 +5539,34 @@ bool isNonLinearPob(ProofObligation *maybeNonLinearPob) {
 }
 
 void Executor::createFunctionPobUsingAcquiredUnderapproximation(
-    const ComposeResult &composeResult, ProofObligation *nonlinearPob) {
+    const PathConstraints &composed, ProofObligation *nonlinearPob) {
+  struct ReadReplacer : public ExprVisitor {
+    ExprHashMap<ref<Expr>> replacements;
+    ExprHashMap<ref<Expr>> revReplacements;
+    Action visitConcat(const ConcatExpr &CE) override {
+      auto ceRef = CE.create(CE.getLeft(), CE.getRight());
+      auto readLsb = CE.hasOrderedReads();
+      if (!readLsb) {
+        return Action::skipChildren();
+      }
+      auto source = readLsb->updates.root->source;
+      if (replacements.find(readLsb) == replacements.end()) {
+        auto varName = "src" + source->toString() + std::to_string(freshInt());
+        auto substituteVar = VariableExpr::create(CE.getWidth(), varName);
+        replacements[ceRef] = substituteVar;
+        revReplacements[substituteVar] = ceRef;
+      }
+      return Action::changeTo(replacements[ceRef]);
+    }
+  };
+  ReadReplacer readReplacer;
   auto nonlinearPobCallBlock = dyn_cast<KCallBlock>(
       nonlinearPob->constraints.path().getFirstInstruction()->getKBlock());
   assert(nonlinearPobCallBlock);
   auto calledFunction = nonlinearPobCallBlock->getKFunction();
   auto n = calledFunction->getNumArgs();
   auto functionValue = calledFunction->function();
-  auto relevantHole =
-      composeResult.composed.summarizerTracker.value().holes.back();
+  auto relevantHole = composed.summarizerTracker.value().holes.back();
   assert(relevantHole.arguments.size() == n);
   auto equalitiesBindingContext =
       std::vector<std::pair<ref<Expr>, ref<Expr>>>{};
@@ -5547,8 +5579,8 @@ void Executor::createFunctionPobUsingAcquiredUnderapproximation(
     auto array = makeArray(Expr::createPointer(size), source);
     auto width = kmodule->targetData->getTypeSizeInBits(argument->getType());
     ref<Expr> ithArgRead = Expr::createTempRead(array, width);
-    equalitiesBindingContext.emplace_back(relevantHole.arguments[i],
-                                          ithArgRead);
+    equalitiesBindingContext.emplace_back(
+        readReplacer.visit(relevantHole.arguments[i]), ithArgRead);
   }
   auto retValueSymbol =
       VariableExpr::create(relevantHole.functionRetValueSymbol->width,
@@ -5559,15 +5591,20 @@ void Executor::createFunctionPobUsingAcquiredUnderapproximation(
   newConstraints.path() = nonlinearPob->constraints.path();
   newConstraints.summarizerTracker =
       nonlinearPob->constraints.summarizerTracker;
-  for (auto const &constraint : composeResult.composed.cs().cs()) {
-    auto replaced = replaceExprWithReplacements(constraint, replacements);
+  for (auto const &constraint : composed.cs().cs()) {
+    auto withGoodReturnValue =
+        replaceExprWithReplacements(constraint, replacements);
+    auto replaced = readReplacer.visit(withGoodReturnValue);
     newConstraints.addConstraint(replaced);
-    llvm::errs() << fmt::format("before:(\n{})\nafter:(\n{})\n",
-                                constraint->toString(), replaced->toString());
+    // llvm::errs() << fmt::format("before:(\n{})\nafter:(\n{})\n",
+    //                             constraint->toString(),
+    //                             replaced->toString());
   }
   for (auto const &[exprL, exprR] : equalitiesBindingContext) {
     newConstraints.addConstraint(EqExpr::create(exprL, exprR));
   }
+  newConstraints.summarizerTracker.value().reversedMappingStack.push_back(
+      readReplacer.revReplacements);
   newConstraints = eliminateQuantifiers(newConstraints);
 
   auto place = nonlinearPob->location;
@@ -5583,8 +5620,37 @@ void Executor::createFunctionPobUsingAcquiredUnderapproximation(
   }
 }
 
+struct NearestNonLinearAncestor {
+  ProofObligation *nonLinearPob;
+  bool wasReachedByFunctionSkip;
+};
+
+NearestNonLinearAncestor findNearestNonLinearAncestor(ProofObligation *pob) {
+  auto nearestNonLinearPob = pob;
+  constexpr auto functional = 1;
+  constexpr auto skipFunction = 2;
+  int queryKind = 0;
+  bool first = true;
+  while (first || !isNonLinearPob(nearestNonLinearPob)) {
+    first = false;
+    auto parent = nearestNonLinearPob->parent;
+    if (isNonLinearPob(parent)) {
+      auto place = dyn_cast<ReachBlockTarget>(nearestNonLinearPob->location);
+      if (place->isAtEnd()) {
+        queryKind = functional;
+      } else {
+        queryKind = skipFunction;
+      }
+    }
+    nearestNonLinearPob = parent;
+  }
+  assert(queryKind == functional || queryKind == skipFunction);
+  return NearestNonLinearAncestor{nearestNonLinearPob,
+                                  queryKind == skipFunction};
+}
+
 void Executor::processSuccessfulComposition(
-    ExecutionState *state, ProofObligation *pob,
+    ExecutionState *state, ProofObligation *const pob,
     Executor::ComposeResult composeResult) {
   if (debugPrints.isSet(DebugPrint::Backward)) {
     llvm::errs() << "[backward] Composition sucessful.\n";
@@ -5618,6 +5684,13 @@ void Executor::processSuccessfulComposition(
             fmap(nonLinearPdrSummary->getFunctionOverapproximation(
                      kCallBlock->getKFunction(), pob->fuel - 2),
                  functionAdapter);
+        auto itp = interpolate(functionLemmas, oldConstraints, solver.get(),
+                               coreSolverTimeout);
+        if (auto interpolant = std::get_if<Interpolant>(&itp)) {
+          nonLinearPdrSummary->kinstructionLemmas[state->initPC][pob->fuel - 1]
+              .insert(interpolant->interpolant);
+          return;
+        }
         auto oldConstraintsWithAppliedLemmas{oldConstraints};
         for (const auto &lemma : functionLemmas) {
           oldConstraintsWithAppliedLemmas.addConstraint(
@@ -5651,135 +5724,46 @@ void Executor::processSuccessfulComposition(
       objectManager->removePob(pob);
     } else if (isFromFunctionStart(*state) &&
                pob->kind == ProofObligation::Kind::NonLinearPdr) {
-      auto nearestNonLinearPob = pob;
-      constexpr auto functional = 1;
-      constexpr auto skipFunction = 2;
-      int queryKind = 0;
-      while (!isNonLinearPob(nearestNonLinearPob)) {
-        auto parent = nearestNonLinearPob->parent;
-        if (isNonLinearPob(parent)) {
-          auto place =
-              dyn_cast<ReachBlockTarget>(nearestNonLinearPob->location);
-          if (place->isAtEnd()) {
-            queryKind = functional;
-          } else {
-            queryKind = skipFunction;
+      auto finalCs = composeResult.composed;
+      auto nextNonLinearPob = findNearestNonLinearAncestor(pob);
+      while (true) {
+        if (nextNonLinearPob.wasReachedByFunctionSkip) {
+          break; // to create functional pob
+        } else {
+          assert(finalCs.summarizerTracker.has_value());
+          assert(
+              !finalCs.summarizerTracker.value().reversedMappingStack.empty());
+          auto replacements =
+              finalCs.summarizerTracker.value().reversedMappingStack.back();
+          finalCs.summarizerTracker.value().reversedMappingStack.pop_back();
+          PathConstraints replacedCs{};
+          replacedCs.summarizerTracker = SummarizerTracker{};
+          for (auto const &hole :
+               composeResult.composed.summarizerTracker->holes) {
+            auto updateArgs = std::vector<ref<Expr>>{};
+            for (auto const &arg : hole.arguments) {
+              updateArgs.push_back(
+                  replaceExprWithReplacements(arg, replacements));
+            }
+            replacedCs.summarizerTracker.value().holes.push_back(
+                Hole{hole.functionName, hole.functionRetValueSymbol, updateArgs,
+                     hole.callSite});
           }
-          removeSubtree(nearestNonLinearPob);
+          for (auto const &constraint : composeResult.composed.cs().cs()) {
+            replacedCs.addConstraint(
+                replaceExprWithReplacements(constraint, replacements));
+          }
+          finalCs = replacedCs;
+          nextNonLinearPob = findNearestNonLinearAncestor(
+              nextNonLinearPob.nonLinearPob->parent);
         }
-        nearestNonLinearPob = parent;
       }
-      assert(queryKind == functional || queryKind == skipFunction);
-      if (queryKind == skipFunction) {
-        createFunctionPobUsingAcquiredUnderapproximation(composeResult,
-                                                         nearestNonLinearPob);
-      } else {
-        struct ReadReplacer : public ExprVisitor {
-          ExprHashMap<ref<Expr>> replacements;
-          Action visitConcat(const ConcatExpr &CE) override {
-            auto readLsb = CE.hasOrderedReads();
-            if (!readLsb) {
-              return Action::skipChildren();
-            }
-            auto source = readLsb->updates.root->source;
-            if (replacements.find(readLsb) == replacements.end()) {
-              auto varName =
-                  "src" + source->toString() + std::to_string(freshInt());
-              auto substituteVar = VariableExpr::create(CE.getWidth(), varName);
-              replacements[readLsb] = substituteVar;
-            }
-            return Action::changeTo(replacements[readLsb]);
-          }
-        };
-        PathConstraints replacedCs{};
-        // replaced.path() = assert(0);
-        replacedCs.summarizerTracker = SummarizerTracker{};
-        ReadReplacer replacer{};
-        for (auto const &hole :
-             composeResult.composed.summarizerTracker->holes) {
-          auto updateArgs = std::vector<ref<Expr>>{};
-          for (auto const &arg : hole.arguments) {
-            updateArgs.push_back(replacer.visit(arg));
-          }
-          replacedCs.summarizerTracker.value().holes.push_back(
-              Hole{hole.functionName, hole.functionRetValueSymbol, updateArgs,
-                   hole.callSite});
-        }
-        for (auto const &constraint : composeResult.composed.cs().cs()) {
-          replacedCs.addConstraint(replacer.visit(constraint));
-        }
-        auto nonLinearPobOfHole = pob;
-        while (!isNonLinearPob(nonLinearPobOfHole)) {
-          nonLinearPobOfHole = nonLinearPobOfHole->parent;
-        }
-        nonLinearPobOfHole = nonLinearPobOfHole->parent;
-        while (!isNonLinearPob(nonLinearPobOfHole)) {
-          nonLinearPobOfHole = nonLinearPobOfHole->parent;
-        }
-        auto kCallBlock =
-            dyn_cast<KCallBlock>(nonLinearPobOfHole->location->getBlock());
-        assert(kCallBlock != nullptr);
-        assert(kCallBlock->getFirstInstruction() ==
-               composeResult.composed.summarizerTracker.value()
-                   .holes.back()
-                   .callSite);
-        for (auto child : nonLinearPobOfHole->children) {
-          removeSubtree(child);
-        }
-        auto kf = kCallBlock->getKFunction();
-        auto functionValue = kf->function();
-        auto n = kf->getNumArgs();
-        auto relevantHole = replacedCs.summarizerTracker->holes.back();
-        auto equalitiesBindingContext =
-            std::vector<std::pair<ref<Expr>, ref<Expr>>>{};
-        for (unsigned i = 0; i < n; ++i) {
-          auto argument = functionValue->getArg(i);
-          auto size =
-              kmodule->targetData->getTypeStoreSize(argument->getType());
-          // setting index to -1 to offset it propagation during composition
-          // with functional state
-          auto source = SourceBuilder::argument(*argument, -1, kmodule.get());
-          auto array = makeArray(Expr::createPointer(size), source);
-          auto width =
-              kmodule->targetData->getTypeSizeInBits(argument->getType());
-          ref<Expr> ithArgRead = Expr::createTempRead(array, width);
-          equalitiesBindingContext.emplace_back(relevantHole.arguments[i],
-                                                ithArgRead);
-        }
-        auto retValueSymbol = VariableExpr::create(
-            relevantHole.functionRetValueSymbol->width,
-            relevantHole.functionRetValueSymbol->name, true);
-        auto replacements = ExprHashMap<ref<Expr>>{};
-        replacements[relevantHole.functionRetValueSymbol] = retValueSymbol;
-        auto newConstraints = PathConstraints{};
-        newConstraints.path() = nonLinearPobOfHole->constraints.path();
-        newConstraints.summarizerTracker =
-            composeResult.composed.summarizerTracker;
-        for (auto const &constraint : replacedCs.cs().cs()) {
-          auto replaced = replaceExprWithReplacements(constraint, replacements);
-          newConstraints.addConstraint(replaced);
-          llvm::errs() << fmt::format("before:(\n{})\nafter:(\n{})\n",
-                                      constraint->toString(),
-                                      replaced->toString());
-        }
-        for (auto const &[exprL, exprR] : equalitiesBindingContext) {
-          newConstraints.addConstraint(EqExpr::create(exprL, exprR));
-        }
-        newConstraints = eliminateQuantifiers(newConstraints);
+      for (auto child : nextNonLinearPob.nonLinearPob->children) {
+        removeSubtree(child);
+      }
+      createFunctionPobUsingAcquiredUnderapproximation(
+          finalCs, nextNonLinearPob.nonLinearPob);
 
-        auto place = nonLinearPobOfHole->location;
-        for (auto kf : kCallBlock->calledFunctions) {
-          for (auto returnBlock : kf->returnKBlocks) {
-            auto functionalPob = nonLinearPobOfHole->makeChild(place);
-            functionalPob->constraints = newConstraints;
-            functionalPob->stack = nonLinearPobOfHole->stack;
-            ProofObligation::propagateToReturn(
-                functionalPob, kCallBlock->kcallInstruction, returnBlock);
-            objectManager->addPob(functionalPob);
-          }
-        }
-        // assert(0 && "not implemented yet");
-      }
       llvm::errs() << "\n";
     } else {
       if (!state->returnValue.isNull() &&
@@ -5875,8 +5859,10 @@ void Executor::goBackward(ref<BackwardAction> action) {
   ExecutionState *state = action->prop.state;
   ProofObligation *pob = action->prop.pob;
   if (pob->fuel == 0) {
-    llvm::errs() << "[backward] stopped pob due to no fuel left pob:\n";
-    llvm::errs() << pobToShortString(pob) << "\n";
+    if (debugPrints.isSet(DebugPrint::Backward)) {
+      llvm::errs() << "[backward] Composition failed: no fuel left in pob:\n";
+      llvm::errs() << pobToShortString(pob) << "\n";
+    }
     return;
   }
 
@@ -5900,10 +5886,6 @@ void Executor::goBackward(ref<BackwardAction> action) {
     composeResult.success = false;
   }
 
-  bool isFromTheFunctionStart = isFromFunctionStart(*state);
-  llvm::errs() << fmt::format("[backward] path {} is from start:{}\n",
-                              state->constraints.path().toString(),
-                              isFromTheFunctionStart);
   if (NonLinearPdr && pob->kind == ProofObligation::Kind::Backward) {
     return;
   }
@@ -6348,19 +6330,13 @@ void Executor::processLeafPobBeforeRemoval(ProofObligation *pob) {
                    functionAdapter);
           leveledLemmas.insert(functionLemmas.begin(), functionLemmas.end());
           auto interpolationResult =
-              interpolate(leveledLemmas, pob->parent->constraints, solver,
+              interpolate(leveledLemmas, pob->parent->constraints, solver.get(),
                           coreSolverTimeout);
           if (auto interpolant =
                   std::get_if<Interpolant>(&interpolationResult)) {
-            llvm::errs() << fmt::format(
-                "interpolant is: \n{}\n",
-                disjunctionToString(interpolant->interpolant));
-            llvm::errs() << "here!\n";
             auto kinstruction = kCallBlock->getLastInstruction();
             nonLinearPdrSummary->addDisjunctOfLemmaOnKInstruction(
                 kinstruction, pob->parent->fuel, interpolant->interpolant);
-            // nonLinearPdrSummary->fixLemmaOnKInstruction(kinstruction,
-            // pob->parent->fuel);
           } else {
             assert(0 && "Do not support failed interpolations!");
           }
@@ -9891,15 +9867,14 @@ void Executor::updateLemmaLevelInNonlinearNode(
       nonLinearPdrSummary->kinstructionLemmas[skipFunctionInstruction];
   auto function = nonlinearNode->getKFunction();
   auto functionLemmas = nonLinearPdrSummary->functionLemmas[function];
-  llvm::errs() << "skip function lemmas:\n";
   auto infinityLevels = skipFunctionLemmas[INF_LEVEL];
   auto functionInfinityLemmas =
       fmap(functionLemmas[INF_LEVEL], functionLemmaAdapter);
   infinityLevels.insert(functionInfinityLemmas.begin(),
                         functionInfinityLemmas.end());
   auto infInterpolant =
-      interpolate(infinityLevels, negateDisjunct(lemmaToLiftLevel), solver,
-                  coreSolverTimeout);
+      interpolate(infinityLevels, negateDisjunct(lemmaToLiftLevel),
+                  solver.get(), coreSolverTimeout);
   auto ki = nonlinearNode->instructions[1];
   if (std::get_if<Interpolant>(&infInterpolant)) {
     lemmaUpdateRecords.push_back(
@@ -9925,7 +9900,7 @@ void Executor::updateLemmaLevelInNonlinearNode(
 
       auto maybeInterpolant =
           interpolate(consideredLevelLemmas, negateDisjunct(lemmaToLiftLevel),
-                      solver, coreSolverTimeout);
+                      solver.get(), coreSolverTimeout);
       if (std::get_if<Interpolant>(&maybeInterpolant)) {
         auto newLemmaLevel = std::min(consideredLevel + 1, queueDepth);
         lemmaUpdateRecords.push_back(LemmaUpdateRecord{
@@ -9960,7 +9935,9 @@ void Executor::checkInductiveNonLinear(int queueDepth) {
   }
   pdrLog() << fmt::format("[checkInductiveNonlinear] begin; depth={}\n",
                           queueDepth);
-  nonLinearPdrSummary->dumpCurrentKiLemmas();
+  if (debugPrints.isSet(DebugPrint::Pdr)) {
+    nonLinearPdrSummary->dumpCurrentKiLemmas();
+  }
   std::vector<LemmaUpdateRecord> updateRecords;
   bool lastLevelInductive = true;
   for (int level = 0; level < queueDepth; ++level) {
