@@ -49,7 +49,7 @@ public:
   void breakLine(unsigned indent = 0) {
     os << newline;
     if (indent)
-      os.indent(indent) << ' ';
+      os.indent(indent);
     pos = indent;
   }
 
