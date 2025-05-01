@@ -475,10 +475,12 @@ def generate_uuid():
 def invs_json_to_witness_yaml(invs: json, source: Path):
     result = []
     for inv in invs:
-        not_false = inv["c_expression"] != "0"  # idk why this does not work
+        c_expr_str = inv["c_expression"]
+        not_false = c_expr_str != "0"  # idk why this does not work
+        is_valid_c_expr = not "<var>" in c_expr_str and not "LlvmReg" in c_expr_str
         not_zero_column = inv[
                               "column"] != 0  # that might be not true, but i've yet to find out why the debugger returns 0 as column
-        if not_zero_column and not_false:
+        if not_zero_column and not_false and is_valid_c_expr:
             result.append({
                 "invariant": {
                     "type": "location_invariant",
@@ -488,7 +490,7 @@ def invs_json_to_witness_yaml(invs: json, source: Path):
                         "column": inv["column"],
                         "function": inv["function"]
                     },
-                    "value": inv["c_expression"],
+                    "value": c_expr_str,
                     "format": "c_expression"
                 }
             })
