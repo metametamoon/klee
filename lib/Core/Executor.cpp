@@ -15,6 +15,7 @@
 #include "CoreStats.h"
 #include "DistanceCalculator.h"
 #include "ExecutionState.h"
+#include "ExprUtil.h"
 #include "ExternalDispatcher.h"
 #include "PdrSummary.h"
 #include <klee/Module/TargetForest.h>
@@ -5175,7 +5176,8 @@ Executor::ComposeResult Executor::compose(const ExecutionState &state,
   return result;
 }
 
-void Executor::dumpSummarizerTracker(SummarizerTracker summarizerTracker) {
+void Executor::dumpSummarizerTracker(
+    SummarizerTracker const &summarizerTracker) {
   for (auto hole : summarizerTracker.holes) {
     llvm::errs() << fmt::format("(\n\t(function {})\n\t(symbol {})\n\t(args\n",
                                 hole.functionName,
@@ -5529,6 +5531,7 @@ void Executor::removeSubtree(ProofObligation *pob) {
       removeSubtree(child);
     }
   }
+  pobToParentState.erase(pob);
   objectManager->removePob(pob);
 }
 
@@ -5596,15 +5599,34 @@ void Executor::createFunctionPobUsingAcquiredUnderapproximation(
         replaceExprWithReplacements(constraint, replacements);
     auto replaced = readReplacer.visit(withGoodReturnValue);
     newConstraints.addConstraint(replaced);
-    // llvm::errs() << fmt::format("before:(\n{})\nafter:(\n{})\n",
-    //                             constraint->toString(),
-    //                             replaced->toString());
   }
+
   for (auto const &[exprL, exprR] : equalitiesBindingContext) {
     newConstraints.addConstraint(EqExpr::create(exprL, exprR));
   }
-  newConstraints.summarizerTracker.value().reversedMappingStack.push_back(
+  auto newSummarizerTracker = SummarizerTracker{};
+  auto oldSummarizerTracker = composed.summarizerTracker.value();
+  if (!oldSummarizerTracker.retValueTracker.isNull()) {
+    newSummarizerTracker.retValueTracker =
+        readReplacer.visit(replaceExprWithReplacements(
+            oldSummarizerTracker.retValueTracker, replacements));
+  }
+  for (auto hole : oldSummarizerTracker.holes) {
+    std::vector<ref<Expr>> newArgs;
+    for (auto arg : hole.arguments) {
+      auto updatedArg =
+          readReplacer.visit(replaceExprWithReplacements(arg, replacements));
+      newArgs.push_back(updatedArg);
+    }
+    newSummarizerTracker.holes.push_back(Hole{hole.functionName,
+                                              hole.functionRetValueSymbol,
+                                              newArgs, hole.callSite});
+  }
+  newSummarizerTracker.holes.pop_back(); // the last is the odd one
+
+  newSummarizerTracker.reversedMappingStack.push_back(
       readReplacer.revReplacements);
+  newConstraints.summarizerTracker = newSummarizerTracker;
   newConstraints = eliminateQuantifiers(newConstraints);
 
   auto place = nonlinearPob->location;
@@ -5626,6 +5648,9 @@ struct NearestNonLinearAncestor {
 };
 
 NearestNonLinearAncestor findNearestNonLinearAncestor(ProofObligation *pob) {
+  if (pob == nullptr) {
+    return NearestNonLinearAncestor{nullptr, true};
+  }
   auto nearestNonLinearPob = pob;
   constexpr auto functional = 1;
   constexpr auto skipFunction = 2;
@@ -5634,6 +5659,9 @@ NearestNonLinearAncestor findNearestNonLinearAncestor(ProofObligation *pob) {
   while (first || !isNonLinearPob(nearestNonLinearPob)) {
     first = false;
     auto parent = nearestNonLinearPob->parent;
+    if (parent == nullptr) {
+      return NearestNonLinearAncestor{nullptr, true};
+    }
     if (isNonLinearPob(parent)) {
       auto place = dyn_cast<ReachBlockTarget>(nearestNonLinearPob->location);
       if (place->isAtEnd()) {
@@ -5727,6 +5755,13 @@ void Executor::processSuccessfulComposition(
       auto finalCs = composeResult.composed;
       auto nextNonLinearPob = findNearestNonLinearAncestor(pob);
       while (true) {
+        if (nextNonLinearPob.nonLinearPob == nullptr) {
+          auto rootPob = pob->root;
+          llvm::errs() << "[TRUE POSITIVE] FOUND TRUE POSITIVE AT: "
+                       << pob->root->location->toString() << "\n";
+          removeSubtree(pob->root);
+          return;
+        }
         if (nextNonLinearPob.wasReachedByFunctionSkip) {
           break; // to create functional pob
         } else {
@@ -6113,47 +6148,6 @@ void Executor::addLemmaToAndEdgeToParent(ProofObligation *pob,
   //                                             composeResult.interpolant);
 }
 
-bool isSymbolicRead(ref<Expr> expr) {
-  if (auto readLsb = expr->hasOrderedReads()) {
-    auto source = readLsb->updates.root->source;
-    if (source->getKind() == SymbolicSource::MakeSymbolic) {
-      return true;
-    }
-  }
-  return false;
-}
-
-std::optional<std::pair<ref<Expr>, ref<Expr>>>
-extractReplacementFromSingleEquality(const ref<EqExpr> &eqExpr) {
-  if (isa<VariableExpr>(eqExpr->right) || isSymbolicRead(eqExpr->right)) {
-    return std::make_pair(eqExpr->right, eqExpr->left);
-  } else if (isa<VariableExpr>(eqExpr->left) || isSymbolicRead(eqExpr->left)) {
-    return std::make_pair(eqExpr->left, eqExpr->right);
-  }
-
-  if (auto addExprRight = dyn_cast<AddExpr>(eqExpr->right)) {
-    if (auto variableExpr = dyn_cast<VariableExpr>(addExprRight->left)) {
-      auto replacement = SubExpr::create(eqExpr->left, addExprRight->right);
-      return std::make_pair(variableExpr, replacement);
-    } else if (auto variableExpr =
-                   dyn_cast<VariableExpr>(addExprRight->right)) {
-      auto replacement = SubExpr::create(eqExpr->left, addExprRight->left);
-      return std::make_pair(variableExpr, replacement);
-    }
-  } else if (auto addExprLeft = dyn_cast<AddExpr>(eqExpr->left)) {
-    if (auto variableExpr = dyn_cast<VariableExpr>(addExprLeft->left)) {
-      auto replacement = SubExpr::create(eqExpr->right, addExprLeft->right);
-      return std::make_pair(variableExpr, replacement);
-    }
-    if (auto variableExpr = dyn_cast<VariableExpr>(addExprLeft->right)) {
-      auto replacement = SubExpr::create(eqExpr->right, addExprLeft->left);
-      return std::make_pair(variableExpr, replacement);
-    }
-  }
-
-  return std::nullopt;
-}
-
 PathConstraints
 Executor::eliminateQuantifiers(const PathConstraints &pathConstraints) {
   PathConstraints newConstraints{};
@@ -6162,20 +6156,30 @@ Executor::eliminateQuantifiers(const PathConstraints &pathConstraints) {
   ExprHashMap<ref<Expr>> possibleReplacements{};
   for (auto expr : pathConstraints.cs().cs()) {
     if (auto eqExpr = dyn_cast<EqExpr>(expr)) {
-      auto singleReplacement = extractReplacementFromSingleEquality(eqExpr);
+      auto singleReplacement = extractReplacementFromSingleEquality(
+          eqExpr, pathConstraints.summarizerTracker);
       if (singleReplacement) {
         possibleReplacements[singleReplacement->first] =
             singleReplacement->second;
       }
     }
   }
+  llvm::errs() << "dump:\n";
+  for (auto [k, v] : possibleReplacements) {
+    llvm::errs() << fmt::format("[\n{}\n->\n{}\n]\n", k->toString(),
+                                v->toString());
+  }
   for (auto expr : pathConstraints.cs().cs()) {
+
     auto replacedExpr = replaceExprWithReplacements(expr, possibleReplacements);
+    if (replacedExpr != expr) {
+      llvm::errs() << fmt::format("before:\n{}\nafter:\n{}\n]\n",
+                                  expr->toString(), replacedExpr->toString());
+    }
+    newConstraints.cs().dump();
     newConstraints.addConstraint(replacedExpr);
   }
-  // for (auto [e1, e2] : possibleReplacements) {
-  //   newConstraints.addConstraint(EqExpr::create(e1, e2));
-  // }
+
   return newConstraints;
 }
 
@@ -6222,7 +6226,6 @@ void Executor::processLeafPobBeforeRemoval(ProofObligation *pob) {
         clonePob->fuel = pob->fuel + 1;
         objectManager->addPob(clonePob);
       }
-      objectManager->removePob(pob);
     }
   }
   if (debugPrints.isSet(DebugPrint::Backward)) {
@@ -6452,12 +6455,6 @@ void Executor::run(ExecutionState *initialState,
     auto action = searcher->selectAction();
     executeAction(action);
     objectManager->updateSubscribers();
-    if ((*objectManager->rootPobs.begin())->children.size() >= 1) {
-      auto child = *((*objectManager->rootPobs.begin())->children.begin());
-      if (child->children.size() > 1) {
-        llvm::errs() << "here!\n";
-      }
-    }
 
     if (!checkMemoryUsage()) {
       // update searchers when states were terminated early due to memory
@@ -9901,7 +9898,10 @@ void Executor::updateLemmaLevelInNonlinearNode(
       auto maybeInterpolant =
           interpolate(consideredLevelLemmas, negateDisjunct(lemmaToLiftLevel),
                       solver.get(), coreSolverTimeout);
-      if (std::get_if<Interpolant>(&maybeInterpolant)) {
+      if (auto interpolant = std::get_if<Interpolant>(&maybeInterpolant)) {
+        llvm::errs() << fmt::format(
+            "itp=\n{}\n",
+            indentString(disjunctionToString(interpolant->interpolant), 1));
         auto newLemmaLevel = std::min(consideredLevel + 1, queueDepth);
         lemmaUpdateRecords.push_back(LemmaUpdateRecord{
             ki, oldLemmaLevel, newLemmaLevel, lemmaToLiftLevel});

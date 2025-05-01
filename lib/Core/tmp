@@ -1,8 +1,0 @@
-int main() {
-    int x = symb();
-    assume(x % 2 == 0)
-    y = f(x);
-    if (x % 2 != 0) {
-        err()
-    }
-}

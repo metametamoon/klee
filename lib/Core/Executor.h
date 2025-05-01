@@ -808,7 +808,7 @@ private:
                         ref<Expr> nullPointerExpr,
                         ImmutableList<Symbolic> &pobSymbolics,
                         int *maxComposeLevel = nullptr);
-  void dumpSummarizerTracker(SummarizerTracker prop);
+  void dumpSummarizerTracker(SummarizerTracker const &prop);
 
   void executeAction(ref<SearcherAction> action);
 

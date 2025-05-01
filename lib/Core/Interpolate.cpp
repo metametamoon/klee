@@ -1,6 +1,7 @@
 #include "Interpolate.h"
 
 #include "ContainsQuantifiersVisitor.h"
+#include "ExprUtil.h"
 #include "PdrSummary.h"
 #include "TimingSolver.h"
 
@@ -82,8 +83,9 @@ InterpolationResult interpolate(const cnf &lhs,
         }
       }
       interpolant.elements.insert(NotExpr::createIsZero(constraint));
-      assert(!containsQuantifiers(interpolant));
-      return Interpolant{interpolant};
+      auto interpolantNoQuantifiers = eliminateQuantifiers(interpolant);
+      assert(!containsQuantifiers(interpolantNoQuantifiers));
+      return Interpolant{interpolantNoQuantifiers};
     }
     lhsAsConstraints.addConstraint(constraint);
     addedToLhs.insert(constraint);

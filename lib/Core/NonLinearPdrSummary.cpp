@@ -1,6 +1,7 @@
 #include "NonLinearPdrSummary.h"
 
 #include "ContainsQuantifiersVisitor.h"
+#include "ExprUtil.h"
 #include "PdrSummary.h"
 #include "ProofObligation.h"
 #include "StringUtil.h"
@@ -14,16 +15,21 @@
 namespace klee {
 void NonLinearPdrSummary::addDisjunctOfLemmaOnKInstruction(
     KInstruction *ki, int level, const disjunction &lemma) {
+  auto simplifiedLemma = eliminateQuantifiers(lemma);
   if (debugConstraints.isSet(DebugPrint::Lemma)) {
     llvm::errs() << logPrefixWithSpace
                  << fmt::format("Extended lemma at ki={} level={}\n",
                                 ki->toString(), levelToString(level));
     llvm::errs() << fmt::format("{}Lemma={}\n", logPrefixWithSpace,
                                 disjunctionToString(lemma));
+
+    llvm::errs() << fmt::format("{}simplified lemma={}\n", logPrefixWithSpace,
+                                disjunctionToString(simplifiedLemma));
   }
-  assert(!containsQuantifiers(lemma));
+  assert(!containsQuantifiers(simplifiedLemma));
   auto &disjunct = kinstructionIntermediateLemmas[ki][level];
-  disjunct.elements.insert(lemma.elements.begin(), lemma.elements.end());
+  disjunct.elements.insert(simplifiedLemma.elements.begin(),
+                           simplifiedLemma.elements.end());
 }
 
 void NonLinearPdrSummary::fixLemmaOnKInstruction(KInstruction *ki, int level) {
@@ -57,7 +63,8 @@ void NonLinearPdrSummary::addFunctionLemma(KFunction *kf, int level,
 void NonLinearPdrSummary::addDisjunctFunctionLemma(KFunction *kf, int level,
                                                    const disjunction &lemma) {
   auto &disjunct = kfunctionsIntermediateLemmas[kf][level];
-  disjunct.elements.insert(lemma.elements.begin(), lemma.elements.end());
+  auto simplifiedLemma = eliminateQuantifiers(lemma);
+  disjunct.elements.insert(simplifiedLemma.elements.begin(), simplifiedLemma.elements.end());
 
   if (debugConstraints.isSet(DebugPrint::Lemma)) {
     llvm::errs() << logPrefixWithSpace
@@ -65,6 +72,9 @@ void NonLinearPdrSummary::addDisjunctFunctionLemma(KFunction *kf, int level,
                                 kf->getName().str(), levelToString(level));
     llvm::errs() << fmt::format("{}Lemma={}\n", logPrefixWithSpace,
                                 disjunctionToString(lemma));
+
+    llvm::errs() << fmt::format("{}Simplified lemma={}\n", logPrefixWithSpace,
+                                disjunctionToString(simplifiedLemma));
   }
 }
 

@@ -46,7 +46,7 @@ int main() {
   int a; // a -> sigma, sigma > 0 /\ sigma < 100000
   // f1 != 2 * sigma
   klee_make_symbolic(&a, sizeof(a), "a");
-  klee_assume(a > 0 && a < 100000);
+  klee_assume(a < 100000);
   // f1 != 2 * read a
   int b = T(a);
   // read b != 2 * read a
