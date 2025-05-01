@@ -16,18 +16,21 @@ import yaml
 
 GDBSERVER_UNUSED_PORT = -1
 
+
 def klee_options(
-    max_memory,
-    test_output_dir,
-    source,
-    hexhash,
-    max_time,
-    compiled_file,
-    is32,
-    f_err,
-    f_cov,
-    write_ktests,
-    bd,
+        max_memory,
+        test_output_dir,
+        source,
+        hexhash,
+        max_time,
+        compiled_file,
+        is32,
+        f_err,
+        f_cov,
+        write_ktests,
+        bd,
+        nonlinear_pdr,
+        backwards_full_logs,
 ):
     if max_time and int(max_time) > 30:
         MAX_SOLVER_TIME = 15
@@ -37,7 +40,8 @@ def klee_options(
         # "--strip-unwanted-calls",  # removes llvm.dbg.* instructions, exponentially reduces time on some benchmarks
         "--delete-dead-loops=false",  # without this optimizer removes some code, which decreases coverage
         "--emit-all-errors",  # without this we generate only one test for assertion failures, which decreases coverage
-        "--mock-policy=all",  # this helps for some linux benchmarks, which have unused extern globals. without this flag we will not even start on them.
+        "--mock-policy=all",
+        # this helps for some linux benchmarks, which have unused extern globals. without this flag we will not even start on them.
         "--external-calls=all",
         "--use-forked-solver=false",
         # "--solver-backend=stp",
@@ -53,7 +57,7 @@ def klee_options(
         "--output-istats=false",
         # "--istats-write-interval=90s", # Istats file can be large as well
         "--write-xml-tests",  # Write tests in XML format
-        f"--write-ktests={write_ktests}", # Write tests in KTest format
+        f"--write-ktests={write_ktests}",  # Write tests in KTest format
         f"--xml-metadata-programfile={source.name}",  # Provide the name of the original source file
         f"--xml-metadata-programhash={hexhash}",  # Provide sha256 hash of source file
         # "--use-guided-search=none",
@@ -81,15 +85,17 @@ def klee_options(
             "--allocate-determ-start-address=0x00030000000",
             # "--x86FP-as-x87FP80",
         ]
-
+    if backwards_full_logs:
+        cmd += [
+            "--debug-log=rootpob,backward,conflict,closepob,reached,init,pdr,maxcompose",
+            "--debug-constraints=lemma,backward",
+        ]
     if f_err:
         cmd += [
             # "--optimize=true", -- obstructs the solving
             "--use-alpha-equivalence=true",
             "--initialize-in-join-blocks",
             "--function-call-reproduce=reach_error",
-            "--debug-log=rootpob,backward,conflict,closepob,reached,init,pdr,maxcompose",
-            "--debug-constraints=lemma,backward",
             "--use-concretizing-solver=false",
             # "--max-cycles=0",
             # "--tc-type=bug",
@@ -115,10 +121,11 @@ def klee_options(
     if f_cov:
         cmd += [
             "--optimize=false",
-            "--mem-trigger-cof", # Start on the fly tests generation after approaching memory cup
+            "--mem-trigger-cof",  # Start on the fly tests generation after approaching memory cup
             "--use-alpha-equivalence=true",
             "--optimize-aggressive=false",
-            "--track-coverage=all", # Only branches and only instructions are wrong in real life. E.g., ternary operators are sometimes counted as different branches, while we stick to look at them as a single instruction from a single branch
+            "--track-coverage=all",
+            # Only branches and only instructions are wrong in real life. E.g., ternary operators are sometimes counted as different branches, while we stick to look at them as a single instruction from a single branch
             "--use-iterative-deepening-search=max-cycles",
             f"--max-solver-time={MAX_SOLVER_TIME}s",
             "--max-cycles-before-stuck=15",
@@ -147,6 +154,12 @@ def klee_options(
             "--execution-mode=bidirectional",
             "--forward-ticks=13",
             "--backward-ticks=7"
+        ]
+    if nonlinear_pdr:
+        assert bd
+        cmd += [
+            "--non-linear-pdr",
+            "--tmp-skip-fns-in-init=false",
         ]
 
     cmd += [compiled_file]  # Finally add the file to be tested
@@ -210,7 +223,9 @@ class KLEEF(object):
             write_ktests=False,
             bd=False,
             gdbserver_port=GDBSERVER_UNUSED_PORT,
-            output_dir = "test-suite",
+            output_dir="test-suite",
+            nonlinear_pdr=False,
+            backwards_full_logs=False,
     ):
         self.source = Path(source) if source else None
         self.is32 = is32
@@ -223,6 +238,8 @@ class KLEEF(object):
         self.max_time = max_time
         self.use_perf = use_perf
         self.use_valgrind = use_valgrind
+        self.nonlinear_pdr = nonlinear_pdr
+        self.backwards_full_logs = backwards_full_logs
         if write_ktests:
             self.write_ktests = "true"
         else:
@@ -335,6 +352,8 @@ class KLEEF(object):
             self.f_cov,
             self.write_ktests,
             self.bd,
+            self.nonlinear_pdr,
+            self.backwards_full_logs,
         )
         if self.gdbserver_port != GDBSERVER_UNUSED_PORT:
             cmd = ["gdbserver", f"localhost:{self.gdbserver_port}"] + cmd
@@ -441,19 +460,24 @@ def run(args):
         bd=args.bidirectional,
         gdbserver_port=args.gdbserver_port,
         output_dir=args.output_dir,
+        nonlinear_pdr=args.nonlinear_pdr,
+        backwards_full_logs=args.backwards_full_logs
     )
     wrapper.compile()
     return wrapper.run()
+
 
 def generate_uuid():
     # FIXME i don't know how to create uuid
     return '550e8400-e29b-41d4-a716-446655440000'
 
+
 def invs_json_to_witness_yaml(invs: json, source: Path):
     result = []
     for inv in invs:
-        not_false = inv["c_expression"] != "0" # idk why this does not work
-        not_zero_column = inv["column"] != 0 # that might be not true, but i've yet to find out why the debugger returns 0 as column
+        not_false = inv["c_expression"] != "0"  # idk why this does not work
+        not_zero_column = inv[
+                              "column"] != 0  # that might be not true, but i've yet to find out why the debugger returns 0 as column
         if not_zero_column and not_false:
             result.append({
                 "invariant": {
@@ -469,6 +493,7 @@ def invs_json_to_witness_yaml(invs: json, source: Path):
                 }
             })
     return result
+
 
 def generate_correctness_witness(source: Path, hexdigest: str, output_path: Path):
     invs_path = output_path / "invs.json"
@@ -567,6 +592,8 @@ def main():
         type=str,
         default="test-suite",
     )
+    parser.add_argument("--nonlinear-pdr", action="store_true", default=False, help="Enable nonlinear pdr")
+    parser.add_argument("--backwards-full-logs", action="store_true", default=False, help="Enable nonlinear pdr")
     args = parser.parse_args()
     run(args)
 
