@@ -161,7 +161,7 @@ TEST(SolverTest, Evaluation) {
 TEST(SolverTest, VariableExpr) {
   auto solver = klee::createCoreSolver(CoreSolverToUse);
   constraints_ty emptyConstraints;
-  auto varExpr = ref<Expr>{new VariableExpr(32, "var")};
+  auto varExpr = VariableExpr::create(32, "var", false);
   auto oneExpr = ref{ConstantExpr::alloc(1, 32)};
   auto twoExpr = ref{ConstantExpr::alloc(2, 32)};
   auto trivialEqExpr = EqExpr::create(
