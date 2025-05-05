@@ -5492,21 +5492,25 @@ Executor::extractFunctionLemmaAdapter(ExecutionState *state,
     replacements[functionParameterRead] = actualFunctionArgument;
   }
   auto callsite = kCallBlock->kcallInstruction->inst();
-  auto size = kmodule->targetData->getTypeStoreSize(callsite->getType());
-  auto source = SourceBuilder::instruction(*callsite, 0, kmodule.get());
-  auto array = makeArray(Expr::createPointer(size), source);
-  auto width = kmodule->targetData->getTypeSizeInBits(callsite->getType());
-  ref<Expr> readFromRetValue = Expr::createTempRead(array, width);
+  if (callsite->getType()->isSized()) {
+    auto size = kmodule->targetData->getTypeStoreSize(callsite->getType());
+    auto source = SourceBuilder::instruction(*callsite, 0, kmodule.get());
+    auto array = makeArray(Expr::createPointer(size), source);
+    auto width = kmodule->targetData->getTypeSizeInBits(callsite->getType());
+    ref<Expr> readFromRetValue = Expr::createTempRead(array, width);
 
-  auto replaceVariablesInLemmas = [replacements,
-                                   readFromRetValue](ref<Expr> value) {
-    RetVariableReplace replacer{readFromRetValue};
-    auto withReplacedArgs =
-        replaceExprWithReplacements(std::move(value), replacements);
-    auto withReplacedRetValue = replacer.visit(withReplacedArgs);
-    return withReplacedRetValue;
-  };
-  return replaceVariablesInLemmas;
+    auto replaceVariablesInLemmas = [replacements,
+                                     readFromRetValue](ref<Expr> value) {
+      RetVariableReplace replacer{readFromRetValue};
+      auto withReplacedArgs =
+          replaceExprWithReplacements(std::move(value), replacements);
+      auto withReplacedRetValue = replacer.visit(withReplacedArgs);
+      return withReplacedRetValue;
+    };
+    return replaceVariablesInLemmas;
+  } else {
+    return [](auto x) { return x; };
+  }
 }
 
 cnf Executor::extractLemmaToApply(ExecutionState *state, KCallBlock *kCallBlock,
@@ -5756,10 +5760,21 @@ void Executor::processSuccessfulComposition(
       auto nextNonLinearPob = findNearestNonLinearAncestor(pob);
       while (true) {
         if (nextNonLinearPob.nonLinearPob == nullptr) {
-          auto rootPob = pob->root;
-          llvm::errs() << "[TRUE POSITIVE] FOUND TRUE POSITIVE AT: "
-                       << pob->root->location->toString() << "\n";
-          removeSubtree(pob->root);
+          auto firstInst = pob->constraints.path().getFirstInstruction();
+          auto isMain = firstInst != nullptr &&
+                        firstInst->getKFunction()->getName().contains("main");
+          if (!isMain) {
+            auto newPob =
+                ProofObligation::create(pob, state, composeResult.composed,
+                                        composeResult.nullPointerExpr);
+            newPob->symbolics = composeResult.symbolics;
+            pobToParentState[newPob] = state->copy(); // do i need a copy here?
+            objectManager->addPob(newPob);
+          } else {
+            llvm::errs() << "[TRUE POSITIVE] FOUND TRUE POSITIVE AT: "
+                         << pob->root->location->toString() << "\n";
+            removeSubtree(pob->root);
+          }
           return;
         }
         if (nextNonLinearPob.wasReachedByFunctionSkip) {
