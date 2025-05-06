@@ -531,7 +531,7 @@ def generate_correctness_witness(source: Path, hexdigest: str, output_path: Path
             "content": invariants_yaml
         }
     ]
-    with open(output_path / 'witness-2.0.yml', 'w') as f:
+    with open(output_path / 'witness.yml', 'w') as f:
         yaml.dump(data, f, sort_keys=False)
 
 
