@@ -5381,8 +5381,7 @@ replaceRetValue(const klee::PathConstraints &composed, KInstruction *callsite,
                 std::string symbolName = "ret") {
   auto result = PathConstraints{};
   result.path() = composed.path();
-  ref<VariableExpr> symbol = VariableExpr::create(32, symbolName);
-  auto visitor = RetValueExprVisitor(callsite, symbol);
+  auto visitor = RetValueExprVisitor(callsite, symbolName);
   for (auto &indexConstraints : composed.orderedCS()) {
     Path::PathIndex index = indexConstraints.first;
     for (ref<Expr> constraint : indexConstraints.second) {
@@ -5402,7 +5401,7 @@ replaceRetValue(const klee::PathConstraints &composed, KInstruction *callsite,
       }
     }
   }
-  return std::make_pair(result, symbol);
+  return std::make_pair(result, visitor.retValue);
 }
 
 int freshInt() {
@@ -5550,6 +5549,9 @@ void Executor::createFunctionPobUsingAcquiredUnderapproximation(
   struct ReadReplacer : public ExprVisitor {
     ExprHashMap<ref<Expr>> replacements;
     ExprHashMap<ref<Expr>> revReplacements;
+    bool isReadFromMakeSymbolic(ref<ReadExpr> e) {
+      return e->updates.root->source->getKind() == SymbolicSource::MakeSymbolic;
+    }
     Action visitConcat(const ConcatExpr &CE) override {
       auto ceRef = CE.create(CE.getLeft(), CE.getRight());
       auto readLsb = CE.hasOrderedReads();
@@ -5558,10 +5560,16 @@ void Executor::createFunctionPobUsingAcquiredUnderapproximation(
       }
       auto source = readLsb->updates.root->source;
       if (replacements.find(readLsb) == replacements.end()) {
-        auto varName = "src" + source->toString() + std::to_string(freshInt());
-        auto substituteVar = VariableExpr::create(CE.getWidth(), varName);
-        replacements[ceRef] = substituteVar;
-        revReplacements[substituteVar] = ceRef;
+        if (!isReadFromMakeSymbolic(readLsb)) {
+          auto varName =
+              "src" + source->toString() + std::to_string(freshInt());
+          auto substituteVar = VariableExpr::create(CE.getWidth(), varName);
+          replacements[ceRef] = substituteVar;
+          revReplacements[substituteVar] = ceRef;
+        } else {
+          replacements[ceRef] = ceRef;
+          revReplacements[ceRef] = ceRef;
+        }
       }
       return Action::changeTo(replacements[ceRef]);
     }
@@ -5606,7 +5614,13 @@ void Executor::createFunctionPobUsingAcquiredUnderapproximation(
   }
 
   for (auto const &[exprL, exprR] : equalitiesBindingContext) {
-    newConstraints.addConstraint(EqExpr::create(exprL, exprR));
+    auto expr = EqExpr::create(exprL, exprR);
+    bool result;
+    SolverQueryMetaData solver_query_meta_data{};
+    auto mayBeTrue = solver->mayBeTrue(newConstraints.cs(), expr, result,
+                                       solver_query_meta_data);
+    assert(mayBeTrue);
+    newConstraints.addConstraint(expr);
   }
   auto newSummarizerTracker = SummarizerTracker{};
   auto oldSummarizerTracker = composed.summarizerTracker.value();
@@ -5686,6 +5700,7 @@ void Executor::processSuccessfulComposition(
     Executor::ComposeResult composeResult) {
   if (debugPrints.isSet(DebugPrint::Backward)) {
     llvm::errs() << "[backward] Composition sucessful.\n";
+    dumpConstraintSet(composeResult.composed.cs());
   }
   if (!state->finalComposing) {
     auto [isFromFunctionCall, kCallBlock] =
@@ -5724,10 +5739,21 @@ void Executor::processSuccessfulComposition(
           return;
         }
         auto oldConstraintsWithAppliedLemmas{oldConstraints};
+        llvm::errs() << fmt::format(
+            "Added {} lemmas from function lemmas at level >= {}:[\n",
+            functionLemmas.size(), pob->fuel - 2);
         for (const auto &lemma : functionLemmas) {
-          oldConstraintsWithAppliedLemmas.addConstraint(
-              disjunctionToExpr(lemma));
+          auto lemmaExpr = disjunctionToExpr(lemma);
+          bool result;
+          SolverQueryMetaData solver_query_meta_data{};
+          auto mayBeTrue =
+              solver->mayBeTrue(oldConstraintsWithAppliedLemmas.cs(), lemmaExpr,
+                                result, solver_query_meta_data);
+          assert(mayBeTrue);
+          oldConstraintsWithAppliedLemmas.addConstraint(lemmaExpr);
+          llvm::errs() << disjunctionToString(lemma) << "\n";
         }
+        llvm::errs() << "]\n";
         auto newConstraints = createConstraintsWithHoleForSkipFunctionPob(
             state, oldConstraintsWithAppliedLemmas, kCallBlock);
         auto newConstrainsWithoutQuantifiers =
@@ -5799,9 +5825,14 @@ void Executor::processSuccessfulComposition(
                 Hole{hole.functionName, hole.functionRetValueSymbol, updateArgs,
                      hole.callSite});
           }
+          // for (auto [k, v]: replacements) {
+          //   llvm::errs() << fmt::format("[\n{}\n->\n{}\n]\n", k->toString(),
+          //   v->toString());
+          // }
           for (auto const &constraint : composeResult.composed.cs().cs()) {
-            replacedCs.addConstraint(
-                replaceExprWithReplacements(constraint, replacements));
+            auto replacedExpr =
+                replaceExprWithReplacements(constraint, replacements);
+            replacedCs.addConstraint(replacedExpr);
           }
           finalCs = replacedCs;
           nextNonLinearPob = findNearestNonLinearAncestor(

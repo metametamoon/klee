@@ -11,17 +11,21 @@ namespace klee {
 // (ReadLSB w32 0 (array (w64 4) (instruction 0 %10 main -1))) ->
 // Variable("Ret")
 class RetValueExprVisitor : public ExprVisitor {
+public:
+  ref<Expr> retValue = VariableExpr::create(Expr::Bool, "empty");
 private:
-  ref<Expr> dst;
+  std::string symbolName;
   KInstruction *callsite;
 
 public:
-  explicit RetValueExprVisitor(KInstruction *_callsite, const ref<Expr> &_dst)
-      : dst(_dst), callsite(_callsite) {}
+  explicit RetValueExprVisitor(KInstruction *_callsite, std::string symbolName)
+      : symbolName(symbolName), callsite(_callsite) {}
 
   Action visitExpr(const Expr &e) override {
     if (isReadFromRetValue(e)) {
-      return Action::changeTo(dst);
+      auto newExpr = VariableExpr::create(e.getWidth(), symbolName);
+      retValue = newExpr;
+      return Action::changeTo(newExpr);
     }
     return Action::doChildren();
   }
