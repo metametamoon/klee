@@ -189,7 +189,7 @@ public:
   ~ComposeVisitor() { delete &state; }
 
   std::pair<ref<Expr>, ref<Expr>> compose(ref<Expr> expr) {
-    auto enableLogging = true;
+    auto enableLogging = false;
     if (enableLogging) {
       llvm::errs() << "composing: " << expr->toString() << "\n";
     }

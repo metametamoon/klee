@@ -5646,7 +5646,7 @@ void Executor::createFunctionPobUsingAcquiredUnderapproximation(
                                               newArgs, hole.callSite});
   }
   newSummarizerTracker.holes.pop_back(); // the last is the odd one
-
+  newSummarizerTracker.reversedMappingStack = oldSummarizerTracker.reversedMappingStack;
   newSummarizerTracker.reversedMappingStack.push_back(
       readReplacer.revReplacements);
   newConstraints.summarizerTracker = newSummarizerTracker;
@@ -5799,7 +5799,7 @@ void Executor::processSuccessfulComposition(
                 ProofObligation::create(pob, state, composeResult.composed,
                                         composeResult.nullPointerExpr);
             newPob->symbolics = composeResult.symbolics;
-            pobToParentState[newPob] = state->copy(); // do i need a copy here?
+            pobToParentState[newPob] = state->copy();
             objectManager->addPob(newPob);
           } else {
             llvm::errs() << "[TRUE POSITIVE] FOUND TRUE POSITIVE AT: "
@@ -5812,6 +5812,18 @@ void Executor::processSuccessfulComposition(
           break; // to create functional pob
         } else {
           assert(finalCs.summarizerTracker.has_value());
+          if (finalCs.summarizerTracker.value().reversedMappingStack.empty()) {
+            auto pobIt = pob;
+            while (pobIt != nullptr) {
+              llvm::errs() << fmt::format(
+                  "[\npob id={} path={} location={}\nrepls={}\n]\n", pobIt->id,
+                  pobIt->constraints.path().toString(),
+                  pobIt->location->toString(),
+                  pobIt->constraints.summarizerTracker.value()
+                      .reversedMappingStack.size());
+              pobIt = pobIt->parent;
+            }
+          }
           assert(
               !finalCs.summarizerTracker.value().reversedMappingStack.empty());
           auto replacements =
@@ -5819,6 +5831,8 @@ void Executor::processSuccessfulComposition(
           finalCs.summarizerTracker.value().reversedMappingStack.pop_back();
           PathConstraints replacedCs{};
           replacedCs.summarizerTracker = SummarizerTracker{};
+          replacedCs.summarizerTracker.value().reversedMappingStack =
+              finalCs.summarizerTracker->reversedMappingStack;
           for (auto const &hole :
                composeResult.composed.summarizerTracker->holes) {
             auto updateArgs = std::vector<ref<Expr>>{};
