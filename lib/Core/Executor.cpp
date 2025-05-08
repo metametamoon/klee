@@ -5508,7 +5508,12 @@ Executor::extractFunctionLemmaAdapter(ExecutionState *state,
     };
     return replaceVariablesInLemmas;
   } else {
-    return [](auto x) { return x; };
+    auto replaceVariablesInLemmas = [replacements](ref<Expr> value) {
+      auto withReplacedArgs =
+          replaceExprWithReplacements(std::move(value), replacements);
+      return withReplacedArgs;
+    };
+    return replaceVariablesInLemmas;
   }
 }
 
@@ -6222,7 +6227,7 @@ Executor::eliminateQuantifiers(const PathConstraints &pathConstraints) {
       llvm::errs() << fmt::format("before:\n{}\nafter:\n{}\n]\n",
                                   expr->toString(), replacedExpr->toString());
     }
-    newConstraints.cs().dump();
+    // newConstraints.cs().dump();
     newConstraints.addConstraint(replacedExpr);
   }
 
