@@ -6280,8 +6280,9 @@ void Executor::processLeafPobBeforeRemoval(ProofObligation *pob) {
     }
   }
   if (debugPrints.isSet(DebugPrint::Backward)) {
-    llvm::errs() << fmt::format("[main loop] removed pob id={} at path {}\n",
-                                pob->id, pob->constraints.path().toString());
+    llvm::errs() << fmt::format(
+        "[main loop] removed pob id={} at path {} at location {}\n", pob->id,
+        pob->constraints.path().toString(), pob->location->toString());
   }
   if (pob->kind == ProofObligation::Kind::Backward) {
     addLemmasToPobLocation(pob);
@@ -6339,21 +6340,18 @@ void Executor::processLeafPobBeforeRemoval(ProofObligation *pob) {
         if (isFunctionalPob) {
           auto state = pobToParentState[parent];
           auto lemmas = extractLemmaToApply(state, kCallBlock, pob->fuel);
-          auto updatedConstraints = parent->constraints;
-          bool sat = true;
-          for (auto lemma : lemmas) {
-            bool mayBeTrue;
-            SolverQueryMetaData md{};
-            solver->mayBeTrue(updatedConstraints.cs(), disjunctionToExpr(lemma),
-                              mayBeTrue, md);
-            if (mayBeTrue) {
+          auto itp = interpolate(lemmas, parent->constraints, solver.get(),
+                                 coreSolverTimeout);
+          if (auto interpolant = std::get_if<Interpolant>(&itp)) {
+            nonLinearPdrSummary->addDisjunctOfLemmaOnKInstruction(
+                kCallBlock->instructions[1], pob->parent->fuel,
+                interpolant->interpolant);
+          } else {
+            auto updatedConstraints = parent->constraints;
+            for (auto lemma : lemmas) {
+              SolverQueryMetaData md{};
               updatedConstraints.addConstraint(disjunctionToExpr(lemma));
-            } else {
-              sat = false;
-              break;
             }
-          }
-          if (sat) {
             auto updatedConstraintsWithHole = eliminateQuantifiers(
                 createConstraintsWithHoleForSkipFunctionPob(
                     state, updatedConstraints, kCallBlock));
@@ -6368,6 +6366,7 @@ void Executor::processLeafPobBeforeRemoval(ProofObligation *pob) {
             path.first = 0;
             objectManager->addPob(functionSkipPob);
           }
+          llvm::errs() << fmt::format("itp idx={}\n", itp.index());
 
         } else { // isFunctionSkipPob
           assert(kCallBlock != nullptr);
