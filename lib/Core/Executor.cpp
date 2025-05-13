@@ -5251,7 +5251,9 @@ void Executor::executeAction(ref<SearcherAction> action) {
         llvm::errs() << "\n";
       }
     }
+    perfTracker.event_begin(PerfEventKind::BACKWARD);
     goBackward(cast<BackwardAction>(action));
+    perfTracker.event_end(PerfEventKind::BACKWARD);
     break;
   }
   case SearcherAction::Kind::Initialize: {
@@ -5259,6 +5261,7 @@ void Executor::executeAction(ref<SearcherAction> action) {
     break;
   }
   case SearcherAction::Kind::PdrUpdate: {
+    break;
     ref<PdrAction> act = cast<PdrAction>(action);
     auto action = act->action;
     if (auto begUpdateAction =
@@ -5646,7 +5649,8 @@ void Executor::createFunctionPobUsingAcquiredUnderapproximation(
                                               newArgs, hole.callSite});
   }
   newSummarizerTracker.holes.pop_back(); // the last is the odd one
-  newSummarizerTracker.reversedMappingStack = oldSummarizerTracker.reversedMappingStack;
+  newSummarizerTracker.reversedMappingStack =
+      oldSummarizerTracker.reversedMappingStack;
   newSummarizerTracker.reversedMappingStack.push_back(
       readReplacer.revReplacements);
   newConstraints.summarizerTracker = newSummarizerTracker;
@@ -6271,7 +6275,9 @@ void Executor::processLeafPobBeforeRemoval(ProofObligation *pob) {
                                   pob->fuel);
       nonLinearPdrSummary->fixLemmaOnKInstruction(
           pob->location->getBlock()->getFirstInstruction(), pob->fuel);
+      perfTracker.event_begin(PerfEventKind::CHECK_INDUCTIVE);
       checkInductiveNonLinear(pob->fuel);
+      perfTracker.event_end(PerfEventKind::CHECK_INDUCTIVE);
       auto infInstruction = nonLinearPdrSummary->getLemmasFromKInstruction(
           pob->location->getBlock()->getFirstInstruction())[INF_LEVEL];
       if (std::any_of(
@@ -6560,6 +6566,7 @@ void Executor::run(ExecutionState *initialState,
     if (searcher->empty())
       haltExecution = HaltExecution::NoMoreStates;
   }
+  perfTracker.print_results();
 
   doDumpObjects();
 

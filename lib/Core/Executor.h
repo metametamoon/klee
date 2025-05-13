@@ -23,6 +23,7 @@
 #include "PathSummary.h"
 #include "PdrEngine.h"
 #include "PdrSummary.h"
+#include "PerfTracker.h"
 #include "ProofObligation.h"
 #include "SeedMap.h"
 #include "TargetedExecutionManager.h"
@@ -293,6 +294,7 @@ private:
   std::map<ProofObligation *, ExecutionState *> pobToParentState;
   std::map<KCallBlock *, ExecutionState *> nonLinearNodeToStateBeginningThere;
   std::vector<PathSummary> summaries;
+  SimplePerfTracker perfTracker{};
 
   /// Return the typeid corresponding to a certain `type_info`
   ref<ConstantExpr> getEhTypeidFor(ref<Expr> type_info);
