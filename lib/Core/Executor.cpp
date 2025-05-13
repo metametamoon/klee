@@ -6013,6 +6013,8 @@ void Executor::goBackward(ref<BackwardAction> action) {
             pob->constraints.path().getFirstInstruction(), pob->fuel,
             disjunction{composeResult.conflict.core});
       }
+    } else if (state->isolated && pob->kind == ProofObligation::Kind::Backward) {
+      pdrSummary->addInfinityLemmaOnSomeEdgeToPob(pob, disjunction{composeResult.conflict.core});
     }
   }
 }
@@ -9856,7 +9858,6 @@ ProofObligation Executor::lemmaAndKInstructionToPobAndStates(
 }
 
 void Executor::executeCheckInductiveAction(int queueDepth) {
-  assert(0);
   if (queueDepth < 3) {
     return; // play it safe
   }

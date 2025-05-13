@@ -99,8 +99,7 @@ ref<SearcherAction> BidirectionalSearcher::selectAction() {
       break;
     }
     case StepKind::LemmaUpdate:
-      // action =
-      // new PdrAction(pdrEngine->getPdrAction());
+      // action = new PdrAction(pdrEngine->getPdrAction());
       break;
     }
   }

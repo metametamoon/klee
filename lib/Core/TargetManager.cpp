@@ -386,7 +386,7 @@ bool TargetManager::isReachedTarget(const ExecutionState &state,
   if (isa<ReachBlockTarget>(target)) {
     if (cast<ReachBlockTarget>(target)->isAtEnd()) {
       if (state.prevPC->parent == target->getBlock() ||
-          state.pc->parent == target->getBlock()) {
+          state.pc && state.pc->parent == target->getBlock()) {
         if (state.prevPC == target->getBlock()->getLastInstruction()) {
           result = Done;
         } else {
