@@ -22,7 +22,7 @@ extractReplacementFromSingleEquality(const ref<EqExpr> &eqExpr,
     if (auto varExpr = dyn_cast<VariableExpr>(expr)) {
       bool isInActiveHole = false;
       if (tracker.has_value()) {
-        for (auto const holes : tracker.value().holes) {
+        for (auto const &holes : tracker.value().holes) {
           if (expr == holes.functionRetValueSymbol) {
             isInActiveHole = true;
             break;

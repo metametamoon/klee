@@ -5582,7 +5582,6 @@ void Executor::createFunctionPobUsingAcquiredUnderapproximation(
       return Action::changeTo(replacements[ceRef]);
     }
   };
-  ReadReplacer readReplacer;
   auto nonlinearPobCallBlock = dyn_cast<KCallBlock>(
       nonlinearPob->constraints.path().getFirstInstruction()->getKBlock());
   assert(nonlinearPobCallBlock);
@@ -5593,17 +5592,25 @@ void Executor::createFunctionPobUsingAcquiredUnderapproximation(
   assert(relevantHole.arguments.size() == n);
   auto equalitiesBindingContext =
       std::vector<std::pair<ref<Expr>, ref<Expr>>>{};
+  auto argumentsEliminator = ExprHashMap<ref<Expr>>{};
+  ReadReplacer readReplacer;
   for (unsigned i = 0; i < n; ++i) {
     auto argument = functionValue->getArg(i);
     auto size = kmodule->targetData->getTypeStoreSize(argument->getType());
     // setting index to -1 to offset it propagation during composition
     // with functional state
-    auto source = SourceBuilder::argument(*argument, -1, kmodule.get());
-    auto array = makeArray(Expr::createPointer(size), source);
+    auto sourceMin1 = SourceBuilder::argument(*argument, -1, kmodule.get());
+    auto arrayMin1 = makeArray(Expr::createPointer(size), sourceMin1);
     auto width = kmodule->targetData->getTypeSizeInBits(argument->getType());
-    ref<Expr> ithArgRead = Expr::createTempRead(array, width);
-    equalitiesBindingContext.emplace_back(
-        readReplacer.visit(relevantHole.arguments[i]), ithArgRead);
+    ref<Expr> ithArgPreComposedRead = Expr::createTempRead(arrayMin1, width);
+    auto replacedArgExpr = readReplacer.visit(relevantHole.arguments[i]);
+    equalitiesBindingContext.emplace_back(replacedArgExpr,
+                                          ithArgPreComposedRead);
+
+    auto source = SourceBuilder::argument(*argument, 0, kmodule.get());
+    auto array = makeArray(Expr::createPointer(size), source);
+    ref<Expr> ithArg = Expr::createTempRead(array, width);
+    argumentsEliminator[ithArg] = replacedArgExpr;
   }
   auto retValueSymbol =
       VariableExpr::create(relevantHole.functionRetValueSymbol->width,
@@ -5653,6 +5660,7 @@ void Executor::createFunctionPobUsingAcquiredUnderapproximation(
       oldSummarizerTracker.reversedMappingStack;
   newSummarizerTracker.reversedMappingStack.push_back(
       readReplacer.revReplacements);
+  newSummarizerTracker.reversedMappingStack.push_back(argumentsEliminator);
   newConstraints.summarizerTracker = newSummarizerTracker;
   newConstraints = eliminateQuantifiers(newConstraints);
 
@@ -5816,33 +5824,37 @@ void Executor::processSuccessfulComposition(
           break; // to create functional pob
         } else {
           assert(finalCs.summarizerTracker.has_value());
-          if (finalCs.summarizerTracker.value().reversedMappingStack.empty()) {
-            auto pobIt = pob;
-            while (pobIt != nullptr) {
-              llvm::errs() << fmt::format(
-                  "[\npob id={} path={} location={}\nrepls={}\n]\n", pobIt->id,
-                  pobIt->constraints.path().toString(),
-                  pobIt->location->toString(),
-                  pobIt->constraints.summarizerTracker.value()
-                      .reversedMappingStack.size());
-              pobIt = pobIt->parent;
-            }
-          }
+          // if (finalCs.summarizerTracker.value().reversedMappingStack.empty())
+          // {
+          //   auto pobIt = pob;
+          //   while (pobIt != nullptr) {
+          //     llvm::errs() << fmt::format(
+          //         "[\npob id={} path={} location={}\nrepls={}\n]\n",
+          //         pobIt->id, pobIt->constraints.path().toString(),
+          //         pobIt->location->toString(),
+          //         pobIt->constraints.summarizerTracker.value()
+          //             .reversedMappingStack.size());
+          //     pobIt = pobIt->parent;
+          //   }
+          // }
           assert(
               !finalCs.summarizerTracker.value().reversedMappingStack.empty());
           auto replacements =
+              finalCs.summarizerTracker.value().reversedMappingStack.back();
+          finalCs.summarizerTracker.value().reversedMappingStack.pop_back();
+          auto replacements2 =
               finalCs.summarizerTracker.value().reversedMappingStack.back();
           finalCs.summarizerTracker.value().reversedMappingStack.pop_back();
           PathConstraints replacedCs{};
           replacedCs.summarizerTracker = SummarizerTracker{};
           replacedCs.summarizerTracker.value().reversedMappingStack =
               finalCs.summarizerTracker->reversedMappingStack;
-          for (auto const &hole :
-               composeResult.composed.summarizerTracker->holes) {
+          for (auto const &hole : finalCs.summarizerTracker->holes) {
             auto updateArgs = std::vector<ref<Expr>>{};
             for (auto const &arg : hole.arguments) {
-              updateArgs.push_back(
-                  replaceExprWithReplacements(arg, replacements));
+              updateArgs.push_back(replaceExprWithReplacements(
+                  replaceExprWithReplacements(arg, replacements),
+                  replacements2));
             }
             replacedCs.summarizerTracker.value().holes.push_back(
                 Hole{hole.functionName, hole.functionRetValueSymbol, updateArgs,
@@ -5852,9 +5864,10 @@ void Executor::processSuccessfulComposition(
           //   llvm::errs() << fmt::format("[\n{}\n->\n{}\n]\n", k->toString(),
           //   v->toString());
           // }
-          for (auto const &constraint : composeResult.composed.cs().cs()) {
-            auto replacedExpr =
-                replaceExprWithReplacements(constraint, replacements);
+          for (auto const &constraint : finalCs.cs().cs()) {
+            auto replacedExpr = replaceExprWithReplacements(
+                replaceExprWithReplacements(constraint, replacements),
+                replacements2);
             replacedCs.addConstraint(replacedExpr);
           }
           finalCs = replacedCs;
@@ -6013,8 +6026,10 @@ void Executor::goBackward(ref<BackwardAction> action) {
             pob->constraints.path().getFirstInstruction(), pob->fuel,
             disjunction{composeResult.conflict.core});
       }
-    } else if (state->isolated && pob->kind == ProofObligation::Kind::Backward) {
-      pdrSummary->addInfinityLemmaOnSomeEdgeToPob(pob, disjunction{composeResult.conflict.core});
+    } else if (state->isolated &&
+               pob->kind == ProofObligation::Kind::Backward) {
+      pdrSummary->addInfinityLemmaOnSomeEdgeToPob(
+          pob, disjunction{composeResult.conflict.core});
     }
   }
 }
@@ -6182,20 +6197,20 @@ llvm::raw_ostream &pdrLog() {
 }
 
 void Executor::addLemmasToPobLocation(ProofObligation *pob) {
-  // disjunction kInstLemma = pdrSummary->getInfinityLemmasFromEdgesToPob(pob);
-  // pdrLog() << fmt::format("[main loop] total lemma size: {}\n",
-  //                         kInstLemma.elements.size());
-  // if (debugConstraints.isSet(DebugPrint::Lemma)) {
-  //   llvm::errs() << fmt::format("[main loop] lemma={}\n",
-  //                               disjunctionToString(kInstLemma));
-  // }
-  // // assert(!kInstLemma.empty()); -- it might be empty in case
-  // // the interpolant was "false"
-  // auto nextStateInitPC = pob->location->getBlock()->getFirstInstruction();
-  // if (pob->parent != nullptr) {
-  //   nextStateInitPC = pobToParentState[pob]->initPC;
-  // }
-  // pdrSummary->addLemmaOnKInstruction(nextStateInitPC, INF_LEVEL, kInstLemma);
+  disjunction kInstLemma = pdrSummary->getInfinityLemmasFromEdgesToPob(pob);
+  pdrLog() << fmt::format("[main loop] total lemma size: {}\n",
+                          kInstLemma.elements.size());
+  if (debugConstraints.isSet(DebugPrint::Lemma)) {
+    llvm::errs() << fmt::format("[main loop] lemma={}\n",
+                                disjunctionToString(kInstLemma));
+  }
+  // assert(!kInstLemma.empty()); -- it might be empty in case
+  // the interpolant was "false"
+  auto nextStateInitPC = pob->location->getBlock()->getFirstInstruction();
+  if (pob->parent != nullptr) {
+    nextStateInitPC = pobToParentState[pob]->initPC;
+  }
+  pdrSummary->addLemmaOnKInstruction(nextStateInitPC, INF_LEVEL, kInstLemma);
 }
 
 void Executor::addLemmaToAndEdgeToParent(ProofObligation *pob,
@@ -6371,7 +6386,6 @@ void Executor::processLeafPobBeforeRemoval(ProofObligation *pob) {
           } else {
             auto updatedConstraints = parent->constraints;
             for (auto lemma : lemmas) {
-              SolverQueryMetaData md{};
               updatedConstraints.addConstraint(disjunctionToExpr(lemma));
             }
             auto updatedConstraintsWithHole = eliminateQuantifiers(
