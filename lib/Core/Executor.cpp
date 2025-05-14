@@ -4920,6 +4920,14 @@ Executor::ComposeResult Executor::compose(const ExecutionState &state,
                                           ref<Expr> nullPointerExpr,
                                           ImmutableList<Symbolic> &pobSymbolics,
                                           int *maxComposeLevel) {
+  auto ki = state.initPC;
+  auto infLevelLemmas =
+      NonLinearPdr
+          ? nonLinearPdrSummary->getKInstructionOverapproximation(ki, INF_LEVEL)
+          : pdrSummary->getLemmasFromKInstruction(ki)[INF_LEVEL];
+  auto kiInstructionLemmas = NonLinearPdr
+                                 ? nonLinearPdrSummary->kinstructionLemmas[ki]
+                                 : pdrSummary->getLemmasFromKInstruction(ki);
   ComposeResult result;
   ComposeHelper helper(this);
   ComposeVisitor composer(state, helper);
@@ -4930,8 +4938,7 @@ Executor::ComposeResult Executor::compose(const ExecutionState &state,
 
   // append the infinity lemmas; we need to have it before everything to have
   // validity core
-  auto lemmaVectored = nonLinearPdrSummary->getLemmasFromKInstruction(
-      state.initPC.operator KInstruction *())[INF_LEVEL];
+  auto lemmaVectored = infLevelLemmas;
   auto lemma = cnfToExpr(lemmaVectored);
   if (LemmaUpdateTicks > 0) {
     bool mayBeTrue = false;
@@ -5073,7 +5080,7 @@ Executor::ComposeResult Executor::compose(const ExecutionState &state,
   }
 
   if (maxComposeLevel != nullptr) {
-    auto lemmas = nonLinearPdrSummary->getLemmasFromKInstruction(state.initPC);
+    auto lemmas = kiInstructionLemmas;
     for (auto it = lemmas.rbegin(); it != lemmas.rend(); ++it) {
       int current_level = it->first;
       auto current_level_vectored_lemma = it->second;
@@ -5261,7 +5268,8 @@ void Executor::executeAction(ref<SearcherAction> action) {
     break;
   }
   case SearcherAction::Kind::PdrUpdate: {
-    break;
+    if (NonLinearPdr)
+      break;
     ref<PdrAction> act = cast<PdrAction>(action);
     auto action = act->action;
     if (auto begUpdateAction =
@@ -5845,6 +5853,19 @@ void Executor::processSuccessfulComposition(
           auto replacements2 =
               finalCs.summarizerTracker.value().reversedMappingStack.back();
           finalCs.summarizerTracker.value().reversedMappingStack.pop_back();
+          llvm::errs() << "replacements 1 = [\n";
+          for (auto [k, v] : replacements) {
+            llvm::errs() << fmt::format("[\n{}\n->\n{}\n]\n", k->toString(),
+                                        v->toString());
+          }
+          llvm::errs() << "]\n";
+
+          llvm::errs() << "replacements 2 = [\n";
+          for (auto [k, v] : replacements2) {
+            llvm::errs() << fmt::format("[\n{}\n->\n{}\n]\n", k->toString(),
+                                        v->toString());
+          }
+          llvm::errs() << "]\n";
           PathConstraints replacedCs{};
           replacedCs.summarizerTracker = SummarizerTracker{};
           replacedCs.summarizerTracker.value().reversedMappingStack =
@@ -5865,9 +5886,14 @@ void Executor::processSuccessfulComposition(
           //   v->toString());
           // }
           for (auto const &constraint : finalCs.cs().cs()) {
-            auto replacedExpr = replaceExprWithReplacements(
-                replaceExprWithReplacements(constraint, replacements),
-                replacements2);
+            llvm::errs() << fmt::format(
+                "before:\n{}\n", indentString(constraint->toString(), 1));
+            auto replaced1 =
+                replaceExprWithReplacements(constraint, replacements);
+            llvm::errs() << fmt::format("after:\n{}\n",
+                                        indentString(replaced1->toString(), 1));
+            auto replacedExpr =
+                replaceExprWithReplacements(replaced1, replacements2);
             replacedCs.addConstraint(replacedExpr);
           }
           finalCs = replacedCs;
@@ -6215,23 +6241,23 @@ void Executor::addLemmasToPobLocation(ProofObligation *pob) {
 
 void Executor::addLemmaToAndEdgeToParent(ProofObligation *pob,
                                          ProofObligation *parent) {
-  // pdrLog() << fmt::format(
-  //     "[main loop] compose after removal of pob with id={}\n", pob->id);
-  // pdrLog() << fmt::format("\tpob loc={}\n", pob->location->toString());
-  // pdrLog() << fmt::format("\tpob path={}\n",
-  //                         pob->constraints.path().toString());
-  // pdrLog() << fmt::format("\tparent pob loc={}\n",
-  //                         parent->location->toString());
-  // pdrLog() << fmt::format("\tparent pob path={}\n",
-  //                         parent->constraints.path().toString());
-  // auto state = pobToParentState[pob];
-  // // pdrLog() << fmt::format("\tstate path={}\n",
-  // //                             state->constraints.path().toString());
-  //
-  // auto composeResult = maxCompose(parent, state);
-  // // assert(composeResult.level == INF_LEVEL);
-  // pdrSummary->addInfinityLemmaOnSomeEdgeToPob(parent,
-  //                                             composeResult.interpolant);
+  pdrLog() << fmt::format(
+      "[main loop] compose after removal of pob with id={}\n", pob->id);
+  pdrLog() << fmt::format("\tpob loc={}\n", pob->location->toString());
+  pdrLog() << fmt::format("\tpob path={}\n",
+                          pob->constraints.path().toString());
+  pdrLog() << fmt::format("\tparent pob loc={}\n",
+                          parent->location->toString());
+  pdrLog() << fmt::format("\tparent pob path={}\n",
+                          parent->constraints.path().toString());
+  auto state = pobToParentState[pob];
+  // pdrLog() << fmt::format("\tstate path={}\n",
+  //                             state->constraints.path().toString());
+
+  auto composeResult = maxCompose(parent, state);
+  // assert(composeResult.level == INF_LEVEL);
+  pdrSummary->addInfinityLemmaOnSomeEdgeToPob(parent,
+                                              composeResult.interpolant);
 }
 
 PathConstraints
@@ -6495,7 +6521,9 @@ void Executor::run(ExecutionState *initialState,
     forCheck = (ConflictCoreInitializer *)initializer;
     ProofObligation *rootPob = *(objectManager->rootPobs.begin());
     auto lemmaUpdater = std::make_unique<PdrEngine>(
-        rootPob, targetManager.get(), forCheck, objectManager.get());
+        NonLinearPdr ? nullptr : rootPob, // no concept of root pob when everything changes always
+        targetManager.get(), forCheck,
+        objectManager.get());
     searcher = std::make_unique<BidirectionalSearcher>(
         forward, branch, backward, initializer, std::move(lemmaUpdater));
   }

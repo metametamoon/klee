@@ -21,8 +21,8 @@ llvm::cl::opt<unsigned> BackwardTicks("backward-ticks", llvm::cl::desc(""),
                                       llvm::cl::init(25),
                                       llvm::cl::cat(ExecCat));
 
-llvm::cl::opt<unsigned> LemmaUpdateTicks("linear-pdr-ticks",
-                                         llvm::cl::desc(""), llvm::cl::init(25),
+llvm::cl::opt<unsigned> LemmaUpdateTicks("linear-pdr-ticks", llvm::cl::desc(""),
+                                         llvm::cl::init(25),
                                          llvm::cl::cat(ExecCat));
 
 BidirectionalSearcher::StepKind BidirectionalSearcher::selectStep() {
@@ -99,7 +99,7 @@ ref<SearcherAction> BidirectionalSearcher::selectAction() {
       break;
     }
     case StepKind::LemmaUpdate:
-      // action = new PdrAction(pdrEngine->getPdrAction());
+      action = new PdrAction(pdrEngine->getPdrAction());
       break;
     }
   }
@@ -135,9 +135,8 @@ bool BidirectionalSearcher::empty() {
          (initializer->empty() || (ticks.at(3) == 0));
 }
 
-BidirectionalSearcher::BidirectionalSearcher(Searcher *_forward,
-                                             Searcher *_branch,
-                                             BackwardSearcher *_backward,
+BidirectionalSearcher::BidirectionalSearcher(
+    Searcher *_forward, Searcher *_branch, BackwardSearcher *_backward,
     Initializer *_initializer, std::unique_ptr<PdrEngine> &&_lemmaUpdater)
     : ticker({ForwardTicks, BranchTicks, BackwardTicks, InitTicks,
               LemmaUpdateTicks}),
