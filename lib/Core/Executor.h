@@ -295,6 +295,7 @@ private:
   std::map<KCallBlock *, ExecutionState *> nonLinearNodeToStateBeginningThere;
   std::vector<PathSummary> summaries;
   SimplePerfTracker perfTracker{};
+  bool forceForward = false;
 
   /// Return the typeid corresponding to a certain `type_info`
   ref<ConstantExpr> getEhTypeidFor(ref<Expr> type_info);
@@ -831,6 +832,7 @@ private:
   void removeSubtree(klee::ProofObligation *pob);
   void createFunctionPobUsingAcquiredUnderapproximation(
       const PathConstraints &composed, ProofObligation *nonlinearPob);
+  void forceForwardExecutionOnly(ProofObligation *pob);
   void processSuccessfulComposition(ExecutionState *state, ProofObligation *pob,
                                     Executor::ComposeResult composeResult);
   bool isFromFunctionStart(ExecutionState const &state);

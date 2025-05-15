@@ -5720,6 +5720,14 @@ NearestNonLinearAncestor findNearestNonLinearAncestor(ProofObligation *pob) {
                                   queryKind == skipFunction};
 }
 
+void Executor::forceForwardExecutionOnly(ProofObligation *const root) {
+  forceForward = true;
+  searcher->forceForward();
+  for (auto child : root->children) {
+    removeSubtree(child);
+  }
+}
+
 void Executor::processSuccessfulComposition(
     ExecutionState *state, ProofObligation *const pob,
     Executor::ComposeResult composeResult) {
@@ -5822,9 +5830,9 @@ void Executor::processSuccessfulComposition(
             pobToParentState[newPob] = state->copy();
             objectManager->addPob(newPob);
           } else {
-            llvm::errs() << "[TRUE POSITIVE] FOUND TRUE POSITIVE AT: "
-                         << pob->root->location->toString() << "\n";
-            removeSubtree(pob->root);
+            // llvm::errs() << "[TRUE POSITIVE] FOUND TRUE POSITIVE AT: "
+            //              << pob->root->location->toString() << "\n";
+            forceForwardExecutionOnly(pob->root);
           }
           return;
         }
@@ -5942,48 +5950,46 @@ void Executor::processSuccessfulComposition(
             llvm::errs() << "[close pob] Pob closed due to backward reach at: "
                          << pob->root->location->toString() << "\n";
           }
-          llvm::errs() << "[TRUE POSITIVE] FOUND TRUE POSITIVE AT: "
-                       << pob->root->location->toString() << "\n";
+          // llvm::errs() << "[TRUE POSITIVE] FOUND TRUE POSITIVE AT: "
+          // << pob->root->location->toString() << "\n";
           // pdrSummary->dumpInfinityLevelLemmas(
           // interpreterHandler->getOutputFilename("invs.json"));
-          closeProofObligation(pob);
+          forceForwardExecutionOnly(pob->root);
         }
       } else {
         if (debugPrints.isSet(DebugPrint::ClosePob)) {
           llvm::errs() << "[close pob] Pob closed due to backward reach at: "
                        << pob->root->location->toString() << "\n";
         }
-        llvm::errs() << "[TRUE POSITIVE] FOUND TRUE POSITIVE AT: "
-                     << pob->root->location->toString() << "\n";
+        // llvm::errs() << "[TRUE POSITIVE] FOUND TRUE POSITIVE AT: "
+        // << pob->root->location->toString() << "\n";
         // pdrSummary->dumpInfinityLevelLemmas(
         // interpreterHandler->getOutputFilename("invs.json"));
-        closeProofObligation(pob);
+        forceForwardExecutionOnly(pob->root);
       }
     } else {
       if (NonLinearPdr && pob->kind == ProofObligation::Kind::NonLinearPdr) {
         // a stub implementation; we want to treat non-linear pobs differently
-        closeProofObligation(pob);
+        // closeProofObligation(pob);
+        forceForwardExecutionOnly(pob->root);
         return;
       }
-      if (debugPrints.isSet(DebugPrint::ClosePob)) {
-        llvm::errs() << "[close pob] Pob closed due to backward reach at: "
-                     << pob->root->location->toString() << "\n";
-      }
-      llvm::errs() << "[TRUE POSITIVE] FOUND TRUE POSITIVE AT: "
-                   << pob->root->location->toString() << "\n";
+      // llvm::errs() << "[TRUE POSITIVE] FOUND TRUE POSITIVE AT: "
+      // << pob->root->location->toString() << "\n";
       // pdrSummary->dumpInfinityLevelLemmas(
       // interpreterHandler->getOutputFilename("invs.json"));
-      closeProofObligation(pob);
+      forceForwardExecutionOnly(pob->root);
+      // closeProofObligation(pob);
     }
 
     klee_warning("GENERATING TEST FROM PROOF OBLIGATION. GENERATION FOR "
                  "PATHS WITH LAZY INITIALIZATION IS NOT SUPPORTED.");
-
-    auto state = ExecutionState();
-    state.constraints = pob->constraints;
-    state.symbolics = pob->symbolics;
-    interpreterHandler->processTestCase(state, "backward", "reachable.err",
-                                        false);
+    // no need to generate test cases
+    // auto state = ExecutionState();
+    // state.constraints = pob->constraints;
+    // state.symbolics = pob->symbolics;
+    // interpreterHandler->processTestCase(state, "backward", "reachable.err",
+    //                                     false);
   }
 }
 
@@ -6521,9 +6527,10 @@ void Executor::run(ExecutionState *initialState,
     forCheck = (ConflictCoreInitializer *)initializer;
     ProofObligation *rootPob = *(objectManager->rootPobs.begin());
     auto lemmaUpdater = std::make_unique<PdrEngine>(
-        NonLinearPdr ? nullptr : rootPob, // no concept of root pob when everything changes always
-        targetManager.get(), forCheck,
-        objectManager.get());
+        NonLinearPdr
+            ? nullptr
+            : rootPob, // no concept of root pob when everything changes always
+        targetManager.get(), forCheck, objectManager.get());
     searcher = std::make_unique<BidirectionalSearcher>(
         forward, branch, backward, initializer, std::move(lemmaUpdater));
   }
@@ -6576,7 +6583,7 @@ void Executor::run(ExecutionState *initialState,
       objectManager->updateSubscribers();
     }
 
-    if (errorAndBackward) {
+    if (errorAndBackward && !forceForward) {
       bool changed = true;
       while (changed) {
         changed = false;
@@ -6591,7 +6598,7 @@ void Executor::run(ExecutionState *initialState,
     }
 
     if (errorAndBackward) {
-      if (objectManager->getRootPobs().empty()) {
+      if (objectManager->getRootPobs().empty() && !forceForward) {
         haltExecution = HaltExecution::Unspecified;
       }
     }

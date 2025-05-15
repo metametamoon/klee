@@ -3,8 +3,8 @@
 
 #include "BackwardSearcher.h"
 #include "Initializer.h"
-#include "PdrEngine.h"
 #include "ObjectManager.h"
+#include "PdrEngine.h"
 #include "Searcher.h"
 #include "SearcherUtil.h"
 #include <klee/ADT/Ticker.h>
@@ -16,6 +16,7 @@ public:
   virtual ref<SearcherAction> selectAction() = 0;
   virtual bool empty() = 0;
   virtual ~IBidirectionalSearcher() {}
+  virtual void forceForward() {}
 };
 
 class BidirectionalSearcher : public IBidirectionalSearcher {
@@ -25,6 +26,7 @@ public:
   ref<SearcherAction> selectAction() override;
   void update(ref<ObjectManager::Event> e) override;
   bool empty() override;
+  void forceForward() override;
 
   // Assumes ownership
   explicit BidirectionalSearcher(Searcher *_forward, Searcher *_branch,

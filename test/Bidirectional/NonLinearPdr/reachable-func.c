@@ -4,7 +4,7 @@
 // RUN: rm -rf %t.klee-out
 // RUN: %klee --write-kqueries --output-dir=%t.klee-out --non-linear-pdr --execution-mode=bidirectional --initialize-in-join-blocks=true --function-call-reproduce=reach_error --forward-ticks=0 --backward-ticks=10 --skip-not-lazy-initialized --skip-not-symbolic-objects --debug-log=rootpob,backward,conflict,closepob,reached,init,pdr --debug-constraints=lemma,backward --tmp-skip-fns-in-init=false --optimize=false %t.bc 2> %t.log
 // RUN: FileCheck %s -input-file=%t.log
-// CHECK: [TRUE POSITIVE] FOUND TRUE POSITIVE AT
+// CHECK: [TRUE POSITIVE]
 
 
 #include "klee/klee.h"

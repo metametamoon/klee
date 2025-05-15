@@ -135,6 +135,11 @@ bool BidirectionalSearcher::empty() {
          (initializer->empty() || (ticks.at(3) == 0));
 }
 
+void BidirectionalSearcher::forceForward() {
+  auto forward = std::max(static_cast<int>(ForwardTicks), 20);
+  ticker = Ticker({forward, BranchTicks, 0, InitTicks, 0});
+}
+
 BidirectionalSearcher::BidirectionalSearcher(
     Searcher *_forward, Searcher *_branch, BackwardSearcher *_backward,
     Initializer *_initializer, std::unique_ptr<PdrEngine> &&_lemmaUpdater)

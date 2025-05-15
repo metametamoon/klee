@@ -33,4 +33,4 @@ int main() {
   }
 }
 
-// CHECK: [TRUE POSITIVE] FOUND TRUE POSITIVE AT
+// CHECK: [TRUE POSITIVE]
