@@ -6318,6 +6318,9 @@ void Executor::processLeafPobBeforeRemoval(ProofObligation *pob) {
                    << "\n";
       pdrSummary->dumpInfinityLevelLemmas(
           interpreterHandler->getOutputFilename("invs.json"));
+      std::fstream file{interpreterHandler->getOutputFilename("answer-true"),
+                        std::ios::out};
+      file << "";
     } else if (pob->kind == ProofObligation::Kind::NonLinearPdr) {
       llvm::errs() << fmt::format("[main loop] ended iteration of "
                                   "non-linear pdr at depth {}\n",
@@ -6338,6 +6341,9 @@ void Executor::processLeafPobBeforeRemoval(ProofObligation *pob) {
                      << "\n";
         nonLinearPdrSummary->dumpInfinityLevelLemmas(
             interpreterHandler->getOutputFilename("invs.json"));
+        std::fstream file{interpreterHandler->getOutputFilename("answer-true"),
+                          std::ios::out};
+        file << "";
       } else {
         auto clonePob = new ProofObligation(pob->location);
         clonePob->kind = ProofObligation::Kind::NonLinearPdr;
@@ -6576,11 +6582,18 @@ void Executor::run(ExecutionState *initialState,
     auto action = searcher->selectAction();
     executeAction(action);
     objectManager->updateSubscribers();
-
+    if (objectManager->rootPobReachedByForward) {
+      haltExecution = HaltExecution::ReachedTarget;
+      continue;
+    }
     if (!checkMemoryUsage()) {
       // update searchers when states were terminated early due to memory
       // pressure
       objectManager->updateSubscribers();
+      if (objectManager->rootPobReachedByForward) {
+        haltExecution = HaltExecution::ReachedTarget;
+        continue;
+      }
     }
 
     if (errorAndBackward && !forceForward) {
@@ -6593,6 +6606,11 @@ void Executor::run(ExecutionState *initialState,
         }
         if (changed) {
           objectManager->updateSubscribers();
+
+          if (objectManager->rootPobReachedByForward) {
+            haltExecution = HaltExecution::ReachedTarget;
+            continue;
+          }
         }
       }
     }
@@ -6602,6 +6620,11 @@ void Executor::run(ExecutionState *initialState,
         haltExecution = HaltExecution::Unspecified;
       }
     }
+  }
+  if (haltExecution == HaltExecution::ReachedTarget) {
+    std::fstream file{interpreterHandler->getOutputFilename("answer-false"),
+                      std::ios::out};
+    file << "";
   }
 
   if (guidanceKind == GuidanceKind::ErrorGuidance) {

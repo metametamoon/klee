@@ -499,6 +499,7 @@ def invs_json_to_witness_yaml(invs: json, source: Path):
 
 
 def generate_correctness_witness(source: Path, hexdigest: str, output_path: Path):
+    existsFalseAnswer = os.path.isfile(output_path / "answer-false")
     invs_path = output_path / "invs.json"
     try:
         with open(invs_path, 'r') as f:
@@ -508,7 +509,7 @@ def generate_correctness_witness(source: Path, hexdigest: str, output_path: Path
         invariants_yaml = []
     data = [
         {
-            "entry_type": "invariant_set",
+            "entry_type": "invariant_set" if not existsFalseAnswer else "violation_sequence",
             "metadata": {
                 "format_version": "2.0",
                 "uuid": generate_uuid(),
@@ -528,7 +529,7 @@ def generate_correctness_witness(source: Path, hexdigest: str, output_path: Path
                     "language": "C"
                 }
             },
-            "content": invariants_yaml
+            "content": invariants_yaml if not existsFalseAnswer else []
         }
     ]
     with open(output_path / 'witness.yml', 'w') as f:

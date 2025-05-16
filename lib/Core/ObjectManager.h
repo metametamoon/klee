@@ -184,6 +184,7 @@ public:
   void setPredicate(InitializerPredicate *predicate_) {
     predicate = predicate_;
   }
+  bool rootPobReachedByForward = false;
 };
 
 class Subscriber {

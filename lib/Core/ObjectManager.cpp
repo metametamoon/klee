@@ -5,6 +5,8 @@
 #include "TargetManager.h"
 
 #include "klee/Module/KModule.h"
+
+#include <fstream>
 #include <klee/Support/DebugFlags.h>
 
 using namespace llvm;
@@ -291,9 +293,11 @@ void ObjectManager::checkReachedPobs() {
           }
           toRemove.insert(pob);
           llvm::errs() << "[TRUE POSITIVE] FOUND TRUE POSITIVE VIA FORWARD AT: "
-            << pob->root->location->toString() << "\n";
+                       << pob->root->location->toString() << "\n";
           llvm::errs() << "[TRUE POSITIVE] State path: "
-            << state->constraints.path().toString() << "\n";
+                       << state->constraints.path().toString() << "\n";
+          rootPobReachedByForward = true;
+
         }
       }
     }
