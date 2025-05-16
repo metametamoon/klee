@@ -142,8 +142,8 @@ void NonLinearPdrSummary::dumpInfinityLevelLemmas(
   for (const auto &[ki, leveledLemmas] : kinstructionLemmas) {
     for (const auto &[level, lemmas] : leveledLemmas) {
       if (level == INF_LEVEL) {
-        llvm::errs() << fmt::format("ki={} ki_loc={} lemmas=\n", ki->toString(),
-                                    ki->getSourceLocationString());
+        // llvm::errs() << fmt::format("ki={} ki_loc={} lemmas=\n",
+        // ki->toString(), ki->getSourceLocationString());
         for (const auto &lemma : lemmas) {
           nlohmann::json invariant{
               {"ki", ki->toString()},
@@ -156,7 +156,7 @@ void NonLinearPdrSummary::dumpInfinityLevelLemmas(
               {"pure_expression", disjunctionToString(lemma)}};
           invariants.push_back(invariant);
         }
-        llvm::errs() << "\n";
+        // llvm::errs() << "\n";
       }
     }
   }

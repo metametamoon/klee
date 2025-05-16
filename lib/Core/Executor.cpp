@@ -4980,11 +4980,6 @@ Executor::ComposeResult Executor::compose(const ExecutionState &state,
               rewriteDependencies[dep].begin(), rewriteDependencies[dep].end());
         }
       }
-      // llvm::errs() << "Clean deps:\n";
-      // for (auto &dep: rewriteDependencies[simplifiedComposedConstraint]) {
-      // llvm::errs() << fmt::format("\t{}\n",
-      // translateToCExpr(dep).value_or("unknown"));
-      // }
 
       ValidityCore core;
       bool isValid;
@@ -5027,8 +5022,6 @@ Executor::ComposeResult Executor::compose(const ExecutionState &state,
             for (auto original : simplMap.at(e)) {
               if (rebuildMap.count(original)) {
                 auto expr = rebuildMap.at(original);
-                llvm::errs() << fmt::format(
-                    "\t{}\n", translateToCExpr(expr).value_or("unknown"));
                 conflict.core.insert(Expr::createIsZero(expr));
               }
             }
@@ -5045,8 +5038,6 @@ Executor::ComposeResult Executor::compose(const ExecutionState &state,
               for (auto original : simplMap.at(e)) {
                 if (rebuildMap.count(original)) {
                   auto expr = rebuildMap.at(original);
-                  llvm::errs() << fmt::format(
-                      "\t{}\n", translateToCExpr(expr).value_or("unknown"));
                   conflict.core.insert(Expr::createIsZero(expr));
                 }
               }
@@ -5132,8 +5123,6 @@ Executor::ComposeResult Executor::compose(const ExecutionState &state,
   for (auto const &[key, expr] : pob.trackers) {
     auto [safetyConstraint, composed] = composer.compose(expr);
     composer.state.constraints.trackers[key] = composed;
-    llvm::errs() << fmt::format("[compose] updated tracking:\n{} -> {}\n", key,
-                                composed->toString());
   }
   if (pob.summarizerTracker) {
     composer.state.constraints.summarizerTracker = SummarizerTracker{};
@@ -5772,9 +5761,6 @@ void Executor::processSuccessfulComposition(
           return;
         }
         auto oldConstraintsWithAppliedLemmas{oldConstraints};
-        llvm::errs() << fmt::format(
-            "Added {} lemmas from function lemmas at level >= {}:[\n",
-            functionLemmas.size(), pob->fuel - 2);
         for (const auto &lemma : functionLemmas) {
           auto lemmaExpr = disjunctionToExpr(lemma);
           bool result;
@@ -5784,9 +5770,7 @@ void Executor::processSuccessfulComposition(
                                 result, solver_query_meta_data);
           assert(mayBeTrue);
           oldConstraintsWithAppliedLemmas.addConstraint(lemmaExpr);
-          llvm::errs() << disjunctionToString(lemma) << "\n";
         }
-        llvm::errs() << "]\n";
         auto newConstraints = createConstraintsWithHoleForSkipFunctionPob(
             state, oldConstraintsWithAppliedLemmas, kCallBlock);
         auto newConstrainsWithoutQuantifiers =
@@ -5830,8 +5814,6 @@ void Executor::processSuccessfulComposition(
             pobToParentState[newPob] = state->copy();
             objectManager->addPob(newPob);
           } else {
-            // llvm::errs() << "[TRUE POSITIVE] FOUND TRUE POSITIVE AT: "
-            //              << pob->root->location->toString() << "\n";
             forceForwardExecutionOnly(pob->root);
           }
           return;
@@ -5840,19 +5822,6 @@ void Executor::processSuccessfulComposition(
           break; // to create functional pob
         } else {
           assert(finalCs.summarizerTracker.has_value());
-          // if (finalCs.summarizerTracker.value().reversedMappingStack.empty())
-          // {
-          //   auto pobIt = pob;
-          //   while (pobIt != nullptr) {
-          //     llvm::errs() << fmt::format(
-          //         "[\npob id={} path={} location={}\nrepls={}\n]\n",
-          //         pobIt->id, pobIt->constraints.path().toString(),
-          //         pobIt->location->toString(),
-          //         pobIt->constraints.summarizerTracker.value()
-          //             .reversedMappingStack.size());
-          //     pobIt = pobIt->parent;
-          //   }
-          // }
           assert(
               !finalCs.summarizerTracker.value().reversedMappingStack.empty());
           auto replacements =
@@ -5861,19 +5830,6 @@ void Executor::processSuccessfulComposition(
           auto replacements2 =
               finalCs.summarizerTracker.value().reversedMappingStack.back();
           finalCs.summarizerTracker.value().reversedMappingStack.pop_back();
-          llvm::errs() << "replacements 1 = [\n";
-          for (auto [k, v] : replacements) {
-            llvm::errs() << fmt::format("[\n{}\n->\n{}\n]\n", k->toString(),
-                                        v->toString());
-          }
-          llvm::errs() << "]\n";
-
-          llvm::errs() << "replacements 2 = [\n";
-          for (auto [k, v] : replacements2) {
-            llvm::errs() << fmt::format("[\n{}\n->\n{}\n]\n", k->toString(),
-                                        v->toString());
-          }
-          llvm::errs() << "]\n";
           PathConstraints replacedCs{};
           replacedCs.summarizerTracker = SummarizerTracker{};
           replacedCs.summarizerTracker.value().reversedMappingStack =
@@ -5889,17 +5845,10 @@ void Executor::processSuccessfulComposition(
                 Hole{hole.functionName, hole.functionRetValueSymbol, updateArgs,
                      hole.callSite});
           }
-          // for (auto [k, v]: replacements) {
-          //   llvm::errs() << fmt::format("[\n{}\n->\n{}\n]\n", k->toString(),
-          //   v->toString());
-          // }
+
           for (auto const &constraint : finalCs.cs().cs()) {
-            llvm::errs() << fmt::format(
-                "before:\n{}\n", indentString(constraint->toString(), 1));
             auto replaced1 =
                 replaceExprWithReplacements(constraint, replacements);
-            llvm::errs() << fmt::format("after:\n{}\n",
-                                        indentString(replaced1->toString(), 1));
             auto replacedExpr =
                 replaceExprWithReplacements(replaced1, replacements2);
             replacedCs.addConstraint(replacedExpr);
@@ -5915,7 +5864,6 @@ void Executor::processSuccessfulComposition(
       createFunctionPobUsingAcquiredUnderapproximation(
           finalCs, nextNonLinearPob.nonLinearPob);
 
-      llvm::errs() << "\n";
     } else {
       if (!state->returnValue.isNull() &&
           composeResult.composed.summarizerTracker.has_value()) {
@@ -5950,10 +5898,6 @@ void Executor::processSuccessfulComposition(
             llvm::errs() << "[close pob] Pob closed due to backward reach at: "
                          << pob->root->location->toString() << "\n";
           }
-          // llvm::errs() << "[TRUE POSITIVE] FOUND TRUE POSITIVE AT: "
-          // << pob->root->location->toString() << "\n";
-          // pdrSummary->dumpInfinityLevelLemmas(
-          // interpreterHandler->getOutputFilename("invs.json"));
           forceForwardExecutionOnly(pob->root);
         }
       } else {
@@ -5961,10 +5905,6 @@ void Executor::processSuccessfulComposition(
           llvm::errs() << "[close pob] Pob closed due to backward reach at: "
                        << pob->root->location->toString() << "\n";
         }
-        // llvm::errs() << "[TRUE POSITIVE] FOUND TRUE POSITIVE AT: "
-        // << pob->root->location->toString() << "\n";
-        // pdrSummary->dumpInfinityLevelLemmas(
-        // interpreterHandler->getOutputFilename("invs.json"));
         forceForwardExecutionOnly(pob->root);
       }
     } else {
@@ -5974,12 +5914,7 @@ void Executor::processSuccessfulComposition(
         forceForwardExecutionOnly(pob->root);
         return;
       }
-      // llvm::errs() << "[TRUE POSITIVE] FOUND TRUE POSITIVE AT: "
-      // << pob->root->location->toString() << "\n";
-      // pdrSummary->dumpInfinityLevelLemmas(
-      // interpreterHandler->getOutputFilename("invs.json"));
       forceForwardExecutionOnly(pob->root);
-      // closeProofObligation(pob);
     }
 
     klee_warning("GENERATING TEST FROM PROOF OBLIGATION. GENERATION FOR "
@@ -6282,19 +6217,9 @@ Executor::eliminateQuantifiers(const PathConstraints &pathConstraints) {
       }
     }
   }
-  llvm::errs() << "dump:\n";
-  for (auto [k, v] : possibleReplacements) {
-    llvm::errs() << fmt::format("[\n{}\n->\n{}\n]\n", k->toString(),
-                                v->toString());
-  }
   for (auto expr : pathConstraints.cs().cs()) {
 
     auto replacedExpr = replaceExprWithReplacements(expr, possibleReplacements);
-    if (replacedExpr != expr) {
-      llvm::errs() << fmt::format("before:\n{}\nafter:\n{}\n]\n",
-                                  expr->toString(), replacedExpr->toString());
-    }
-    // newConstraints.cs().dump();
     newConstraints.addConstraint(replacedExpr);
   }
 
@@ -6440,8 +6365,6 @@ void Executor::processLeafPobBeforeRemoval(ProofObligation *pob) {
             path.first = 0;
             objectManager->addPob(functionSkipPob);
           }
-          llvm::errs() << fmt::format("itp idx={}\n", itp.index());
-
         } else { // isFunctionSkipPob
           assert(kCallBlock != nullptr);
           auto leveledLemmas =
@@ -9864,12 +9787,6 @@ Executor::MaxComposeResult Executor::maxCompose(klee::ProofObligation *pob,
     llvm::errs() << fmt::format("[maxcompose] pob info:\n");
     llvm::errs() << fmt::format("\tpob unordered cs:\n");
     pob->constraints.cs().dump();
-    // llvm::errs() << fmt::format("\tpob ordered cs:\n");
-    // for (auto [pathOffset, exprs]: pob->constraints.orderedCS()) {
-    //   for (auto expr: exprs) {
-    //     llvm::errs() << fmt::format("{}\n", expr->toString());
-    //   }
-    // }
     llvm::errs() << "\n";
   }
   int currentComposeLevel = -2;
@@ -10042,10 +9959,8 @@ void Executor::updateLemmaLevelInNonlinearNode(
       auto maybeInterpolant =
           interpolate(consideredLevelLemmas, negateDisjunct(lemmaToLiftLevel),
                       solver.get(), coreSolverTimeout);
-      if (auto interpolant = std::get_if<Interpolant>(&maybeInterpolant)) {
-        llvm::errs() << fmt::format(
-            "itp=\n{}\n",
-            indentString(disjunctionToString(interpolant->interpolant), 1));
+      if (auto interpolant = std::get_if<Interpolant>(&maybeInterpolant);
+          interpolant != nullptr) {
         auto newLemmaLevel = std::min(consideredLevel + 1, queueDepth);
         lemmaUpdateRecords.push_back(LemmaUpdateRecord{
             ki, oldLemmaLevel, newLemmaLevel, lemmaToLiftLevel});
