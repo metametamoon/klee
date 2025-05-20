@@ -9832,6 +9832,7 @@ int Executor::calculateMinEdgeLevel(
     if (result.level < level - 1) {
       llvm::errs() << "[executeCheckInductive] CRITICAL lemma was not "
                       "verified by a maxCompose!\n";
+      forceForwardExecutionOnly();
     }
     minEdgeLevel = std::min(minEdgeLevel, result.level);
   }
