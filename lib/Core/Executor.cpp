@@ -6248,6 +6248,7 @@ void Executor::processLeafPobBeforeRemoval(ProofObligation *pob) {
       std::fstream file{interpreterHandler->getOutputFilename("answer-true"),
                         std::ios::out};
       file << "";
+      haltExecution = HaltExecution::UnreachedTarget;
     } else if (pob->kind == ProofObligation::Kind::NonLinearPdr) {
       llvm::errs() << fmt::format("[main loop] ended iteration of "
                                   "non-linear pdr at depth {}\n",
@@ -6271,6 +6272,7 @@ void Executor::processLeafPobBeforeRemoval(ProofObligation *pob) {
         std::fstream file{interpreterHandler->getOutputFilename("answer-true"),
                           std::ios::out};
         file << "";
+        haltExecution = HaltExecution::UnreachedTarget;
       } else {
         auto clonePob = new ProofObligation(pob->location);
         clonePob->kind = ProofObligation::Kind::NonLinearPdr;
@@ -9832,7 +9834,8 @@ int Executor::calculateMinEdgeLevel(
     if (result.level < level - 1) {
       llvm::errs() << "[executeCheckInductive] CRITICAL lemma was not "
                       "verified by a maxCompose!\n";
-      forceForwardExecutionOnly();
+      assert(objectManager->rootPobs.size() == 1);
+      forceForwardExecutionOnly(*objectManager->rootPobs.begin());
     }
     minEdgeLevel = std::min(minEdgeLevel, result.level);
   }
