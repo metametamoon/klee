@@ -191,6 +191,8 @@ cl::opt<size_t> StackCopySizeMemoryCheckThreshold(
     cl::cat(ExecCat));
 
 cl::opt<bool> NonLinearPdr("non-linear-pdr", cl::init(false), cl::cat(ExecCat));
+cl::opt<int> InitialNonlinearDepth("initial-non-linear-depth", cl::init(2),
+                                   cl::cat(ExecCat));
 cl::opt<bool> EnableFunctionSummarization("enable-function-summarization",
                                           cl::init(false), cl::cat(ExecCat));
 
@@ -6547,7 +6549,12 @@ void Executor::run(ExecutionState *initialState,
   if (haltExecution == HaltExecution::ReachedTarget) {
     std::fstream file{interpreterHandler->getOutputFilename("answer-false"),
                       std::ios::out};
-    file << "";
+    nlohmann::json j{
+        {"column", objectManager->lastReachedInstruction->getColumn()},
+        {"line", objectManager->lastReachedInstruction->getLine()},
+    };
+
+    file << j.dump(2);
   }
 
   if (guidanceKind == GuidanceKind::ErrorGuidance) {
@@ -8874,7 +8881,7 @@ void Executor::runFunctionAsMain(Function *f, int argc, char **argv,
       clonePob->kind = ProofObligation::Kind::NonLinearPdr;
       clonePob->constraints.summarizerTracker = SummarizerTracker();
       clonePob->targetForest = pob->targetForest;
-      clonePob->fuel = 2;
+      clonePob->fuel = InitialNonlinearDepth;
       objectManager->addPob(clonePob);
     } else {
       objectManager->addPob(pob);

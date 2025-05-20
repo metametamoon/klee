@@ -297,7 +297,8 @@ void ObjectManager::checkReachedPobs() {
           llvm::errs() << "[TRUE POSITIVE] State path: "
                        << state->constraints.path().toString() << "\n";
           rootPobReachedByForward = true;
-
+          lastReachedInstruction =
+              state->constraints.path().getLastInstruction();
         }
       }
     }

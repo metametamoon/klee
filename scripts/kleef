@@ -154,7 +154,7 @@ def klee_options(
         cmd += [
             "--execution-mode=bidirectional",
             "--forward-ticks=13",
-            "--backward-ticks=7"
+            "--backward-ticks=7",
         ]
     if nonlinear_pdr:
         assert bd
@@ -379,7 +379,7 @@ class KLEEF(object):
             cmd = "perf script | c++filt | gprof2dot -f perf -s | dot -Tpdf -o output.pdf"
             check_call(cmd, shell=True)
 
-        generate_correctness_witness(self.source, h.hexdigest(), self.test_results_path)
+        generate_witness(self.source, h.hexdigest(), self.test_results_path)
         return test_output_dir
 
     def version(self):
@@ -498,16 +498,39 @@ def invs_json_to_witness_yaml(invs: json, source: Path):
     return result
 
 
-def generate_correctness_witness(source: Path, hexdigest: str, output_path: Path):
-    existsFalseAnswer = os.path.isfile(output_path / "answer-false")
+def generate_witness(source: Path, hexdigest: str, output_path: Path):
+    existsFalseAnswer = False
+    violation_yaml = None
+    try:
+        with open(output_path / "answer-false") as f:
+            existsFalseAnswer = True
+            reached_destination = json.load(f)
+            violation_yaml = [
+                {
+                    "segment": [{
+                        "waypoint": {
+                            "action": "follow",
+                            "type": "target",
+                            "location": {
+                                "file_name": str(source),
+                                "line": reached_destination["line"],
+                                "column": reached_destination["column"]
+                            }
+                        }
+                    }]
+                }
+            ]
+            pass
+    except OSError:
+        pass
     invs_path = output_path / "invs.json"
     try:
         with open(invs_path, 'r') as f:
             invs_json = json.load(f)
-            invariants_yaml = invs_json_to_witness_yaml(invs_json, source)
+            correctness_yaml = invs_json_to_witness_yaml(invs_json, source)
     except Exception:
-        invariants_yaml = []
-    data = [
+        correctness_yaml = []
+    full_witness_data = [
         {
             "entry_type": "invariant_set" if not existsFalseAnswer else "violation_sequence",
             "metadata": {
@@ -529,11 +552,11 @@ def generate_correctness_witness(source: Path, hexdigest: str, output_path: Path
                     "language": "C"
                 }
             },
-            "content": invariants_yaml if not existsFalseAnswer else []
+            "content": correctness_yaml if not existsFalseAnswer else violation_yaml
         }
     ]
     with open(output_path / 'witness.yml', 'w') as f:
-        yaml.dump(data, f, sort_keys=False)
+        yaml.dump(full_witness_data, f, sort_keys=False)
 
 
 def main():

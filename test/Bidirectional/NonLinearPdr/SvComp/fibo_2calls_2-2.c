@@ -1,5 +1,5 @@
 // RUN: rm -rf test-suite
-// RUN: %kleef --nonlinear-pdr --bidirectional --output-dir=%t.klee-out --property-file=%S/unreach-call.prp --max-memory=15000000000 --max-cputime-soft=900 --32 %s &>%t.log
+// RUN: %kleef --nonlinear-pdr --backwards-full-logs --bidirectional --output-dir=%t.klee-out --property-file=%S/unreach-call.prp --max-memory=15000000000 --max-cputime-soft=900 --32 %s &>%t.log
 // RUN: FileCheck %s -input-file=%t.log
 // CHECK: [FALSE POSITIVE]
 
@@ -40,7 +40,9 @@ int fibo2(int n) {
 // 121393, 196418, 317811, 514229, 832040
 
 int main(void) {
-    int x = 2;
+    int x = __VERIFIER_nondet_int();
+    if (x != 2)
+      abort();
     int result = fibo1(x);
     if (result != 1) {
         ERROR: {reach_error();abort();}

@@ -185,6 +185,7 @@ public:
     predicate = predicate_;
   }
   bool rootPobReachedByForward = false;
+  KInstruction *lastReachedInstruction = nullptr;
 };
 
 class Subscriber {
