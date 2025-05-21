@@ -5740,8 +5740,11 @@ void Executor::processSuccessfulComposition(
         } else if (pob->fuel == 1) {
           auto kiNonLinear = state->getInitPCBlock()->instructions[1];
           auto falseLemma = disjunction{};
-          nonLinearPdrSummary->addDisjunctOfLemmaOnKInstruction(kiNonLinear, 0,
-                                                                falseLemma);
+          bool success = nonLinearPdrSummary->addDisjunctOfLemmaOnKInstruction(
+              kiNonLinear, 0, falseLemma);
+          if (!success) {
+            forceForwardExecutionOnly(pob->root);
+          }
           nonLinearPdrSummary->fixLemmaOnKInstruction(kiNonLinear, 0);
           return;
         }
@@ -5991,9 +5994,12 @@ void Executor::goBackward(ref<BackwardAction> action) {
             state->initPC->getKFunction(), pob->fuel,
             disjunction{composeResult.conflict.core});
       } else {
-        nonLinearPdrSummary->addDisjunctOfLemmaOnKInstruction(
+        bool success = nonLinearPdrSummary->addDisjunctOfLemmaOnKInstruction(
             pob->constraints.path().getFirstInstruction(), pob->fuel,
             disjunction{composeResult.conflict.core});
+        if (!success) {
+          forceForwardExecutionOnly(pob->root);
+        }
       }
     } else if (state->isolated &&
                pob->kind == ProofObligation::Kind::Backward) {
@@ -6330,8 +6336,14 @@ void Executor::processLeafPobBeforeRemoval(ProofObligation *pob) {
             nonLinearPdrSummary->addDisjunctFunctionLemma(
                 function, pob->fuel + 1, composeResult.interpolant);
           } else {
-            nonLinearPdrSummary->addDisjunctOfLemmaOnKInstruction(
-                parentInstruction, pob->fuel + 1, composeResult.interpolant);
+            bool success =
+                nonLinearPdrSummary->addDisjunctOfLemmaOnKInstruction(
+                    parentInstruction, pob->fuel + 1,
+                    composeResult.interpolant);
+            if (!success) {
+              forceForwardExecutionOnly(pob);
+              return;
+            }
           }
         } else {
           assert(0 && "Parent is not nonlinear and not connected via state");
@@ -6346,11 +6358,18 @@ void Executor::processLeafPobBeforeRemoval(ProofObligation *pob) {
           auto lemmas = extractLemmaToApply(state, kCallBlock, pob->fuel);
           auto itp = interpolate(lemmas, parent->constraints, solver.get(),
                                  coreSolverTimeout);
-          if (auto interpolant = std::get_if<Interpolant>(&itp)) {
-            nonLinearPdrSummary->addDisjunctOfLemmaOnKInstruction(
-                kCallBlock->instructions[1], pob->parent->fuel,
-                interpolant->interpolant);
-          } else {
+          if (auto interpolant = std::get_if<Interpolant>(&itp); interpolant) {
+            bool success =
+                nonLinearPdrSummary->addDisjunctOfLemmaOnKInstruction(
+                    kCallBlock->instructions[1], pob->parent->fuel,
+                    interpolant->interpolant);
+            if (!success) {
+              forceForwardExecutionOnly(pob->root);
+              return;
+            }
+          } else if (auto noInterpolantExist =
+                         std::get_if<NoInterpolantExist>(&itp);
+                     noInterpolantExist) {
             auto updatedConstraints = parent->constraints;
             for (auto lemma : lemmas) {
               updatedConstraints.addConstraint(disjunctionToExpr(lemma));
@@ -6368,6 +6387,8 @@ void Executor::processLeafPobBeforeRemoval(ProofObligation *pob) {
             auto &path = functionSkipPob->constraints.path();
             path.first = 0;
             objectManager->addPob(functionSkipPob);
+          } else {
+            forceForwardExecutionOnly(pob->root);
           }
         } else { // isFunctionSkipPob
           assert(kCallBlock != nullptr);
@@ -6389,13 +6410,16 @@ void Executor::processLeafPobBeforeRemoval(ProofObligation *pob) {
           if (auto interpolant =
                   std::get_if<Interpolant>(&interpolationResult)) {
             auto kinstruction = kCallBlock->getLastInstruction();
-            nonLinearPdrSummary->addDisjunctOfLemmaOnKInstruction(
-                kinstruction, pob->parent->fuel, interpolant->interpolant);
+            bool success =
+                nonLinearPdrSummary->addDisjunctOfLemmaOnKInstruction(
+                    kinstruction, pob->parent->fuel, interpolant->interpolant);
+            if (!success) {
+              forceForwardExecutionOnly(pob->root);
+            }
           } else {
-            assert(0 && "Do not support failed interpolations!");
+            // failed interpolation
+            forceForwardExecutionOnly(pob->root);
           }
-          // assert(0 &&
-          // "not implemented: lemma update in nonlinear case");
         }
       }
       if (isNonLinearPob(pob->parent)) {
@@ -6413,17 +6437,11 @@ void Executor::processLeafPobBeforeRemoval(ProofObligation *pob) {
   }
 }
 
-bool Executor::removeLeafPobIfDead(ConflictCoreInitializer *forCheck,
-                                   bool &changed, ProofObligation *pob) {
-  if (!targetManager->hasTargetedStates(pob->location) &&
-      !forCheck->initsLeftForTarget(pob->location) &&
-      objectManager->propagationCount[pob] == 0) {
-    processLeafPobBeforeRemoval(pob);
-    pobToParentState.erase(pob);
-    objectManager->removePob(pob);
-    changed = true;
-  }
-  return false;
+bool Executor::isPobDead(ProofObligation *pob,
+                         ConflictCoreInitializer *forCheck) {
+  return !targetManager->hasTargetedStates(pob->location) &&
+         !forCheck->initsLeftForTarget(pob->location) &&
+         objectManager->propagationCount[pob] == 0;
 }
 
 void Executor::run(ExecutionState *initialState,
@@ -6505,7 +6523,6 @@ void Executor::run(ExecutionState *initialState,
 
   // main interpreter loop
   while (!haltExecution && !searcher->empty()) {
-    // hello from nvim :)
     auto action = searcher->selectAction();
     executeAction(action);
     objectManager->updateSubscribers();
@@ -6525,11 +6542,18 @@ void Executor::run(ExecutionState *initialState,
 
     if (errorAndBackward && !forceForward) {
       bool changed = true;
-      while (changed) {
+      while (changed && !forceForward) {
         changed = false;
         for (auto pob : objectManager->leafPobs) {
-          if (removeLeafPobIfDead(forCheck, changed, pob))
-            return;
+          if (isPobDead(pob, forCheck)) {
+            processLeafPobBeforeRemoval(pob);
+            changed = true;
+            if (forceForward) {
+              break;
+            }
+            pobToParentState.erase(pob);
+            objectManager->removePob(pob);
+          }
         }
         if (changed) {
           objectManager->updateSubscribers();
@@ -6539,12 +6563,22 @@ void Executor::run(ExecutionState *initialState,
             continue;
           }
         }
+        if (forceForward) {
+          break;
+        }
       }
     }
 
     if (errorAndBackward) {
       if (objectManager->getRootPobs().empty() && !forceForward) {
         haltExecution = HaltExecution::Unspecified;
+      }
+    }
+  }
+  if (!haltExecution) {
+    if (auto forward = searcher->forwardSearcher()) {
+      if (forward->empty()) {
+        llvm::errs() << "[FALSE POSITIVE] FOUND FALSE POSITIVE AT\n";
       }
     }
   }

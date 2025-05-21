@@ -17,6 +17,7 @@ public:
   virtual bool empty() = 0;
   virtual ~IBidirectionalSearcher() {}
   virtual void forceForward() {}
+  virtual Searcher *forwardSearcher() = 0;
 };
 
 class BidirectionalSearcher : public IBidirectionalSearcher {
@@ -27,7 +28,7 @@ public:
   void update(ref<ObjectManager::Event> e) override;
   bool empty() override;
   void forceForward() override;
-
+  Searcher *forwardSearcher() override;
   // Assumes ownership
   explicit BidirectionalSearcher(Searcher *_forward, Searcher *_branch,
                                  BackwardSearcher *_backward,
@@ -36,7 +37,7 @@ public:
 
   ~BidirectionalSearcher() override;
 
-private:
+public:
   Ticker ticker;
 
   Searcher *forward;
@@ -55,6 +56,7 @@ public:
   void update(ref<ObjectManager::Event>) override;
   bool empty() override;
   explicit ForwardOnlySearcher(Searcher *searcher);
+  Searcher *forwardSearcher() override;
   ~ForwardOnlySearcher() override;
 
 private:

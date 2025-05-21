@@ -310,8 +310,8 @@ private:
   PathConstraints
   eliminateQuantifiers(const klee::PathConstraints &path_constraints);
   void processLeafPobBeforeRemoval(ProofObligation *pob);
-  bool removeLeafPobIfDead(ConflictCoreInitializer *forCheck, bool &changed,
-                           ProofObligation *pob);
+  [[nodiscard]] bool isPobDead(ProofObligation *pob,
+                               ConflictCoreInitializer *forCheck);
   void run(ExecutionState *initialState, TargetedExecutionManager::Data &data);
 
   // Given a concrete object in our [klee's] address space, add it to

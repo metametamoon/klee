@@ -1,5 +1,5 @@
 // RUN: rm -rf test-suite
-// RUN: %kleef --backwards-full-logs --bidirectional --output-dir=%t.klee-out --property-file=%S/unreach-call.prp --max-memory=15000000000 --max-cputime-soft=90 --32 %s &>%t.log
+// RUN: %kleef --nonlinear-pdr --backwards-full-logs --bidirectional --output-dir=%t.klee-out --property-file=%S/unreach-call.prp --max-memory=15000000000 --max-cputime-soft=90 --32 %s &>%t.log
 // RUN: FileCheck %s -input-file=%t.log
 // CHECK: [FALSE POSITIVE]
 

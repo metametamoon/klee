@@ -12,7 +12,8 @@ class ProofObligation;
 class NonLinearPdrSummary {
 public:
   NonLinearPdrSummary() = default;
-  void addDisjunctOfLemmaOnKInstruction(KInstruction *, int level,
+  // returns true if the lemma was added successfully
+  bool addDisjunctOfLemmaOnKInstruction(KInstruction *, int level,
                                         const disjunction &lemma);
   void fixLemmaOnKInstruction(KInstruction *, int level);
 

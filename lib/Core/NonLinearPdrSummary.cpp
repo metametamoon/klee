@@ -13,9 +13,15 @@
 #include <klee/Support/DebugFlags.h>
 
 namespace klee {
-void NonLinearPdrSummary::addDisjunctOfLemmaOnKInstruction(
+
+bool NonLinearPdrSummary::addDisjunctOfLemmaOnKInstruction(
     KInstruction *ki, int level, const disjunction &lemma) {
   auto simplifiedLemma = eliminateQuantifiers(lemma);
+  // assert(!containsQuantifiers(simplifiedLemma));
+  if (containsQuantifiers(simplifiedLemma)) {
+    return false;
+  }
+
   if (debugConstraints.isSet(DebugPrint::Lemma)) {
     llvm::errs() << logPrefixWithSpace
                  << fmt::format("Extended lemma at ki={} level={}\n",
@@ -26,10 +32,10 @@ void NonLinearPdrSummary::addDisjunctOfLemmaOnKInstruction(
     llvm::errs() << fmt::format("{}simplified lemma={}\n", logPrefixWithSpace,
                                 disjunctionToString(simplifiedLemma));
   }
-  assert(!containsQuantifiers(simplifiedLemma));
   auto &disjunct = kinstructionIntermediateLemmas[ki][level];
   disjunct.elements.insert(simplifiedLemma.elements.begin(),
                            simplifiedLemma.elements.end());
+  return true;
 }
 
 void NonLinearPdrSummary::fixLemmaOnKInstruction(KInstruction *ki, int level) {
@@ -64,7 +70,8 @@ void NonLinearPdrSummary::addDisjunctFunctionLemma(KFunction *kf, int level,
                                                    const disjunction &lemma) {
   auto &disjunct = kfunctionsIntermediateLemmas[kf][level];
   auto simplifiedLemma = eliminateQuantifiers(lemma);
-  disjunct.elements.insert(simplifiedLemma.elements.begin(), simplifiedLemma.elements.end());
+  disjunct.elements.insert(simplifiedLemma.elements.begin(),
+                           simplifiedLemma.elements.end());
 
   if (debugConstraints.isSet(DebugPrint::Lemma)) {
     llvm::errs() << logPrefixWithSpace
