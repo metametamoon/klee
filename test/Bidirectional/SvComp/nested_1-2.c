@@ -21,7 +21,7 @@ int main(void) {
   unsigned int y = 0;
 
   while (x < 0x0fffffff) {
-    y = 0
+    y = 0;
 
     while (y < 10) {
       y++;
