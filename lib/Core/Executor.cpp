@@ -6439,9 +6439,12 @@ void Executor::processLeafPobBeforeRemoval(ProofObligation *pob) {
 
 bool Executor::isPobDead(ProofObligation *pob,
                          ConflictCoreInitializer *forCheck) {
-  return !targetManager->hasTargetedStates(pob->location) &&
-         !forCheck->initsLeftForTarget(pob->location) &&
-         objectManager->propagationCount[pob] == 0;
+  bool hasTargetedStates = targetManager->hasTargetedStates(pob->location);
+  bool initStatesLeft = forCheck->initsLeftForTarget(pob->location);
+  auto propagationCounts = objectManager->propagationCount[pob];
+  return !hasTargetedStates &&
+         !initStatesLeft &&
+         propagationCounts == 0;
 }
 
 void Executor::run(ExecutionState *initialState,
