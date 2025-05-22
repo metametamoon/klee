@@ -5734,6 +5734,18 @@ void Executor::processSuccessfulComposition(
         createPobsAtReturnPoints(state, pob, composeResult, kCallBlock);
       } else if (pob->kind == ProofObligation::Kind::NonLinearPdr) {
         assert(kCallBlock != nullptr);
+        auto function = kCallBlock->getKFunction();
+        for (size_t i = 0; i < function->getNumArgs(); ++i) {
+          if (function->function()->getArg(0)->getType()->isPointerTy()) {
+            if (!function->getName().contains("klee")) {
+              llvm::errs() << "[backward] pointer in function args; falling "
+                              "back to forward\n";
+              forceForwardExecutionOnly(pob->root);
+              return;
+            }
+          }
+        }
+        llvm::errs() << function->getName();
         nonLinearNodeToStateBeginningThere[kCallBlock] = state->copy();
         if (pob->fuel == 0) {
           assert(0 && "pob should not appear here with zero fuel");
@@ -6442,9 +6454,7 @@ bool Executor::isPobDead(ProofObligation *pob,
   bool hasTargetedStates = targetManager->hasTargetedStates(pob->location);
   bool initStatesLeft = forCheck->initsLeftForTarget(pob->location);
   auto propagationCounts = objectManager->propagationCount[pob];
-  return !hasTargetedStates &&
-         !initStatesLeft &&
-         propagationCounts == 0;
+  return !hasTargetedStates && !initStatesLeft && propagationCounts == 0;
 }
 
 void Executor::run(ExecutionState *initialState,
