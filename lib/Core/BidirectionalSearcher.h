@@ -17,6 +17,7 @@ public:
   virtual bool empty() = 0;
   virtual ~IBidirectionalSearcher() {}
   virtual void forceForward() {}
+  virtual void resetTicks() {};
   virtual Searcher *forwardSearcher() = 0;
 };
 
@@ -28,6 +29,7 @@ public:
   void update(ref<ObjectManager::Event> e) override;
   bool empty() override;
   void forceForward() override;
+  void resetTicks() override;
   Searcher *forwardSearcher() override;
   // Assumes ownership
   explicit BidirectionalSearcher(Searcher *_forward, Searcher *_branch,

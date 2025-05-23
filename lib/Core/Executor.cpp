@@ -196,6 +196,9 @@ cl::opt<int> InitialNonlinearDepth("initial-non-linear-depth", cl::init(2),
 cl::opt<bool> EnableFunctionSummarization("enable-function-summarization",
                                           cl::init(false), cl::cat(ExecCat));
 
+// in seconds
+cl::opt<int> ForwardOnlyTimeRun("forward-only-time-run", cl::init(5),
+                                cl::cat(ExecCat));
 namespace {
 
 /*** Lazy initialization options ***/
@@ -6533,8 +6536,19 @@ void Executor::run(ExecutionState *initialState,
   pdrSummary = std::make_unique<PdrSummary>();
   nonLinearPdrSummary = std::make_unique<NonLinearPdrSummary>();
 
+  auto currentMoment = std::chrono::high_resolution_clock::now();
+  auto resetTime = currentMoment + std::chrono::seconds(ForwardOnlyTimeRun);
+  bool hasAlreadyReset = false;
+  searcher->forceForward();
   // main interpreter loop
+
   while (!haltExecution && !searcher->empty()) {
+    if (!hasAlreadyReset &&
+        std::chrono::high_resolution_clock::now() >= resetTime) {
+      searcher->resetTicks();
+      hasAlreadyReset = true;
+      llvm::errs() << "[main loop] reset ticks\n";
+    }
     auto action = searcher->selectAction();
     executeAction(action);
     objectManager->updateSubscribers();

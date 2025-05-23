@@ -139,9 +139,11 @@ void BidirectionalSearcher::forceForward() {
   auto forward = std::max(static_cast<int>(ForwardTicks), 20);
   ticker = Ticker({forward, BranchTicks, 0, InitTicks, 0});
 }
-Searcher *BidirectionalSearcher::forwardSearcher() {
-  return forward;
+void BidirectionalSearcher::resetTicks() {
+  ticker = std::vector<unsigned>{ForwardTicks, BranchTicks, BackwardTicks,
+                                 InitTicks, LemmaUpdateTicks};
 }
+Searcher *BidirectionalSearcher::forwardSearcher() { return forward; }
 
 BidirectionalSearcher::BidirectionalSearcher(
     Searcher *_forward, Searcher *_branch, BackwardSearcher *_backward,
@@ -174,9 +176,7 @@ void ForwardOnlySearcher::update(ref<ObjectManager::Event> e) {
 ForwardOnlySearcher::ForwardOnlySearcher(Searcher *_searcher) {
   searcher = _searcher;
 }
-Searcher *ForwardOnlySearcher::forwardSearcher() {
-  return searcher;
-}
+Searcher *ForwardOnlySearcher::forwardSearcher() { return searcher; }
 
 ForwardOnlySearcher::~ForwardOnlySearcher() { delete searcher; }
 
