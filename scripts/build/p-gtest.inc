@@ -5,9 +5,10 @@ setup_build_variables_gtest() {
 
 download_gtest() {
   cd "${BASE}" || exit 1
-  wget "https://github.com/google/googletest/archive/release-${GTEST_VERSION}.zip"
-  unzip -o "release-${GTEST_VERSION}.zip"
-  rm "release-${GTEST_VERSION}.zip"
+  wget "https://github.com/google/googletest/releases/download/v${GTEST_VERSION}/googletest-${GTEST_VERSION}.tar.gz"
+  tar -xvzf "googletest-${GTEST_VERSION}.tar.gz"
+  mv "googletest-${GTEST_VERSION}" "googletest-release-${GTEST_VERSION}"
+  rm "googletest-${GTEST_VERSION}.tar.gz"
   touch "${GTEST_INSTALL_PATH}"/.is_installed
 }
 
