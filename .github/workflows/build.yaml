@@ -3,9 +3,9 @@ name: CI
 
 on:
   pull_request:
-    branches: [main, utbot-main]
+    branches: [ main, utbot-main, metametamoon/bidirectional ]
   push:
-    branches: [main, utbot-main]
+    branches: [ main, utbot-main, metametamoon/bidirectional ]
   workflow_dispatch:
     inputs:
       warnings_as_errors:
