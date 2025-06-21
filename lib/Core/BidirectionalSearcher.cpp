@@ -56,7 +56,7 @@ BidirectionalSearcher::StepKind BidirectionalSearcher::selectStep() {
     choice = ticker.getCurrent();
   } while (choice != initial_choice);
 
-  assert(0 && "Empty searcher queried for an action");
+  klee_error("Empty searcher queried for an action");
 }
 
 ref<SearcherAction> BidirectionalSearcher::selectAction() {

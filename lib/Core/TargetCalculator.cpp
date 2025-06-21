@@ -149,7 +149,7 @@ TargetCalculator::getCoverageTargets(KFunction *kf) {
     return codeGraphInfo.getFunctionBranches(kf);
 
   default:
-    assert(0 && "not implemented");
+    klee_error("not implemented");
   }
 }
 

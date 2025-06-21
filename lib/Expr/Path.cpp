@@ -176,7 +176,7 @@ Path Path::concat(const Path &l, const Path &r) {
     assert(l.blockCompleted(l.path.size() - 1));
     assert(isa<KReturnBlock>(l.path.back().block));
     assert(r.path.front().kind == TransitionKind::Out);
-    auto kf = l.path.back().block->parent;
+    [[maybe_unused]] auto kf = l.path.back().block->parent;
     assert(
         dyn_cast<KCallBlock>(r.path.front().block)->calledFunctions.count(kf));
   } else {

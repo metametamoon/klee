@@ -441,7 +441,7 @@ ref<Expr> ComposeVisitor::processSelect(ref<Expr> cond, ref<Expr> trueExpr,
     return result;
   }
   default: {
-    assert(0);
+    klee_error("PValidity check not exhaustive in processSelect");
   }
   }
 }

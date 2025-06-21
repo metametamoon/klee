@@ -521,9 +521,9 @@ Executor::Executor(LLVMContext &ctx, const InterpreterOptions &opts,
     : Interpreter(opts), interpreterHandler(ih), searcher(nullptr),
       externalDispatcher(new ExternalDispatcher(ctx)),
       summary(interpreterHandler), statsTracker(0), pathWriter(0),
-      symPathWriter(0),
-      specialFunctionHandler(0), timers{time::Span(TimerInterval)},
-      guidanceKind(opts.Guidance), codeGraphInfo(new CodeGraphInfo()),
+      symPathWriter(0), specialFunctionHandler(0),
+      timers{time::Span(TimerInterval)}, guidanceKind(opts.Guidance),
+      codeGraphInfo(new CodeGraphInfo()),
       distanceCalculator(new DistanceCalculator(*codeGraphInfo)),
       targetCalculator(new TargetCalculator(*codeGraphInfo)),
       targetManager(new TargetManager(guidanceKind, *distanceCalculator,
@@ -4734,12 +4734,16 @@ ref<Expr> Executor::fillValue(ExecutionState &state,
         bool isFinalPCKB = std::find(lastkf->returnKBlocks.begin(),
                                      lastkf->returnKBlocks.end(),
                                      pckb) != lastkf->returnKBlocks.end();
-        assert(isFinalPCKB && calledf == lastkf->function());
+        if (!(isFinalPCKB && calledf == lastkf->function())) {
+          klee_error("postcondition violated");
+        }
         result = state.returnValue;
       } else {
         const StackFrame &frame = state.stack.valueStack().back();
         KFunction *framekf = frame.kf;
-        assert(kf->function() == framekf->function());
+        if (kf->function() != framekf->function()) {
+          klee_error("bad stack frame while reading stack in fillValue");
+        }
         result = getDestCell(frame, ki).value;
         assert(result);
       }
@@ -4759,12 +4763,16 @@ ref<Expr> Executor::fillValue(ExecutionState &state,
         }
       } else if ((isa<CallInst>(inst) || isa<InvokeInst>(inst))) {
         KFunction *kf = ki->parent->parent;
-        assert(kf->function() == framekf->function());
+        if (kf->function() != framekf->function()) {
+          klee_error("bad stack frame while reading stack in fillValue");
+        }
         result = readDest(state, frame, ki);
       } else {
         const Function *f = inst->getParent()->getParent();
         const KFunction *kf = getKFunction(f);
-        assert(kf->function() == framekf->function());
+        if (kf->function() != framekf->function()) {
+          klee_error("bad stack frame while reading stack in fillValue");
+        }
         result = readDest(state, frame, ki);
       }
     }
@@ -4775,13 +4783,11 @@ ref<Expr> Executor::fillValue(ExecutionState &state,
     assert(!state.stack.empty());
     StackFrame &frame = state.stack.valueStack().at(state.stack.size() -
                                                     valueSource->index - 1);
-    KFunction *framekf = frame.kf;
-
     const Argument *arg = cast<Argument>(&valueSource->value());
     const Function *f = arg->getParent();
     const KFunction *kf = getKFunction(f);
     const unsigned argN = arg->getArgNo();
-    assert(kf->function() == framekf->function());
+    assert(kf->function() == frame.kf->function());
     result = readArgument(state, frame, kf, argN);
     break;
   }

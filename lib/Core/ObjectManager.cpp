@@ -55,7 +55,10 @@ ExecutionState *ObjectManager::branchState(ExecutionState *state,
                                            BranchType reason) {
   if (statesUpdated) {
     auto kind = (state->isolated ? StateKind::Isolated : StateKind::Regular);
-    assert(kind == stateUpdateKind);
+    if (kind != stateUpdateKind) {
+      klee_error("expected state to be of kind %d but was %d",
+                 static_cast<int>(stateUpdateKind), static_cast<int>(kind));
+    }
   } else {
     assert(0); // Is this possible?
   }
@@ -67,9 +70,8 @@ ExecutionState *ObjectManager::branchState(ExecutionState *state,
 }
 
 void ObjectManager::removeState(ExecutionState *state) {
-  std::vector<ExecutionState *>::iterator itr =
-      std::find(removedStates.begin(), removedStates.end(), state);
-  assert(itr == removedStates.end());
+  assert(std::find(removedStates.begin(), removedStates.end(), state) ==
+         removedStates.end());
 
   if (state->isolated) {
     llvm::errs() << "Removing isolated: "
@@ -82,7 +84,10 @@ void ObjectManager::removeState(ExecutionState *state) {
         (state->isolated ? StateKind::Isolated : StateKind::Regular);
   } else {
     auto kind = (state->isolated ? StateKind::Isolated : StateKind::Regular);
-    assert(kind == stateUpdateKind);
+    if (kind != stateUpdateKind) {
+      klee_error("expected state to be of kind %d but was %d",
+                 static_cast<int>(stateUpdateKind), static_cast<int>(kind));
+    }
   }
 
   removedStates.push_back(state);
