@@ -79,7 +79,7 @@ KInstruction *Path::getLastInstruction() const {
 }
 
 bool Path::blockCompleted(unsigned index) const {
-  assert(index && index < path.size());
+  assert(index < path.size());
   if (index + 1 < path.size()) {
     return true;
   }
@@ -93,8 +93,7 @@ bool Path::blockCompleted(unsigned index) const {
 }
 
 KFunction *Path::getCalledFunction(unsigned index) const {
-  assert(index && index < path.size());
-  assert(isa<KCallBlock>(path.at(index).block));
+  assert(path.at(index).block);
   if (index + 1 < path.size()) {
     return path.at(index + 1).block->parent;
   } else {
