@@ -153,11 +153,14 @@ jobs:
       - name: Run tests and save artifacts
         env: ${{ matrix.env }}
         run: |
-          scripts/build/run-tests.sh --run-docker --debug
+          scripts/build/run-tests.sh --run-docker --debug || TEST_FAILED=$?
           mkdir -p $GITHUB_WORKSPACE/klee-test-artifacts
           cp -r /tmp/klee_build*/**/test $GITHUB_WORKSPACE/klee-test-artifacts/ || true
           find $GITHUB_WORKSPACE/klee-test-artifacts -type f | wc -l
           echo "Artifacts copied to $GITHUB_WORKSPACE/klee-test-artifacts"
+          if [ -n "$TEST_FAILED" ]; then
+            exit $TEST_FAILED
+          fi
 
       - name: Upload test artifacts
         if: always()
