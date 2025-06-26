@@ -155,7 +155,7 @@ jobs:
         run: scripts/build/run-tests.sh --run-docker --debug
       - name: Upload test artifacts
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: klee-test-artifacts-${{ matrix.name }}
           path: /tmp/klee_build*/**/test
