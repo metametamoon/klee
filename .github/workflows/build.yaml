@@ -150,15 +150,21 @@ jobs:
       - name: Build KLEE
         env: ${{ matrix.env }}
         run: scripts/build/build.sh klee --docker --create-final-image
-      - name: Run tests
+      - name: Run tests and save artifacts
         env: ${{ matrix.env }}
-        run: scripts/build/run-tests.sh --run-docker --debug
+        run: |
+          scripts/build/run-tests.sh --run-docker --debug
+          mkdir -p $GITHUB_WORKSPACE/klee-test-artifacts
+          cp -r /tmp/klee_build*/**/test $GITHUB_WORKSPACE/klee-test-artifacts/ || true
+          find $GITHUB_WORKSPACE/klee-test-artifacts -type f | wc -l
+          echo "Artifacts copied to $GITHUB_WORKSPACE/klee-test-artifacts"
+
       - name: Upload test artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: klee-test-artifacts-${{ matrix.name }}
-          path: /tmp/klee_build*/**/test
+          path: ${{ github.workspace }}/klee-test-artifacts
           retention-days: 7
 
   macOS:
