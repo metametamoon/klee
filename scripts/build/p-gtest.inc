@@ -1,15 +1,13 @@
 setup_build_variables_gtest() {
-  GTEST_INSTALL_PATH="${BASE}/googletest-release-${GTEST_VERSION}"
+  GTEST_INSTALL_PATH="${BASE}/googletest-${GTEST_VERSION}"
   return 0
 }
 
 download_gtest() {
   cd "${BASE}" || exit 1
-  wget "https://github.com/google/googletest/releases/download/v${GTEST_VERSION}/googletest-${GTEST_VERSION}.tar.gz"
-  tar -xvzf "googletest-${GTEST_VERSION}.tar.gz"
-  mv "googletest-${GTEST_VERSION}" "googletest-release-${GTEST_VERSION}"
-  rm "googletest-${GTEST_VERSION}.tar.gz"
-  touch "${GTEST_INSTALL_PATH}"/.is_installed
+  wget "https://github.com/google/googletest/archive/refs/tags/v${GTEST_VERSION}.zip"
+  unzip -o "v${GTEST_VERSION}.zip"
+  rm "v${GTEST_VERSION}.zip"
 }
 
 build_gtest() {
