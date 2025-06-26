@@ -107,6 +107,8 @@ void TargetForest::Layer::addTrace(
                              RefLocationCmp> &locToBlocks,
     bool reversed) {
   auto forest = this;
+  ref<UnorderedTargetsSet> prevTargets;
+
   for (size_t count = 0; count < result.locations.size(); ++count) {
     size_t i = reversed ? result.locations.size() - count - 1 : count;
     const auto &loc = result.locations[i];
@@ -126,6 +128,17 @@ void TargetForest::Layer::addTrace(
     }
 
     ref<UnorderedTargetsSet> targetsVec = UnorderedTargetsSet::create(targets);
+    /**
+     * We assume that whenever in a SARIF trace we encounter two sequential
+     * locations that resolve to the same LLVM IR blocks, they are expected to
+     * be visited at the same time (in contrast to be visited repeatedly after
+     * e.g. a loop execution).
+     */
+    if (!prevTargets.isNull() && targetsVec == prevTargets) {
+      continue;
+    }
+    prevTargets = targetsVec;
+
     if (forest->forest.count(targetsVec) == 0) {
       ref<TargetForest::Layer> next = new TargetForest::Layer();
       forest->insert(targetsVec, next);
