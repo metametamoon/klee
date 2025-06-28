@@ -22,32 +22,32 @@ public:
 
   bool getResponse(const ExecutionState &state, ref<Expr> expr,
                    ref<SolverResponse> &queryResult, SolverQueryMetaData &) {
-    executor->solver->setTimeout(executor->coreSolverTimeout);
+    executor->solver->setLimits(executor->coreSolverTimeout, -1);
     bool success = executor->solver->getResponse(
         state.constraints.withAssumtions(state.assumptions), expr, queryResult,
         state.queryMetaData);
-    executor->solver->setTimeout(time::Span());
+    executor->solver->setLimits(time::Span(), -1);
     return success;
   }
 
   bool evaluate(const ExecutionState &state, ref<Expr> expr,
                 PartialValidity &res, SolverQueryMetaData &) {
-    executor->solver->setTimeout(executor->coreSolverTimeout);
+    executor->solver->setLimits(executor->coreSolverTimeout, -1);
     bool success = executor->solver->evaluate(
         state.constraints.withAssumtions(state.assumptions), expr, res,
         state.queryMetaData);
-    executor->solver->setTimeout(time::Span());
+    executor->solver->setLimits(time::Span(), -1);
     return success;
   }
 
   bool evaluate(const ExecutionState &state, ref<Expr> expr,
                 ref<SolverResponse> &queryResult,
                 ref<SolverResponse> &negateQueryResult, SolverQueryMetaData &) {
-    executor->solver->setTimeout(executor->coreSolverTimeout);
+    executor->solver->setLimits(executor->coreSolverTimeout, -1);
     bool success = executor->solver->evaluate(
         state.constraints.withAssumtions(state.assumptions), expr, queryResult,
         negateQueryResult, state.queryMetaData);
-    executor->solver->setTimeout(time::Span());
+    executor->solver->setLimits(time::Span(), -1);
     return success;
   }
 

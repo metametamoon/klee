@@ -1419,7 +1419,7 @@ Executor::StatePair Executor::fork(ExecutionState &current, ref<Expr> condition,
   time::Span timeout = coreSolverTimeout;
   if (isSeeding)
     timeout *= static_cast<unsigned>(it->second.size());
-  solver->setTimeout(timeout);
+  solver->setLimits(timeout, -1);
 
   bool shouldCheckTrueBlock = true, shouldCheckFalseBlock = true;
   if (!isInternal) {
@@ -1460,7 +1460,7 @@ Executor::StatePair Executor::fork(ExecutionState &current, ref<Expr> condition,
     success = solver->evaluate(current.constraints.cs(), condition, res,
                                current.queryMetaData);
   }
-  solver->setTimeout(time::Span());
+  solver->setLimits(time::Span(), -1);
   if (!success) {
     terminateStateOnSolverError(current, "Query timed out (fork).");
     return StatePair(nullptr, nullptr);
@@ -1673,11 +1673,11 @@ void Executor::addConstraint(ExecutionState &state, ref<Expr> condition) {
                                          siie = it->second.end();
          siit != siie; ++siit) {
       bool res;
-      solver->setTimeout(coreSolverTimeout);
+      solver->setLimits(coreSolverTimeout, -1);
       bool success = solver->mustBeFalse(state.constraints.cs(),
                                          siit->assignment.evaluate(condition),
                                          res, state.queryMetaData);
-      solver->setTimeout(time::Span());
+      solver->setLimits(time::Span(), -1);
       assert(success && "FIXME: Unhandled solver failure");
       (void)success;
       if (res) {
@@ -1746,9 +1746,9 @@ void Executor::bindArgument(KFunction *kf, unsigned index,
 
 ref<Expr> Executor::toUnique(const ExecutionState &state, ref<Expr> e) {
   ref<Expr> result = e;
-  solver->setTimeout(coreSolverTimeout);
+  solver->setLimits(coreSolverTimeout, -1);
   solver->tryGetUnique(state.constraints.cs(), e, result, state.queryMetaData);
-  solver->setTimeout(time::Span());
+  solver->setLimits(time::Span(), -1);
   return result;
 }
 
@@ -4902,11 +4902,11 @@ Executor::compose(const ExecutionState &state, const PathConstraints &pob,
 
       ValidityCore core;
       bool isValid;
-      solver->setTimeout(coreSolverTimeout);
+      solver->setLimits(coreSolverTimeout, -1);
       bool success = solver->getValidityCore(
           composer.state.constraints.cs(), Expr::createIsZero(condition), core,
           isValid, composer.state.queryMetaData);
-      solver->setTimeout(time::Span());
+      solver->setLimits(time::Span(), -1);
       if (!success || haltExecution) {
         result.success = false;
         return result;
@@ -5132,11 +5132,11 @@ void Executor::goBackward(ref<BackwardAction> action) {
         if (error->isThatError(klee::MustBeNullPointerException) &&
             !error->isThatError(klee::MayBeNullPointerException)) {
           ref<Expr> result = composeResult.nullPointerExpr;
-          solver->setTimeout(coreSolverTimeout);
+          solver->setLimits(coreSolverTimeout, -1);
           solver->tryGetUnique(composeResult.composed.cs(),
                                composeResult.nullPointerExpr, result,
                                state->queryMetaData);
-          solver->setTimeout(time::Span());
+          solver->setLimits(time::Span(), -1);
           if (!isReadFromSymbolicArray(result)) {
             if (debugPrints.isSet(DebugPrint::ClosePob)) {
               llvm::errs()
@@ -6170,11 +6170,11 @@ void Executor::executeAlloc(ExecutionState &state, ref<Expr> size, bool isLocal,
   /* If size greater then upper bound for size, then we will follow
   the malloc semantic and return NULL. Otherwise continue execution. */
   PartialValidity inBounds;
-  solver->setTimeout(coreSolverTimeout);
+  solver->setLimits(coreSolverTimeout, -1);
   bool success =
       solver->evaluate(state.constraints.cs(), upperBoundSizeConstraint,
                        inBounds, state.queryMetaData);
-  solver->setTimeout(time::Span());
+  solver->setLimits(time::Span(), -1);
   if (!success) {
     terminateStateOnSolverError(state, "Query timed out (resolve)");
     return;
@@ -6478,21 +6478,21 @@ bool Executor::computeSizes(
   objects = constraints.gatherSymcretizedArrays();
   findObjects(symbolicSizesSum, objects);
 
-  solver->setTimeout(coreSolverTimeout);
+  solver->setLimits(coreSolverTimeout, -1);
   bool success = solver->getResponse(
       constraints,
       UgtExpr::create(symbolicSizesSum,
                       ConstantExpr::create(SymbolicAllocationThreshold,
                                            symbolicSizesSum->getWidth())),
       response, metaData);
-  solver->setTimeout(time::Span());
+  solver->setLimits(time::Span(), -1);
 
   if (!response->tryGetInitialValuesFor(objects, values)) {
     /* Receive model with a smallest sum as possible. */
-    solver->setTimeout(coreSolverTimeout);
+    solver->setLimits(coreSolverTimeout, -1);
     success = solver->getMinimalUnsignedValue(constraints, symbolicSizesSum,
                                               minimalSumValue, metaData);
-    solver->setTimeout(time::Span());
+    solver->setLimits(time::Span(), -1);
     assert(success);
 
     /* We can simply query the solver to get value of size, but
@@ -6502,9 +6502,9 @@ bool Executor::computeSizes(
     ConstraintSet minimized = constraints;
     minimized.addConstraint(EqExpr::create(symbolicSizesSum, minimalSumValue));
 
-    solver->setTimeout(coreSolverTimeout);
+    solver->setLimits(coreSolverTimeout, -1);
     success = solver->getInitialValues(minimized, objects, values, metaData);
-    solver->setTimeout(time::Span());
+    solver->setLimits(time::Span(), -1);
   }
   return success;
 }
@@ -6684,10 +6684,10 @@ bool Executor::resolveMemoryObjects(
     if (!onlyLazyInitialize || !mayLazyInitialize) {
       ResolutionList rl;
 
-      solver->setTimeout(coreSolverTimeout);
+      solver->setLimits(coreSolverTimeout, -1);
       incomplete = state.addressSpace.resolve(state, solver.get(), basePointer,
                                               rl, 0, coreSolverTimeout);
-      solver->setTimeout(time::Span());
+      solver->setLimits(time::Span(), -1);
 
       for (ResolutionList::iterator i = rl.begin(), ie = rl.end(); i != ie;
            ++i) {
@@ -6702,10 +6702,10 @@ bool Executor::resolveMemoryObjects(
     }
 
     if (mayLazyInitialize) {
-      solver->setTimeout(coreSolverTimeout);
+      solver->setLimits(coreSolverTimeout, -1);
       bool success = solver->mayBeTrue(state.constraints.cs(), checkOutOfBounds,
                                        mayLazyInitialize, state.queryMetaData);
-      solver->setTimeout(time::Span());
+      solver->setLimits(time::Span(), -1);
       if (!success) {
         return false;
       } else if (mayLazyInitialize) {
@@ -6771,10 +6771,10 @@ bool Executor::checkResolvedMemoryObjects(
             .simplified;
 
     PartialValidity result;
-    solver->setTimeout(coreSolverTimeout);
+    solver->setLimits(coreSolverTimeout, -1);
     bool success = solver->evaluate(state.constraints.cs(), inBounds, result,
                                     state.queryMetaData);
-    solver->setTimeout(time::Span());
+    solver->setLimits(time::Span(), -1);
     if (!success) {
       return false;
     }
@@ -6835,10 +6835,10 @@ bool Executor::checkResolvedMemoryObjects(
                                .simplified;
 
       bool mayBeInBounds;
-      solver->setTimeout(coreSolverTimeout);
+      solver->setLimits(coreSolverTimeout, -1);
       bool success = solver->mayBeTrue(state.constraints.cs(), inBounds,
                                        mayBeInBounds, state.queryMetaData);
-      solver->setTimeout(time::Span());
+      solver->setLimits(time::Span(), -1);
       if (!success) {
         return false;
       }
@@ -6860,10 +6860,10 @@ bool Executor::checkResolvedMemoryObjects(
   }
 
   if (mayBeOutOfBound) {
-    solver->setTimeout(coreSolverTimeout);
+    solver->setLimits(coreSolverTimeout, -1);
     bool success = solver->mayBeTrue(state.constraints.cs(), checkOutOfBounds,
                                      mayBeOutOfBound, state.queryMetaData);
-    solver->setTimeout(time::Span());
+    solver->setLimits(time::Span(), -1);
     if (!success) {
       return false;
     }
@@ -6890,10 +6890,10 @@ bool Executor::makeGuard(ExecutionState &state,
     }
   }
 
-  solver->setTimeout(coreSolverTimeout);
+  solver->setLimits(coreSolverTimeout, -1);
   bool success = solver->mayBeTrue(state.constraints.cs(), guard, mayBeInBounds,
                                    state.queryMetaData);
-  solver->setTimeout(time::Span());
+  solver->setLimits(time::Span(), -1);
   if (!success) {
     return false;
   }
@@ -6999,7 +6999,7 @@ void Executor::executeMemoryOperation(
     idFastResult = *state->resolvedPointers[base].begin();
   } else {
     ObjectPair idFastOp;
-    solver->setTimeout(coreSolverTimeout);
+    solver->setLimits(coreSolverTimeout, -1);
 
     if (!state->addressSpace.resolveOne(*state, solver.get(), address, idFastOp,
                                         success, haltExecution)) {
@@ -7008,7 +7008,7 @@ void Executor::executeMemoryOperation(
           cast<ConstantPointerExpr>(address), idFastOp);
     }
 
-    solver->setTimeout(time::Span());
+    solver->setLimits(time::Span(), -1);
 
     if (success) {
       idFastResult = idFastOp.first;
@@ -7033,16 +7033,16 @@ void Executor::executeMemoryOperation(
                    .simplified;
 
     ref<SolverResponse> response;
-    solver->setTimeout(coreSolverTimeout);
+    solver->setLimits(coreSolverTimeout, -1);
     bool success = solver->getResponse(state->constraints.cs(), inBounds,
                                        response, state->queryMetaData);
-    solver->setTimeout(time::Span());
+    solver->setLimits(time::Span(), -1);
     if (!success) {
       state->pc = state->prevPC;
       terminateStateOnSolverError(*state, "Query timed out (bounds check).");
       return;
     }
-    solver->setTimeout(time::Span());
+    solver->setLimits(time::Span(), -1);
 
     bool mustBeInBounds = !isa<InvalidResponse>(response);
     if (mustBeInBounds) {
@@ -7095,10 +7095,10 @@ void Executor::executeMemoryOperation(
              allLeafsAreConstant(address)) {
     ObjectPair idFastOp;
 
-    solver->setTimeout(coreSolverTimeout);
+    solver->setLimits(coreSolverTimeout, -1);
     state->addressSpace.resolveOne(*state, solver.get(), basePointer, idFastOp,
                                    success, haltExecution);
-    solver->setTimeout(time::Span());
+    solver->setLimits(time::Span(), -1);
 
     if (!success) {
       terminateStateOnTargetError(*state, ReachWithError::UseAfterFree);
@@ -7365,11 +7365,11 @@ ref<const MemoryObject> Executor::lazyInitializeObject(
           sizeExpr, Expr::createPointer(MaxSymbolicAllocationSize));
     }
     bool mayBeInBounds;
-    solver->setTimeout(coreSolverTimeout);
+    solver->setLimits(coreSolverTimeout, -1);
     bool success = solver->mayBeTrue(state.constraints.cs(),
                                      AndExpr::create(lowerBound, upperBound),
                                      mayBeInBounds, state.queryMetaData);
-    solver->setTimeout(time::Span());
+    solver->setLimits(time::Span(), -1);
     if (!success) {
       return nullptr;
     }
@@ -8146,7 +8146,7 @@ bool isMakeSymbolic(const klee::Symbolic &symb) {
 }
 
 bool Executor::getSymbolicSolution(const ExecutionState &state, KTest &res) {
-  solver->setTimeout(coreSolverTimeout);
+  solver->setLimits(coreSolverTimeout, -1);
 
   PathConstraints extendedConstraints(state.constraints);
 
@@ -8217,11 +8217,11 @@ bool Executor::getSymbolicSolution(const ExecutionState &state, KTest &res) {
   std::vector<const Array *> objects(objectSet.begin(), objectSet.end());
 
   ref<SolverResponse> response;
-  solver->setTimeout(coreSolverTimeout);
+  solver->setLimits(coreSolverTimeout, -1);
   bool success =
       solver->getResponse(extendedConstraints.cs(), Expr::createFalse(),
                           response, state.queryMetaData);
-  solver->setTimeout(time::Span());
+  solver->setLimits(time::Span(), -1);
   if (!success || !isa<InvalidResponse>(response)) {
     klee_warning("unable to compute initial values (invalid constraints?)!");
     ExprPPrinter::printQuery(llvm::errs(), state.constraints.cs(),
@@ -8301,14 +8301,14 @@ bool Executor::getSymbolicSolution(const ExecutionState &state, KTest &res) {
 
     ref<Expr> concretizationCondition = Expr::createFalse();
     for (const auto &concretization : concretizations) {
-      solver->setTimeout(coreSolverTimeout);
+      solver->setLimits(coreSolverTimeout, -1);
       success = solver->getResponse(
           extendedConstraints.cs(),
           OrExpr::create(Expr::createIsZero(EqExpr::create(
                              concretization.first, concretization.second)),
                          concretizationCondition),
           response, state.queryMetaData);
-      solver->setTimeout(time::Span());
+      solver->setLimits(time::Span(), -1);
 
       if (auto invalidResponse = dyn_cast<InvalidResponse>(response)) {
         concretizationCondition =
