@@ -180,7 +180,8 @@ Path Path::concat(const Path &l, const Path &r) {
     assert(
         dyn_cast<KCallBlock>(r.path.front().block)->calledFunctions.count(kf));
   } else {
-    assert(l.next == r.getFirstInstruction());
+    assert(l.next->getKFunction() != r.getFirstInstruction()->getKFunction() ||
+           l.next == r.getFirstInstruction());
   }
   Path path;
   auto leftWhole = l.blockCompleted(l.path.size() - 1);
