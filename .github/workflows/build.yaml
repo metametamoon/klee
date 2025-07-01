@@ -154,13 +154,7 @@ jobs:
       - name: Run tests
         env: ${{ matrix.env }}
         run: scripts/build/run-tests.sh --run-docker --debug
-      - name: Upload test artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: klee-test-artifacts-${{ matrix.name }}
-          path: "/home/klee/klee_build/klee_build*/test"
-          retention-days: 7
+
 
   macOS:
     runs-on: macos-latest
