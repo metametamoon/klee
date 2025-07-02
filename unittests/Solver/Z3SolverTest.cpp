@@ -27,7 +27,7 @@ protected:
   std::unique_ptr<Solver> Z3Solver_;
 
   Z3SolverTest() : Z3Solver_(createCoreSolver(CoreSolverType::Z3_SOLVER)) {
-    Z3Solver_->setCoreSolverLimits(time::Span("10s"), -1);
+    Z3Solver_->setCoreSolverLimits(time::Span("10s"), 0);
   }
 };
 

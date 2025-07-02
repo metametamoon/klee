@@ -12,10 +12,12 @@
 
 #include "KModule.h"
 #include "KValue.h"
+#include "LocationInfo.h"
 
 #include "llvm/Support/raw_ostream.h"
 
 #include <klee/Module/KInstIterator.h>
+#include <optional>
 #include <unordered_map>
 #include <vector>
 
@@ -73,6 +75,7 @@ struct KInstruction : public KValue {
   /// register indices.
   int *operands;
   KBlock *parent;
+  mutable std::optional<ref<LocationInfo>> locationInfo;
 
 private:
   // Instruction index in the basic block

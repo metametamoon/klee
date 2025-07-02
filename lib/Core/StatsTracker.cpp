@@ -761,7 +761,7 @@ void StatsTracker::writeIStats() {
       // Always try to write the filename before the function name, as otherwise
       // KCachegrind can create two entries for the function, one with an
       // unnamed file and one without.
-      auto fnlFile = getLocationInfo(&fn).file;
+      auto fnlFile = getLocationInfo(&fn)->file;
       if (fnlFile != sourceFile) {
         of << "fl=" << fnlFile << "\n";
         sourceFile = fnlFile;
@@ -775,9 +775,9 @@ void StatsTracker::writeIStats() {
           auto instrLI = getLocationInfo(instrPtr);
 
           unsigned index = executor.kmodule->getGlobalIndex(instrPtr);
-          if (instrLI.file != sourceFile) {
-            of << "fl=" << instrLI.file << "\n";
-            sourceFile = instrLI.file;
+          if (instrLI->file != sourceFile) {
+            of << "fl=" << instrLI->file << "\n";
+            sourceFile = instrLI->file;
           }
 
           {
@@ -786,7 +786,7 @@ void StatsTracker::writeIStats() {
             of << asmLine.value() << " ";
           }
 
-          of << instrLI.line << " ";
+          of << instrLI->line << " ";
           for (unsigned i = 0; i < nStats; i++)
             if (istatsMask.test(i))
               of << sm.getIndexedValue(sm.getStatistic(i), index) << " ";
@@ -800,8 +800,8 @@ void StatsTracker::writeIStats() {
                 const Function *f = fit.first;
                 CallSiteInfo &csi = fit.second;
                 auto fli = getLocationInfo(f);
-                if (fli.file != "" && fli.file != sourceFile)
-                  of << "cfl=" << fli.file << "\n";
+                if (fli->file != "" && fli->file != sourceFile)
+                  of << "cfl=" << fli->file << "\n";
                 of << "cfn=" << f->getName().str() << "\n";
                 of << "calls=" << csi.count << " ";
 
@@ -811,7 +811,7 @@ void StatsTracker::writeIStats() {
                   of << asmLine.value() << " ";
                 }
 
-                of << fli.line << "\n";
+                of << fli->line << "\n";
 
                 {
                   auto asmLine = executor.kmodule->getAsmLine(instrPtr);
@@ -819,7 +819,7 @@ void StatsTracker::writeIStats() {
                   of << asmLine.value() << " ";
                 }
 
-                of << instrLI.line << " ";
+                of << instrLI->line << " ";
                 for (unsigned i = 0; i < nStats; i++) {
                   if (istatsMask.test(i)) {
                     Statistic &s = sm.getStatistic(i);

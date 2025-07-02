@@ -132,9 +132,8 @@ public:
   const ConstraintSet &cs() const;
   const ConstraintSet &withAssumtions(const ExprHashSet &assumptions) const;
   const Path &path() const;
-  const ExprHashMap<Path::PathIndex> &indexes() const;
-  const ordered_constraints_ty &orderedCS() const;
 
+  const ordered_constraints_ty &orderedCS() const;
   PathConstraints() = default;
   PathConstraints(KInstruction *initpc) : _path(initpc) {}
 
@@ -146,6 +145,7 @@ private:
   ExprHashMap<Path::PathIndex> pathIndexes;
   ordered_constraints_ty orderedConstraints;
   ExprHashMap<ExprHashSet> _simplificationMap;
+  unsigned long addingCounter = 0UL;
 };
 
 struct Conflict {

@@ -2063,8 +2063,8 @@ int main(int argc, char **argv, char **envp) {
     for (const auto &Func : *mainModule) {
       for (const auto &instr : llvm::instructions(Func)) {
         auto locationInfo = getLocationInfo(&instr);
-        origInstructions[locationInfo.file][locationInfo.line]
-                        [locationInfo.column.value_or(0)]
+        origInstructions[locationInfo->file][locationInfo->line]
+                        [locationInfo->column.value_or(0)]
                             .insert(instr.getOpcode());
       }
     }
@@ -2081,7 +2081,7 @@ int main(int argc, char **argv, char **envp) {
       for (const auto &loc : path.locations) {
         std::vector<llvm::Function *> funcs;
         for (auto &f : *mainModule) {
-          if (loc->isInside(&f, origInstructions[getLocationInfo(&f).file])) {
+          if (loc->isInside(&f, origInstructions[getLocationInfo(&f)->file])) {
             funcs.push_back(&f);
           }
         }
