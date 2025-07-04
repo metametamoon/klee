@@ -121,20 +121,15 @@ bool BidirectionalSearcher::empty() {
          (initializer->empty() || (ticks.at(3) == 0));
 }
 
-BidirectionalSearcher::BidirectionalSearcher(Searcher *_forward,
-                                             Searcher *_branch,
-                                             BackwardSearcher *_backward,
-                                             Initializer *_initializer)
+BidirectionalSearcher::BidirectionalSearcher(
+    std::unique_ptr<Searcher> _forward,
+    std::unique_ptr<Searcher> _branch,
+    std::unique_ptr<BackwardSearcher> _backward, Initializer *_initializer)
     : ticker({ForwardTicks, BranchTicks, BackwardTicks, InitTicks}),
-      forward(_forward), branch(_branch), backward(_backward),
-      initializer(_initializer) {}
+      forward(std::move(_forward)), branch(std::move(_branch)),
+      backward(std::move(_backward)), initializer(_initializer) {}
 
-BidirectionalSearcher::~BidirectionalSearcher() {
-  delete forward;
-  delete branch;
-  delete backward;
-  delete initializer;
-}
+BidirectionalSearcher::~BidirectionalSearcher() { delete initializer; }
 
 ref<SearcherAction> ForwardOnlySearcher::selectAction() {
   return new ForwardAction(&searcher->selectState());
@@ -149,10 +144,8 @@ void ForwardOnlySearcher::update(ref<ObjectManager::Event> e) {
   }
 }
 
-ForwardOnlySearcher::ForwardOnlySearcher(Searcher *_searcher) {
-  searcher = _searcher;
+ForwardOnlySearcher::ForwardOnlySearcher(std::unique_ptr<Searcher> _searcher) {
+  searcher = std::move(_searcher);
 }
-
-ForwardOnlySearcher::~ForwardOnlySearcher() { delete searcher; }
 
 } // namespace klee

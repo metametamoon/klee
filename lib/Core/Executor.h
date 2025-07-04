@@ -120,8 +120,10 @@ class Executor : public Interpreter {
   friend class WeightedRandomSearcher;
   friend class SpecialFunctionHandler;
   friend class StatsTracker;
-  friend klee::Searcher *klee::constructBaseSearcher(Executor &executor);
-  friend klee::Searcher *klee::constructUserSearcher(Executor &executor);
+  friend std::unique_ptr<Searcher>
+  klee::constructBaseSearcher(Executor &executor);
+  friend std::unique_ptr<Searcher>
+  klee::constructUserSearcher(Executor &executor);
 
   struct ComposeResult {
     bool success;

@@ -26,8 +26,9 @@ public:
   bool empty() override;
 
   // Assumes ownership
-  explicit BidirectionalSearcher(Searcher *_forward, Searcher *_branch,
-                                 BackwardSearcher *_backward,
+  explicit BidirectionalSearcher(std::unique_ptr<Searcher> _forward,
+                                 std::unique_ptr<Searcher> _branch,
+                                 std::unique_ptr<BackwardSearcher> _backward,
                                  Initializer *_initializer);
 
   ~BidirectionalSearcher() override;
@@ -35,9 +36,9 @@ public:
 private:
   Ticker ticker;
 
-  Searcher *forward;
-  Searcher *branch;
-  BackwardSearcher *backward;
+  std::unique_ptr<Searcher> forward;
+  std::unique_ptr<Searcher> branch;
+  std::unique_ptr<BackwardSearcher> backward;
   Initializer *initializer;
 
 private:
@@ -49,11 +50,10 @@ public:
   ref<SearcherAction> selectAction() override;
   void update(ref<ObjectManager::Event>) override;
   bool empty() override;
-  explicit ForwardOnlySearcher(Searcher *searcher);
-  ~ForwardOnlySearcher() override;
+  explicit ForwardOnlySearcher(std::unique_ptr<Searcher> searcher);
 
 private:
-  Searcher *searcher;
+  std::unique_ptr<Searcher> searcher;
 };
 
 } // namespace klee

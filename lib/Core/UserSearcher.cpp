@@ -164,7 +164,7 @@ Searcher *getNewSearcher(Searcher::CoreSearchType type, RNG &rng,
   return searcher;
 }
 
-Searcher *klee::constructBaseSearcher(Executor &executor) {
+std::unique_ptr<Searcher> klee::constructBaseSearcher(Executor &executor) {
   Searcher *searcher =
       getNewSearcher(CoreSearch[0], executor.theRNG, *executor.processForest);
 
@@ -194,15 +194,15 @@ Searcher *klee::constructBaseSearcher(Executor &executor) {
         new IterativeDeepeningSearcher(searcher, UseIterativeDeepeningSearch);
   }
 
-  return searcher;
+  return std::unique_ptr<Searcher>{searcher};
 }
 
-Searcher *klee::constructUserSearcher(Executor &executor) {
+std::unique_ptr<Searcher> klee::constructUserSearcher(Executor &executor) {
 
-  Searcher *searcher = nullptr;
+  std::unique_ptr<Searcher> searcher;
   if (UseFairSearch) {
-    searcher = new DiscreteTimeFairSearcher(BaseSearcherConstructor(executor),
-                                            executor.theRNG, 1);
+    searcher = std::make_unique<DiscreteTimeFairSearcher>(
+        BaseSearcherConstructor(executor), executor.theRNG, 1);
   } else {
     searcher = constructBaseSearcher(executor);
   }
@@ -216,7 +216,7 @@ Searcher *klee::constructUserSearcher(Executor &executor) {
   return searcher;
 }
 
-BackwardSearcher *klee::constructUserBackwardSearcher(Executor &executor) {
-  (void)executor;
-  return new RecencyRankedSearcher(MaxPropagations - 1);
+std::unique_ptr<BackwardSearcher>
+klee::constructUserBackwardSearcher([[maybe_unused]] Executor &executor) {
+  return std::make_unique<RecencyRankedSearcher>(MaxPropagations - 1);
 }

@@ -5336,12 +5336,11 @@ void Executor::run(ExecutionState *initialState,
 
   DefaultInitializer *forCheck = nullptr;
   if (ExecutionMode == ExecutionKind::Forward) {
-    searcher =
-        std::make_unique<ForwardOnlySearcher>(constructUserSearcher(*this));
+    searcher = std::make_unique<ForwardOnlySearcher>(constructUserSearcher(*this));
   } else {
-    Searcher *forward = constructUserSearcher(*this);
-    Searcher *branch = constructUserSearcher(*this);
-    BackwardSearcher *backward = constructUserBackwardSearcher(*this);
+    auto forward = constructUserSearcher(*this);
+    auto branch = constructUserSearcher(*this);
+    auto backward = constructUserBackwardSearcher(*this);
     InitializerPredicate *predicate =
         errorAndBackward ? (InitializerPredicate *)new TraceVerifyPredicate(
                                data.specialPoints, *codeGraphInfo.get(),
@@ -5352,8 +5351,9 @@ void Executor::run(ExecutionState *initialState,
     Initializer *initializer = new DefaultInitializer(
         codeGraphInfo.get(), *predicate, errorAndBackward);
     forCheck = (DefaultInitializer *)initializer;
-    searcher = std::make_unique<BidirectionalSearcher>(forward, branch,
-                                                       backward, initializer);
+    searcher = std::make_unique<BidirectionalSearcher>(
+        std::move(forward), std::move(branch), std::move(backward),
+        initializer);
   }
 
   if (errorAndBackward) {
