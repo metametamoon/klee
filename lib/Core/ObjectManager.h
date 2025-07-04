@@ -118,8 +118,6 @@ public:
   const pobs_ty &getLeafPobs();
   const pobs_ty &getRootPobs();
 
-  void addTargetedConflict(ref<TargetedConflict> conflict);
-
   void addPob(ProofObligation *pob);
   void removePob(ProofObligation *pob);
 

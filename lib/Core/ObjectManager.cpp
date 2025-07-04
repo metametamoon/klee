@@ -310,10 +310,6 @@ void ObjectManager::checkReachedPobs() {
   }
 }
 
-void ObjectManager::addTargetedConflict(ref<TargetedConflict> conflict) {
-  addedTargetedConflicts.push_back(conflict);
-}
-
 void ObjectManager::addPob(ProofObligation *pob) {
   assert(!pobExists(pob));
 

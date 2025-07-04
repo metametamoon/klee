@@ -151,12 +151,6 @@ cl::opt<bool> MergedPointerDereference(
     cl::desc("Enable merged pointer dereference (default=false)"),
     cl::cat(ExecCat));
 
-cl::opt<unsigned> MaxFailedBranchings(
-    "max-failed-branchings",
-    cl::desc("start bidirectional execution after failing during some "
-             "branching this amount of times (default=1)."),
-    cl::init(1), cl::cat(ExecCat));
-
 cl::opt<bool>
     AlignSymbolicPointers("align-symbolic-pointers",
                           cl::desc("Makes symbolic pointers aligned according"
@@ -2959,52 +2953,6 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
         maxNewStateStackSize =
             std::max(maxNewStateStackSize,
                      branches.first->stack.stackRegisterSize() * 8);
-      }
-
-      if (ProduceUnsatCore && !state.isolated &&
-          ExecutionMode == ExecutionKind::Bidirectional) {
-        if ((!branches.first && branches.second) ||
-            (branches.first && !branches.second)) {
-          ExecutionState &validState =
-              !branches.first ? *branches.second : *branches.first;
-          ref<Expr> condition =
-              !branches.first ? Expr::createIsZero(cond) : cond;
-          unsigned index = !branches.first ? 0 : 1;
-          ValidityCore core;
-          bool result;
-          auto success =
-              solver->getValidityCore(validState.constraints.cs(), condition,
-                                      core, result, validState.queryMetaData);
-          if (success && result) {
-            auto conflict = Conflict();
-            conflict.path = validState.constraints.path();
-            conflict.core = core.constraints;
-            // for (const auto &i: conflict.core) {
-            //   conflict.pathIndexes.insert({i,
-            //   state.constraints.indexes().at(i)});
-            // }
-            conflict.core.insert(Expr::createIsZero(core.expr));
-            ref<TargetedConflict> targeted = new TargetedConflict(
-                conflict, kmodule->getKBlock(bi->getSuccessor(index)));
-            failedTransitionsTo[targeted->target->basicBlock()] =
-                failedTransitionsTo[targeted->target->basicBlock()] + 1;
-            if (!successTransitionsTo.count(targeted->target->basicBlock()) &&
-                failedTransitionsTo[targeted->target->basicBlock()] >
-                    MaxFailedBranchings) {
-              objectManager->addTargetedConflict(targeted);
-
-              if (!verifingTransitionsTo.count(
-                      targeted->target->basicBlock())) {
-                verifingTransitionsTo.insert(targeted->target->basicBlock());
-                if (guidanceKind != Interpreter::GuidanceKind::ErrorGuidance) {
-                  ProofObligation *pob = new ProofObligation(
-                      ReachBlockTarget::create(targeted->target));
-                  objectManager->addPob(pob);
-                }
-              }
-            }
-          }
-        }
       }
 
       // NOTE: There is a hidden dependency here, markBranchVisited

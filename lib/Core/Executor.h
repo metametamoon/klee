@@ -262,10 +262,6 @@ private:
   // For statistics
   std::set<KBlock *> summarized;
 
-  std::unordered_set<llvm::BasicBlock *> verifingTransitionsTo;
-  std::unordered_set<llvm::BasicBlock *> successTransitionsTo;
-  std::unordered_map<llvm::BasicBlock *, unsigned> failedTransitionsTo;
-
   /// Typeids used during exception handling
   std::vector<ref<Expr>> eh_typeids;
 
