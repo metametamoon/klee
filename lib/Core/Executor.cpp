@@ -5160,7 +5160,6 @@ void Executor::goBackward(ref<BackwardAction> action) {
           !summarized.count(
               state->constraints.path().getBlocks().back().block)) {
         summarized.insert(state->constraints.path().getBlocks().back().block);
-        interpreterHandler->incSummarizedLocations();
       }
     }
   }

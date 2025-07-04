@@ -442,7 +442,6 @@ private:
   unsigned m_numGeneratedTests; // Number of tests successfully generated
   unsigned m_pathsCompleted;    // number of completed paths
   unsigned m_pathsExplored; // number of partially explored and completed paths
-  unsigned m_summarizedLocations;
 
   // used for writing .ktest files
   int m_argc;
@@ -457,9 +456,7 @@ public:
   unsigned getNumTestCases() { return m_numGeneratedTests; }
   unsigned getNumPathsCompleted() { return m_pathsCompleted; }
   unsigned getNumPathsExplored() { return m_pathsExplored; }
-  unsigned getSummarizedLocaitons() { return m_summarizedLocations; }
   void incPathsCompleted() override { ++m_pathsCompleted; }
-  void incSummarizedLocations() override { ++m_summarizedLocations; }
   void incPathsExplored(std::uint32_t num = 1) override {
     m_pathsExplored += num;
   }
@@ -498,8 +495,7 @@ public:
 KleeHandler::KleeHandler(int argc, char **argv)
     : m_interpreter(0), m_pathWriter(0), m_symPathWriter(0),
       m_outputDirectory(), m_numTotalTests(0), m_numGeneratedTests(0),
-      m_pathsCompleted(0), m_pathsExplored(0), m_summarizedLocations(0),
-      m_argc(argc), m_argv(argv) {
+      m_pathsCompleted(0), m_pathsExplored(0), m_argc(argc), m_argv(argv) {
 
   // create output directory (OutputDir or "klee-out-<i>")
   bool dir_given = OutputDir != "";
@@ -2476,8 +2472,6 @@ int main(int argc, char **argv, char **envp) {
         << '\n'
         << "KLEE: done: generated tests = " << handler->getNumTestCases()
         << '\n'
-        << "KLEE: done: newly summarized locations = "
-        << handler->getSummarizedLocaitons() << '\n'
         << "KLEE: done: queries = " << queries << '\n';
 
   bool useColors = llvm::errs().is_displayed();

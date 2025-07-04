@@ -50,8 +50,8 @@ public:
     }
 
     bool operator<(const PathIndex &other) const {
-      return block < other.block ||
-             (block == other.block && instruction < other.instruction);
+      return std::make_tuple(block, instruction) <
+             std::make_tuple(other.block, other.instruction);
     }
   };
 
