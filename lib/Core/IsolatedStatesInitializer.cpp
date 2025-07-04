@@ -74,7 +74,6 @@ void DefaultIsolatedStatesInitializer::addPob(ProofObligation *pob) {
           addInit(kcallblock->getFirstInstruction(),
                   ReachBlockTarget::create(pob->location->getBlock()));
           addInit(kcallblock->getFirstInstruction(), target);
-          // }
         }
       }
     }

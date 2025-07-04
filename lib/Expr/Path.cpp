@@ -4,6 +4,7 @@
 #include "klee/Module/KModule.h"
 
 #include "klee/Support/CompilerWarning.h"
+#include "klee/Support/ErrorHandling.h"
 DISABLE_WARNING_PUSH
 DISABLE_WARNING_DEPRECATED_DECLARATIONS
 #include "llvm/ADT/StringExtras.h"
@@ -305,6 +306,5 @@ KInstruction *klee::getLastInstructionFromPathEntry(Path::entry entry) {
   case Path::TransitionKind::None:
     return entry.block->getLastInstruction();
   }
-  abort(); // unreachable by exhausting pattern matching
-  return nullptr;
+  klee_error("unhandled path transition kind");
 }

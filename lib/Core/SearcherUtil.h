@@ -21,16 +21,15 @@ struct Propagation {
   }
 
   bool operator<(const Propagation &rhs) const {
-    return state->id < rhs.state->id ||
-           (state->id == rhs.state->id && pob->id < rhs.pob->id);
+    return std::make_tuple(state->id, pob->id) <
+           std::make_tuple(rhs.state->id, rhs.pob->id);
   }
 };
 
 struct PropagationIDCompare {
   bool operator()(const Propagation &a, const Propagation &b) const {
-    return a.state->getID() < b.state->getID() ||
-           (a.state->getID() == b.state->getID() &&
-            a.pob->getID() < b.pob->getID());
+    return std::make_tuple(a.state->getID(), a.pob->getID()) <
+           std::make_tuple(b.state->getID(), b.pob->getID());
   }
 };
 

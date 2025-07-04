@@ -801,9 +801,6 @@ private:
 
   void closeProofObligation(ProofObligation *pob);
 
-  // void executeAction(ref<SearcherAction> action);
-  // void goForward(ref<ForwardAction> action);
-
   const KInstruction *getKInst(const llvm::Instruction *ints) const;
   const KBlock *getKBlock(const llvm::BasicBlock *bb) const;
   const KFunction *getKFunction(const llvm::Function *f) const;

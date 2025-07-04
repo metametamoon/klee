@@ -131,7 +131,6 @@ class TargetedSearcher final : public Searcher {
 private:
   std::unique_ptr<WeightedQueue<ExecutionState *, ExecutionStateIDCompare>>
       states;
-  std::set<ExecutionState *> stateshere;
   ref<Target> target;
   DistanceCalculator &distanceCalculator;
 

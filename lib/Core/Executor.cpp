@@ -6603,8 +6603,6 @@ bool Executor::resolveMemoryObjects(
     size = kmodule->targetData->getTypeStoreSize(state.gepExprBases[base]);
   }
 
-  // base = Simplificator::simplifyExpr(state.constraints.cs(),
-  // base).simplified;
   ref<PointerExpr> basePointer = PointerExpr::create(base, base);
 
   auto mso = MemorySubobject(address, bytes);
@@ -6680,7 +6678,6 @@ bool Executor::resolveMemoryObjects(
         return false;
       } else if (mayLazyInitialize) {
         uint64_t minObjectSize = 0;
-        // minObjectSize = MinNumberElementsLazyInit * MinElementSizeLazyInit;
         minObjectSize = state.isolated ? 0 : MinNumberElementsLazyInit * size;
 
         const Array *lazyInstantiationSize = makeArray(
@@ -6698,7 +6695,6 @@ bool Executor::resolveMemoryObjects(
       }
     }
   }
-
   return true;
 }
 
@@ -6934,11 +6930,6 @@ void Executor::executeMemoryOperation(
   ref<Expr> zeroPointer = PointerExpr::create(Expr::createPointer(0));
 
   if (SimplifySymIndices) {
-    // if (!isa<ConstantExpr>(base)) {
-    //   base =
-    //       Simplificator::simplifyExpr(estate.constraints.cs(),
-    //       base).simplified;
-    // }
     if (isWrite && !isa<ConstantExpr>(value))
       value = Simplificator::simplifyExpr(estate.constraints.cs(), value)
                   .simplified;
