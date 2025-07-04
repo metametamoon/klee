@@ -65,20 +65,6 @@ public:
     static bool classof(const Propagations *) { return true; }
   };
 
-  struct Conflicts : public Event {
-    friend class ref<Conflicts>;
-    const std::vector<ref<TargetedConflict>> &conflicts;
-
-    Conflicts(const std::vector<ref<TargetedConflict>> &conflicts)
-        : conflicts(conflicts) {}
-
-    Kind getKind() const { return Kind::Conflicts; }
-    static bool classof(const Event *A) {
-      return A->getKind() == Kind::Conflicts;
-    }
-    static bool classof(const Conflicts *) { return true; }
-  };
-
   struct ProofObligations : public Event {
     friend class ref<ProofObligations>;
     ExecutionState *context;
@@ -168,8 +154,6 @@ public:
 
   propagations_ty addedPropagations;
   propagations_ty removedPropagations;
-
-  std::vector<ref<TargetedConflict>> addedTargetedConflicts;
 
   bool checkStack(ExecutionState *state, ProofObligation *pob);
   void checkReachedStates();

@@ -16,7 +16,7 @@
 namespace klee {
 
 std::pair<KInstruction *, std::set<ref<Target>>>
-ConflictCoreInitializer::selectAction() {
+DefaultInitializer::selectAction() {
   auto KI = queued.front();
   queued.pop_front();
   auto targets = targetMap[KI];
@@ -28,10 +28,9 @@ ConflictCoreInitializer::selectAction() {
   return {KI, targets};
 }
 
-bool ConflictCoreInitializer::empty() { return queued.empty(); }
+bool DefaultInitializer::empty() { return queued.empty(); }
 
-void ConflictCoreInitializer::update(const pobs_ty &added,
-                                     const pobs_ty &removed) {
+void DefaultInitializer::update(const pobs_ty &added, const pobs_ty &removed) {
   for (auto i : added) {
     addPob(i);
   }
@@ -40,7 +39,7 @@ void ConflictCoreInitializer::update(const pobs_ty &added,
   }
 }
 
-void ConflictCoreInitializer::addPob(ProofObligation *pob) {
+void DefaultInitializer::addPob(ProofObligation *pob) {
   auto target = pob->location;
   knownTargets[target]++;
   if (knownTargets[target] > 1) {
@@ -65,21 +64,8 @@ void ConflictCoreInitializer::addPob(ProofObligation *pob) {
           (predicate.isInterestingCallBlock(from) ? from->instructions[1]
                                                   : from->instructions[0]);
       addInit(fromInst, target);
-      // if (!pob->parent && !predicate(pob->location->getBlock())) {
-      //   KInstruction *fromInst =
-      //       (predicate.isInterestingCallBlock(from) ? from->instructions[1]
-      //        : from->instructions[0]);
-      //   addInit(fromInst,
-      //   ReachBlockTarget::create(pob->location->getBlock()));
-      // }
     }
   } else {
-    // if (!pob->stack.empty()) {
-    //   auto frame = pob->stack.back();
-    //   assert(frame.kf == pob->location->getBlock()->parent);
-    //   addInit(frame.caller,
-    //           ReachBlockTarget::create(pob->location->getBlock()));
-    // } else {
     for (auto i : allowed) {
       for (auto kcallblock : i->kCallBlocks) {
         if (kcallblock->calledFunctions.count(
@@ -106,7 +92,7 @@ void ConflictCoreInitializer::addPob(ProofObligation *pob) {
   }
 }
 
-void ConflictCoreInitializer::removePob(ProofObligation *pob) {
+void DefaultInitializer::removePob(ProofObligation *pob) {
   auto target = pob->location;
   assert(knownTargets[target] != 0);
   knownTargets[target]--;
@@ -135,85 +121,12 @@ void ConflictCoreInitializer::removePob(ProofObligation *pob) {
   }
 }
 
-void ConflictCoreInitializer::addConflictInit(const Conflict &conflict,
-                                              KBlock *target) {
-  (void)conflict;
-  (void)target;
-
-  if (errorGuided) {
-    return;
-  }
-
-  // auto &blocks = conflict.path.getBlocks();
-  // std::set<KFunction *, KFunctionCompare> functions;
-
-  // for (auto block : blocks) {
-  //   if (!dismantledFunctions.count(block.block->parent)) {
-  //     functions.insert(block.block->parent);
-  //     dismantledFunctions.insert(block.block->parent);
-  //   }
-  // }
-
-  // // Dismantle all functions present in the path
-  // for (auto function : functions) {
-  //   auto dismantled = cgd->dismantleFunction(function, predicate);
-  //   for (auto i : dismantled) {
-  //     KInstruction *from =
-  //         (RegularFunctionPredicate(i.first) ? i.first->instructions[1]
-  //                                            : i.first->instructions[0]);
-  //     addInit(from, ReachBlockTarget::create(i.second));
-  //   }
-  // }
-
-  // // Bridge calls
-  // for (auto function : functions) {
-  //   for (auto &block : function->blocks) {
-  //     if (RegularFunctionPredicate(block.get())) {
-  //       auto call = dyn_cast<KCallBlock>(block.get());
-  //       auto called = call->getKFunction();
-  //       addInit(call->getFirstInstruction(),
-  //               ReachBlockTarget::create(called->entryKBlock, false));
-  //     }
-  //   }
-  // }
-
-  // auto targetB = cgd->getNearestPredicateSatisfying(target, predicate,
-  // false); if (target != targetB) {
-  //   KInstruction *from =
-  //       (RegularFunctionPredicate(targetB) ? targetB->instructions[1]
-  //                                          : targetB->instructions[0]);
-  //   addInit(from, ReachBlockTarget::create(target));
-  // }
-}
-
-void ConflictCoreInitializer::initializeFunctions(
+void DefaultInitializer::initializeFunctions(
     std::set<KFunction *, KFunctionCompare> functions) {
   allowed = functions;
-  // for (auto function : functions) {
-  //   if (dismantledFunctions.count(function)) {
-  //     continue;
-  //   }
-  //   dismantledFunctions.insert(function);
-
-  //   auto dismantled = cgd->dismantleFunction(function, predicate);
-  //   for (auto i : dismantled) {
-  //     KInstruction *from =
-  //         (RegularFunctionPredicate(i.first) ? i.first->instructions[1]
-  //                                            : i.first->instructions[0]);
-  //     addInit(from, ReachBlockTarget::create(i.second));
-  //   }
-  //   for (auto &block : function->blocks) {
-  //     if (RegularFunctionPredicate(block.get())) {
-  //       auto call = dyn_cast<KCallBlock>(block.get());
-  //       auto called = call->getKFunction();
-  //       addInit(call->getFirstInstruction(),
-  //               ReachBlockTarget::create(called->entryKBlock, false));
-  //     }
-  //   }
-  // }
 }
 
-void ConflictCoreInitializer::addErrorInit(ref<Target> errorTarget) {
+void DefaultInitializer::addErrorInit(ref<Target> errorTarget) {
   auto errorT = dyn_cast<ReproduceErrorTarget>(errorTarget);
   auto location = errorTarget->getBlock();
   // Check direction
@@ -241,7 +154,7 @@ void ConflictCoreInitializer::addErrorInit(ref<Target> errorTarget) {
   }
 }
 
-void ConflictCoreInitializer::addInit(KInstruction *from, ref<Target> to) {
+void DefaultInitializer::addInit(KInstruction *from, ref<Target> to) {
   if (initialized[from].count(to)) {
     return;
   }

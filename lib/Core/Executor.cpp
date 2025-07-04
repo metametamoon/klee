@@ -5334,7 +5334,7 @@ void Executor::run(ExecutionState *initialState,
   auto errorAndBackward = ExecutionMode == ExecutionKind::Bidirectional &&
                           guidanceKind == GuidanceKind::ErrorGuidance;
 
-  ConflictCoreInitializer *forCheck = nullptr;
+  DefaultInitializer *forCheck = nullptr;
   if (ExecutionMode == ExecutionKind::Forward) {
     searcher =
         std::make_unique<ForwardOnlySearcher>(constructUserSearcher(*this));
@@ -5349,9 +5349,9 @@ void Executor::run(ExecutionState *initialState,
                          : (InitializerPredicate *)new DefaultBlockPredicate(
                                InitializeInJoinBlocks);
     objectManager->setPredicate(predicate);
-    Initializer *initializer = new ConflictCoreInitializer(
+    Initializer *initializer = new DefaultInitializer(
         codeGraphInfo.get(), *predicate, errorAndBackward);
-    forCheck = (ConflictCoreInitializer *)initializer;
+    forCheck = (DefaultInitializer *)initializer;
     searcher = std::make_unique<BidirectionalSearcher>(forward, branch,
                                                        backward, initializer);
   }

@@ -13,16 +13,22 @@
 namespace klee {
 struct Conflict;
 
+/**
+ * Is responsible for prioritizing the creation of new isolated states
+ */
 class Initializer {
 public:
   virtual ~Initializer() {}
   virtual std::pair<KInstruction *, std::set<ref<Target>>> selectAction() = 0;
   virtual bool empty() = 0;
   virtual void update(const pobs_ty &added, const pobs_ty &removed) = 0;
-  virtual void addConflictInit(const Conflict &, KBlock *) = 0;
 };
 
-class ConflictCoreInitializer : public Initializer {
+/**
+ * The default initializer that maintains a queue of most wanted initializer
+ * pairs (kinstruction to target)
+ */
+class DefaultInitializer : public Initializer {
 public:
   std::pair<KInstruction *, std::set<ref<Target>>> selectAction() override;
   bool empty() override;
@@ -31,19 +37,16 @@ public:
     return instructionMap.count(t) && !instructionMap.at(t).empty();
   }
 
-  void addConflictInit(const Conflict &, KBlock *) override;
-
   void initializeFunctions(std::set<KFunction *, KFunctionCompare> functions);
   void addErrorInit(ref<Target> errorTarget);
 
   void update(const pobs_ty &added, const pobs_ty &removed) override;
 
-  explicit ConflictCoreInitializer(CodeGraphInfo *cgd,
-                                   InitializerPredicate &predicate,
-                                   bool errorGuided)
+  explicit DefaultInitializer(CodeGraphInfo *cgd,
+                              InitializerPredicate &predicate, bool errorGuided)
       : cgd(cgd), predicate(predicate), errorGuided(errorGuided){};
 
-  ~ConflictCoreInitializer() override {}
+  ~DefaultInitializer() override {}
 
 private:
   CodeGraphInfo *cgd;

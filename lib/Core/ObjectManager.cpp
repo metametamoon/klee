@@ -196,14 +196,6 @@ void ObjectManager::updateSubscribers() {
     removedPobs.clear();
     context = nullptr;
   }
-
-  {
-    ref<Event> e = new Conflicts(addedTargetedConflicts);
-    for (auto s : subscribers) {
-      s->update(e);
-    }
-    addedTargetedConflicts.clear();
-  }
 }
 
 void ObjectManager::initialUpdate() {
