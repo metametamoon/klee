@@ -72,20 +72,16 @@ public:
   void retractInstruction();
 
   friend bool operator==(const Path &lhs, const Path &rhs) {
-    return lhs.path == rhs.path && lhs.first == rhs.first &&
-           lhs.last == rhs.last && lhs.next == rhs.next;
+    return std::make_tuple(lhs.path, lhs.first, lhs.last, lhs.next) ==
+           std::make_tuple(rhs.path, rhs.first, rhs.last, rhs.next);
   }
   friend bool operator!=(const Path &lhs, const Path &rhs) {
     return !(lhs == rhs);
   }
 
   friend bool operator<(const Path &lhs, const Path &rhs) {
-    return lhs.path < rhs.path ||
-           (lhs.path == rhs.path &&
-            (lhs.first < rhs.first ||
-             (lhs.first == rhs.first &&
-              (lhs.last < rhs.last ||
-               (lhs.last == rhs.last && lhs.next < rhs.next)))));
+    return std::make_tuple(lhs.path, lhs.first, lhs.last, lhs.next) <
+           std::make_tuple(rhs.path, rhs.first, rhs.last, rhs.next);
   }
 
   bool empty() const { return path.empty(); }
