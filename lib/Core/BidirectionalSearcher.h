@@ -29,9 +29,7 @@ public:
   explicit BidirectionalSearcher(std::unique_ptr<Searcher> _forward,
                                  std::unique_ptr<Searcher> _branch,
                                  std::unique_ptr<BackwardSearcher> _backward,
-                                 Initializer *_initializer);
-
-  ~BidirectionalSearcher() override;
+                                 std::unique_ptr<Initializer> _initializer);
 
 private:
   Ticker ticker;
@@ -39,7 +37,7 @@ private:
   std::unique_ptr<Searcher> forward;
   std::unique_ptr<Searcher> branch;
   std::unique_ptr<BackwardSearcher> backward;
-  Initializer *initializer;
+  std::unique_ptr<Initializer> initializer;
 
 private:
   StepKind selectStep();

@@ -220,3 +220,14 @@ std::unique_ptr<BackwardSearcher>
 klee::constructUserBackwardSearcher([[maybe_unused]] Executor &executor) {
   return std::make_unique<RecencyRankedSearcher>(MaxPropagations - 1);
 }
+
+std::unique_ptr<BidirectionalSearcher> klee::constructUserBidirectionalSearcher(
+    Executor &executor, std::unique_ptr<Initializer> initializer) {
+  auto forward = constructUserSearcher(executor);
+  auto branch = constructUserSearcher(executor);
+  auto backward = constructUserBackwardSearcher(executor);
+  auto bidirectionalSearcher = std::make_unique<BidirectionalSearcher>(
+      std::move(forward), std::move(branch), std::move(backward),
+      std::move(initializer));
+  return bidirectionalSearcher;
+}

@@ -26,7 +26,8 @@ public:
 
 /**
  * The default initializer that maintains a queue of most wanted initializer
- * pairs (kinstruction to target)
+ * pairs (kinstruction to target).
+ * Bidirectional mode is only usable in error-guided moded.
  */
 class DefaultInitializer : public Initializer {
 public:
@@ -43,15 +44,14 @@ public:
   void update(const pobs_ty &added, const pobs_ty &removed) override;
 
   explicit DefaultInitializer(CodeGraphInfo *cgd,
-                              InitializerPredicate &predicate, bool errorGuided)
-      : cgd(cgd), predicate(predicate), errorGuided(errorGuided){};
+                              InitializerPredicate &predicate)
+      : cgd(cgd), predicate(predicate){};
 
   ~DefaultInitializer() override {}
 
 private:
   CodeGraphInfo *cgd;
   InitializerPredicate &predicate;
-  bool errorGuided;
 
   // There are proof obligation in these targets
   std::map<ref<Target>, unsigned> knownTargets;

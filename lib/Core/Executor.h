@@ -696,6 +696,7 @@ private:
   void reportProgressTowardsTargets(std::string prefix,
                                     const SetOfStates &states) const;
   void reportProgressTowardsTargets() const;
+  void updateHaltExecutionStatus();
 
   /// bindModuleConstants - Initialize the module constant table.
   void bindModuleConstants(llvm::APFloat::roundingMode rm);

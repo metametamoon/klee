@@ -29,6 +29,10 @@ std::unique_ptr<Searcher> constructUserSearcher(Executor &executor);
 std::unique_ptr<BackwardSearcher>
 constructUserBackwardSearcher(Executor &executor);
 
+std::unique_ptr<BidirectionalSearcher>
+constructUserBidirectionalSearcher(Executor &executor,
+                                   std::unique_ptr<Initializer> initializer);
+
 struct BaseSearcherConstructor {
   Executor &executor;
   BaseSearcherConstructor(Executor &executor) : executor(executor) {}

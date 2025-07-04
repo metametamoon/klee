@@ -5320,6 +5320,15 @@ void Executor::reportProgressTowardsTargets() const {
   reportProgressTowardsTargets("", objectManager->getStates());
 }
 
+void Executor::updateHaltExecutionStatus() {
+  bool errorAndBackward = ExecutionMode == ExecutionKind::Bidirectional;
+  if (errorAndBackward) {
+    if (objectManager->getRootPobs().empty()) {
+      haltExecution = HaltExecution::Unspecified;
+    }
+  }
+}
+
 void Executor::run(ExecutionState *initialState,
                    TargetedExecutionManager::Data &data) {
   // Delay init till now so that ticks don't accrue during optimization and
@@ -5330,30 +5339,27 @@ void Executor::run(ExecutionState *initialState,
   if (usingSeeds) {
     seed(*initialState);
   }
+  if (ExecutionMode == ExecutionKind::Bidirectional &&
+      guidanceKind != GuidanceKind::ErrorGuidance) {
+    klee_error("Bidirectional execution is only support in error-guided mode");
+  }
 
-  auto errorAndBackward = ExecutionMode == ExecutionKind::Bidirectional &&
-                          guidanceKind == GuidanceKind::ErrorGuidance;
+  auto errorAndBackward = ExecutionMode == ExecutionKind::Bidirectional;
 
   DefaultInitializer *forCheck = nullptr;
   if (ExecutionMode == ExecutionKind::Forward) {
-    searcher = std::make_unique<ForwardOnlySearcher>(constructUserSearcher(*this));
+    searcher =
+        std::make_unique<ForwardOnlySearcher>(constructUserSearcher(*this));
   } else {
-    auto forward = constructUserSearcher(*this);
-    auto branch = constructUserSearcher(*this);
-    auto backward = constructUserBackwardSearcher(*this);
-    InitializerPredicate *predicate =
-        errorAndBackward ? (InitializerPredicate *)new TraceVerifyPredicate(
-                               data.specialPoints, *codeGraphInfo.get(),
-                               InitializeInJoinBlocks)
-                         : (InitializerPredicate *)new DefaultBlockPredicate(
-                               InitializeInJoinBlocks);
+    InitializerPredicate *predicate = new TraceVerifyPredicate(
+        data.specialPoints, *codeGraphInfo.get(), InitializeInJoinBlocks);
     objectManager->setPredicate(predicate);
-    Initializer *initializer = new DefaultInitializer(
-        codeGraphInfo.get(), *predicate, errorAndBackward);
-    forCheck = (DefaultInitializer *)initializer;
-    searcher = std::make_unique<BidirectionalSearcher>(
-        std::move(forward), std::move(branch), std::move(backward),
-        initializer);
+    auto initializer =
+        std::make_unique<DefaultInitializer>(codeGraphInfo.get(), *predicate);
+    forCheck = initializer.get();
+    auto bidirectional =
+        constructUserBidirectionalSearcher(*this, std::move(initializer));
+    searcher = std::move(bidirectional);
   }
 
   if (errorAndBackward) {
@@ -5424,11 +5430,7 @@ void Executor::run(ExecutionState *initialState,
       }
     }
 
-    if (errorAndBackward) {
-      if (objectManager->getRootPobs().empty()) {
-        haltExecution = HaltExecution::Unspecified;
-      }
-    }
+    updateHaltExecutionStatus();
   }
 
   if (guidanceKind == GuidanceKind::ErrorGuidance) {
