@@ -5328,6 +5328,47 @@ void Executor::updateHaltExecutionStatus() {
   }
 }
 
+std::unique_ptr<DefaultIsolatedStatesInitializer>
+Executor::createIsolatedStatesInitializer(
+    InitializerPredicate *predicate,
+    TargetedExecutionManager::Data const &data) {
+  auto result = std::make_unique<DefaultIsolatedStatesInitializer>(
+      codeGraphInfo.get(), *predicate);
+  result->initializeFunctions(data.functionsToDismantle);
+  for (auto &backwardlist : data.backwardWhitelists) {
+    for (const auto &target : backwardlist.second->getTargets()) {
+      result->addErrorInit(target);
+    }
+  }
+
+  return result;
+}
+
+void Executor::pruneInactivePobs(
+    DefaultIsolatedStatesInitializer *isolatedStatesInitializer) {
+  if (ExecutionMode == ExecutionKind::Bidirectional) {
+    bool changed = true;
+    while (changed) {
+      changed = false;
+      for (auto pob : objectManager->leafPobs) {
+        if (!targetManager->hasTargetedStates(pob->location) &&
+            !isolatedStatesInitializer->initsLeftForTarget(pob->location) &&
+            objectManager->propagationCount[pob] == 0) {
+          if (!pob->parent) {
+            llvm::errs() << "[FALSE POSITIVE] "
+                         << "FOUND FALSE POSITIVE AT: "
+                         << pob->location->toString() << "\n";
+          }
+          objectManager->removePob(pob);
+          changed = true;
+        }
+      }
+      if (changed) {
+        objectManager->updateSubscribers();
+      }
+    }
+  }
+}
 void Executor::run(ExecutionState *initialState,
                    TargetedExecutionManager::Data &data) {
   // Delay init till now so that ticks don't accrue during optimization and
@@ -5343,41 +5384,22 @@ void Executor::run(ExecutionState *initialState,
     klee_error("Bidirectional execution is only support in error-guided mode");
   }
 
-  auto errorAndBackward = ExecutionMode == ExecutionKind::Bidirectional;
-
-  DefaultInitializer *forCheck = nullptr;
+  DefaultIsolatedStatesInitializer *isolatedStatesInitializer = nullptr;
   if (ExecutionMode == ExecutionKind::Forward) {
     searcher =
         std::make_unique<ForwardOnlySearcher>(constructUserSearcher(*this));
-  } else {
+  } else if (ExecutionMode == ExecutionKind::Bidirectional) {
     InitializerPredicate *predicate = new TraceVerifyPredicate(
         data.specialPoints, *codeGraphInfo.get(), InitializeInJoinBlocks);
     objectManager->setPredicate(predicate);
-    auto initializer =
-        std::make_unique<DefaultInitializer>(codeGraphInfo.get(), *predicate);
-    forCheck = initializer.get();
+    auto initializer = createIsolatedStatesInitializer(predicate, data);
+    isolatedStatesInitializer = initializer.get();
     auto bidirectional =
         constructUserBidirectionalSearcher(*this, std::move(initializer));
     searcher = std::move(bidirectional);
-  }
-
-  if (errorAndBackward) {
-    forCheck->initializeFunctions(data.functionsToDismantle);
-    for (auto &backwardlist : data.backwardWhitelists) {
-      for (auto target : backwardlist.second->getTargets()) {
-        forCheck->addErrorInit(target);
-      }
-    }
   } else {
-    if (ExecutionMode == ExecutionKind::Bidirectional) {
-      std::set<KFunction *, KFunctionCompare> allowed;
-      for (auto &i : kmodule->functions) {
-        allowed.insert(i.get());
-      }
-      forCheck->initializeFunctions(allowed);
-    }
+    klee_error("Unsupported execution kind");
   }
-
   if (targetManager) {
     objectManager->addSubscriber(targetManager.get());
   }
@@ -5406,28 +5428,7 @@ void Executor::run(ExecutionState *initialState,
       objectManager->updateSubscribers();
     }
 
-    if (errorAndBackward) {
-      bool changed = true;
-      while (changed) {
-        changed = false;
-        for (auto pob : objectManager->leafPobs) {
-          if (!targetManager->hasTargetedStates(pob->location) &&
-              !forCheck->initsLeftForTarget(pob->location) &&
-              objectManager->propagationCount[pob] == 0) {
-            if (!pob->parent) {
-              llvm::errs() << "[FALSE POSITIVE] "
-                           << "FOUND FALSE POSITIVE AT: "
-                           << pob->location->toString() << "\n";
-            }
-            objectManager->removePob(pob);
-            changed = true;
-          }
-        }
-        if (changed) {
-          objectManager->updateSubscribers();
-        }
-      }
-    }
+    pruneInactivePobs(isolatedStatesInitializer);
 
     updateHaltExecutionStatus();
   }

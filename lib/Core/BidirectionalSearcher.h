@@ -2,7 +2,7 @@
 #define KLEE_BIDIRECTIONALSEARCHER_H
 
 #include "BackwardSearcher.h"
-#include "Initializer.h"
+#include "IsolatedStatesInitializer.h"
 #include "ObjectManager.h"
 #include "Searcher.h"
 #include "SearcherUtil.h"
@@ -26,10 +26,10 @@ public:
   bool empty() override;
 
   // Assumes ownership
-  explicit BidirectionalSearcher(std::unique_ptr<Searcher> _forward,
-                                 std::unique_ptr<Searcher> _branch,
-                                 std::unique_ptr<BackwardSearcher> _backward,
-                                 std::unique_ptr<Initializer> _initializer);
+  explicit BidirectionalSearcher(
+      std::unique_ptr<Searcher> _forward, std::unique_ptr<Searcher> _branch,
+      std::unique_ptr<BackwardSearcher> _backward,
+      std::unique_ptr<IsolatedStatesInitializer> _initializer);
 
 private:
   Ticker ticker;
@@ -37,7 +37,7 @@ private:
   std::unique_ptr<Searcher> forward;
   std::unique_ptr<Searcher> branch;
   std::unique_ptr<BackwardSearcher> backward;
-  std::unique_ptr<Initializer> initializer;
+  std::unique_ptr<IsolatedStatesInitializer> initializer;
 
 private:
   StepKind selectStep();

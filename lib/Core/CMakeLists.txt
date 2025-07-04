@@ -22,7 +22,7 @@ add_library(kleeCore
   ExecutorUtil.cpp
   ExternalDispatcher.cpp
   ImpliedValue.cpp
-  Initializer.cpp
+  IsolatedStatesInitializer.cpp
   Memory.cpp
   MemoryManager.cpp
   ObjectManager.cpp

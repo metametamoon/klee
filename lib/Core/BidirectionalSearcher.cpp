@@ -124,7 +124,7 @@ bool BidirectionalSearcher::empty() {
 BidirectionalSearcher::BidirectionalSearcher(
     std::unique_ptr<Searcher> _forward, std::unique_ptr<Searcher> _branch,
     std::unique_ptr<BackwardSearcher> _backward,
-    std::unique_ptr<Initializer> _initializer)
+    std::unique_ptr<IsolatedStatesInitializer> _initializer)
     : ticker({ForwardTicks, BranchTicks, BackwardTicks, InitTicks}),
       forward(std::move(_forward)), branch(std::move(_branch)),
       backward(std::move(_backward)), initializer(std::move(_initializer)) {}

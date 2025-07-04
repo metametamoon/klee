@@ -1,4 +1,4 @@
-#include "Initializer.h"
+#include "IsolatedStatesInitializer.h"
 #include "ProofObligation.h"
 #include "klee/Module/KInstruction.h"
 #include "klee/Module/KModule.h"
@@ -16,7 +16,7 @@
 namespace klee {
 
 std::pair<KInstruction *, std::set<ref<Target>>>
-DefaultInitializer::selectAction() {
+DefaultIsolatedStatesInitializer::selectAction() {
   auto KI = queued.front();
   queued.pop_front();
   auto targets = targetMap[KI];
@@ -28,9 +28,10 @@ DefaultInitializer::selectAction() {
   return {KI, targets};
 }
 
-bool DefaultInitializer::empty() { return queued.empty(); }
+bool DefaultIsolatedStatesInitializer::empty() { return queued.empty(); }
 
-void DefaultInitializer::update(const pobs_ty &added, const pobs_ty &removed) {
+void DefaultIsolatedStatesInitializer::update(const pobs_ty &added,
+                                              const pobs_ty &removed) {
   for (auto i : added) {
     addPob(i);
   }
@@ -39,7 +40,7 @@ void DefaultInitializer::update(const pobs_ty &added, const pobs_ty &removed) {
   }
 }
 
-void DefaultInitializer::addPob(ProofObligation *pob) {
+void DefaultIsolatedStatesInitializer::addPob(ProofObligation *pob) {
   auto target = pob->location;
   knownTargets[target]++;
   if (knownTargets[target] > 1) {
@@ -92,7 +93,7 @@ void DefaultInitializer::addPob(ProofObligation *pob) {
   }
 }
 
-void DefaultInitializer::removePob(ProofObligation *pob) {
+void DefaultIsolatedStatesInitializer::removePob(ProofObligation *pob) {
   auto target = pob->location;
   assert(knownTargets[target] != 0);
   knownTargets[target]--;
@@ -121,12 +122,12 @@ void DefaultInitializer::removePob(ProofObligation *pob) {
   }
 }
 
-void DefaultInitializer::initializeFunctions(
+void DefaultIsolatedStatesInitializer::initializeFunctions(
     std::set<KFunction *, KFunctionCompare> functions) {
   allowed = functions;
 }
 
-void DefaultInitializer::addErrorInit(ref<Target> errorTarget) {
+void DefaultIsolatedStatesInitializer::addErrorInit(ref<Target> errorTarget) {
   auto errorT = dyn_cast<ReproduceErrorTarget>(errorTarget);
   auto location = errorTarget->getBlock();
   // Check direction
@@ -154,7 +155,8 @@ void DefaultInitializer::addErrorInit(ref<Target> errorTarget) {
   }
 }
 
-void DefaultInitializer::addInit(KInstruction *from, ref<Target> to) {
+void DefaultIsolatedStatesInitializer::addInit(KInstruction *from,
+                                               ref<Target> to) {
   if (initialized[from].count(to)) {
     return;
   }

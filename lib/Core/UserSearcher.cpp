@@ -222,7 +222,8 @@ klee::constructUserBackwardSearcher([[maybe_unused]] Executor &executor) {
 }
 
 std::unique_ptr<BidirectionalSearcher> klee::constructUserBidirectionalSearcher(
-    Executor &executor, std::unique_ptr<Initializer> initializer) {
+    Executor &executor,
+    std::unique_ptr<IsolatedStatesInitializer> initializer) {
   auto forward = constructUserSearcher(executor);
   auto branch = constructUserSearcher(executor);
   auto backward = constructUserBackwardSearcher(executor);

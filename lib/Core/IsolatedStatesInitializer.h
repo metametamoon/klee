@@ -16,9 +16,9 @@ struct Conflict;
 /**
  * Is responsible for prioritizing the creation of new isolated states
  */
-class Initializer {
+class IsolatedStatesInitializer {
 public:
-  virtual ~Initializer() {}
+  virtual ~IsolatedStatesInitializer() {}
   virtual std::pair<KInstruction *, std::set<ref<Target>>> selectAction() = 0;
   virtual bool empty() = 0;
   virtual void update(const pobs_ty &added, const pobs_ty &removed) = 0;
@@ -29,7 +29,7 @@ public:
  * pairs (kinstruction to target).
  * Bidirectional mode is only usable in error-guided moded.
  */
-class DefaultInitializer : public Initializer {
+class DefaultIsolatedStatesInitializer : public IsolatedStatesInitializer {
 public:
   std::pair<KInstruction *, std::set<ref<Target>>> selectAction() override;
   bool empty() override;
@@ -43,11 +43,11 @@ public:
 
   void update(const pobs_ty &added, const pobs_ty &removed) override;
 
-  explicit DefaultInitializer(CodeGraphInfo *cgd,
-                              InitializerPredicate &predicate)
+  explicit DefaultIsolatedStatesInitializer(CodeGraphInfo *cgd,
+                                            InitializerPredicate &predicate)
       : cgd(cgd), predicate(predicate){};
 
-  ~DefaultInitializer() override {}
+  ~DefaultIsolatedStatesInitializer() override {}
 
 private:
   CodeGraphInfo *cgd;

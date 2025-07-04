@@ -698,6 +698,12 @@ private:
   void reportProgressTowardsTargets() const;
   void updateHaltExecutionStatus();
 
+  std::unique_ptr<DefaultIsolatedStatesInitializer>
+  createIsolatedStatesInitializer(InitializerPredicate *predicate,
+                                  TargetedExecutionManager::Data const &data);
+  void pruneInactivePobs(
+      DefaultIsolatedStatesInitializer *isolatedStatesInitializer);
+
   /// bindModuleConstants - Initialize the module constant table.
   void bindModuleConstants(llvm::APFloat::roundingMode rm);
 
