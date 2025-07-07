@@ -1,6 +1,7 @@
 // REQUIRES: geq-llvm-12.0
 // REQUIRES: not-darwin
 // (deterministic memory allocation not supported on darwin)
+// REQUIRES: not-freebsd
 
 // RUN: %clang %s -emit-llvm %O0opt -fno-discard-value-names -g -c -o %t.bc
 // RUN: %clang %testcomp_defs -emit-llvm -g -c -o %t.testcomp_defs.bc
