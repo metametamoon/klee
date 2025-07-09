@@ -8,7 +8,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "TargetCalculator.h"
-
 #include "ExecutionState.h"
 #include "ObjectManager.h"
 
@@ -16,9 +15,9 @@
 #include "klee/Module/KInstruction.h"
 #include "klee/Module/Target.h"
 #include "klee/Module/TargetHash.h"
+#include "klee/Support/OptionCategories.h"
 
 #include <functional>
-#include <klee/Support/OptionCategories.h>
 #include <set>
 #include <vector>
 

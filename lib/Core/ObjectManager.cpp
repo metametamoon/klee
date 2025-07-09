@@ -5,7 +5,7 @@
 #include "TargetManager.h"
 
 #include "klee/Module/KModule.h"
-#include <klee/Support/DebugFlags.h>
+#include "klee/Support/DebugFlags.h"
 
 using namespace llvm;
 using namespace klee;

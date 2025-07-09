@@ -17,9 +17,9 @@
 #include "klee/Module/CodeGraphInfo.h"
 #include "klee/Module/KInstruction.h"
 #include "klee/Module/KModule.h"
+#include "klee/Module/TargetForest.h"
 #include "klee/Support/ErrorHandling.h"
 
-#include <klee/Module/TargetForest.h>
 #include <memory>
 
 using namespace llvm;

@@ -1,10 +1,9 @@
 #include "Composer.h"
 
 #include "Executor.h"
+#include "klee/Core/Context.h"
 #include "klee/Expr/ArrayExprVisitor.h"
-
 #include "klee/Expr/SymbolicSource.h"
-#include <klee/Core/Context.h>
 #include <stack>
 
 using namespace klee;

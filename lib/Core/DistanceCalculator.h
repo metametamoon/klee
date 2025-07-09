@@ -12,7 +12,6 @@
 
 #include "ExecutionState.h"
 #include "ProofObligation.h"
-
 #include "klee/Module/CodeGraphInfo.h"
 
 namespace llvm {

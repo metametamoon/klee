@@ -1,9 +1,8 @@
-#include "klee/Support/OptionCategories.h"
-
 #include "BidirectionalSearcher.h"
 #include "ObjectManager.h"
 #include "Searcher.h"
 #include "SearcherUtil.h"
+#include "klee/Support/OptionCategories.h"
 
 namespace klee {
 

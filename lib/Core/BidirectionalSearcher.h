@@ -6,7 +6,7 @@
 #include "ObjectManager.h"
 #include "Searcher.h"
 #include "SearcherUtil.h"
-#include <klee/ADT/Ticker.h>
+#include "klee/ADT/Ticker.h"
 
 namespace klee {
 
