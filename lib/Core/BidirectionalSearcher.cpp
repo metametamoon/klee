@@ -7,19 +7,27 @@
 
 namespace klee {
 
-llvm::cl::opt<unsigned> ForwardTicks("forward-ticks", llvm::cl::desc(""),
-                                     llvm::cl::init(25),
-                                     llvm::cl::cat(ExecCat));
+llvm::cl::opt<unsigned> ForwardTicks(
+    "forward-ticks",
+    llvm::cl::desc(
+        "Ticks of forward execution (if bidirectional mode is enabled)"),
+    llvm::cl::init(25), llvm::cl::cat(ExecCat));
 
 llvm::cl::opt<unsigned> BranchTicks("branch-ticks", llvm::cl::desc(""),
                                     llvm::cl::init(25), llvm::cl::cat(ExecCat));
 
-llvm::cl::opt<unsigned> InitTicks("init-ticks", llvm::cl::desc(""),
-                                  llvm::cl::init(25), llvm::cl::cat(ExecCat));
+llvm::cl::opt<unsigned>
+    InitTicks("init-ticks",
+              llvm::cl::desc("Ticks of initializing isolacted states which are "
+                             "used to fuel the backward execution."),
+              llvm::cl::init(25), llvm::cl::cat(ExecCat));
 
-llvm::cl::opt<unsigned> BackwardTicks("backward-ticks", llvm::cl::desc(""),
-                                      llvm::cl::init(25),
-                                      llvm::cl::cat(ExecCat));
+llvm::cl::opt<unsigned> BackwardTicks(
+    "backward-ticks",
+    llvm::cl::desc(
+        "Ticks of backwards execution, specifically "
+        "of creating new backwards execution queries (aka proof obligations)"),
+    llvm::cl::init(25), llvm::cl::cat(ExecCat));
 
 BidirectionalSearcher::StepKind BidirectionalSearcher::selectStep() {
   size_t initial_choice = ticker.getCurrent();
@@ -67,14 +75,12 @@ ref<SearcherAction> BidirectionalSearcher::selectAction() {
 
     case StepKind::Forward: {
       auto &state = forward->selectState();
-      state.isolated = state.isolated;
       action = new ForwardAction(&state);
       break;
     }
 
     case StepKind::Branch: {
       auto &state = branch->selectState();
-      state.isolated = state.isolated;
       action = new ForwardAction(&state);
       break;
     }
