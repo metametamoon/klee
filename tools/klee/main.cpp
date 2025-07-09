@@ -2472,7 +2472,7 @@ int main(int argc, char **argv, char **envp) {
         << '\n'
         << "KLEE: done: generated tests = " << handler->getNumTestCases()
         << '\n'
-        << "KLEE: done: queries = " << queries << '\n';
+        << "KLEE: done: solver queries = " << queries << '\n';
 
   bool useColors = llvm::errs().is_displayed();
   if (useColors)
