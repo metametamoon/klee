@@ -148,8 +148,9 @@ bool AddressSpace::resolveOneIfUnique(ExecutionState &state,
   ref<Expr> base = address->getBase();
   ref<Expr> uniqueAddress = base;
   if (!isa<ConstantExpr>(uniqueAddress) &&
-      !solver->tryGetUnique(state.constraints.withAssumptions(state.assumptions),
-                            base, uniqueAddress, state.queryMetaData)) {
+      !solver->tryGetUnique(
+          state.constraints.withAssumptions(state.assumptions), base,
+          uniqueAddress, state.queryMetaData)) {
     return false;
   }
 
