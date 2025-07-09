@@ -285,11 +285,11 @@ void ObjectManager::checkReachedPobs() {
                          << pob->location->toString() << "\n";
           }
           toRemove.insert(pob);
-          // llvm::errs() << "[TRUE POSITIVE] FOUND TRUE POSITIVE VIA FORWARD
-          // AT: "
-          //              << pob->root->location->toString() << "\n";
-          // llvm::errs() << "[TRUE POSITIVE] State path: "
-          //              << state->constraints.path().toString() << "\n";
+          llvm::errs()
+              << "[TRUE POSITIVE] FOUND TRUE POSITIVE VIA FORWARD AT : "
+              << pob->root->location->toString() << "\n";
+          llvm::errs() << "[TRUE POSITIVE] State path: "
+                       << state->constraints.path().toString() << "\n";
         }
       }
     }
@@ -310,11 +310,6 @@ void ObjectManager::addPob(ProofObligation *pob) {
     }
     rootPobs.insert(pob);
   }
-
-  // if (pob->parent) {
-  //   llvm::errs() << "[pob] NEW POB WITH:\n";
-  //   pob->constraints.cs().dump();
-  // }
 
   addedPobs.insert(pob);
   pathedPobs.insert({{pob->constraints.path(), pob->location}, pob});

@@ -131,8 +131,8 @@ public:
   std::map<ref<Target>, propagations_ty> propagations;
   std::map<ProofObligation *, unsigned> propagationCount;
 
-  std::unordered_set<uint32_t> reachedOriginal; // TODO remove
-  std::unordered_set<uint32_t> removeSet;       // TODO remove
+  std::unordered_set<uint32_t> reachedOriginal;
+  std::unordered_set<uint32_t> removeSet;
 
   // These are used to buffer execution results and pass the updates to
   // subscribers
