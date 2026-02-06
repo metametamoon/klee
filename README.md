@@ -1,9 +1,3 @@
-KLEEF Symbolic Virtual Machine
-=============================
-
-[![Build Status](https://github.com/UnitTestBot/klee/workflows/CI/badge.svg)](https://github.com/UnitTestBot/klee/actions?query=workflow%3ACI)
-[![Coverage](https://codecov.io/gh/UnitTestBot/klee/branch/main/graph/badge.svg)](https://codecov.io/gh/UnitTestBot/klee)
-
-`KLEEF` is a complete overhaul of the KLEE symbolic execution engine for LLVM, fine-tuned for a robust analysis of industrial C/C++ code.
-
-For further information, see the [webpage](https://toolchain-labs.com/projects/kleef.html).
+Этот репозиторий содержит исходный код моей дипломной работы, защищенной в 2025 году на факультете Математики и Компьютерных Наук СПбГУ.
+К работе относятся ветки в папке `metametamoon/`.
+Текст дипломной работы можно найти в соответствующем [репозитории](https://github.com/metametamoon/KLEEF-PDR-bachelor-thesis-2025).
